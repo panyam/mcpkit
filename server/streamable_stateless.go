@@ -19,8 +19,9 @@ import (
 //
 // Flow:
 //
-//  1. Cross-check MCP-Protocol-Version HTTP header against
-//     _meta[protocolVersion]. Disagreement → -32020 + HTTP 400.
+//  1. Require the MCP-Protocol-Version HTTP header and cross-check it
+//     against _meta[protocolVersion]. Missing or different → -32020 +
+//     HTTP 400.
 //  2. Dispatch via Server.dispatchStateless (which itself
 //     validates _meta and protocol-version against the supported
 //     list, threads RequestMeta through ctx, and routes by method).
@@ -35,15 +36,11 @@ func (t *streamableTransport) handleStatelessPost(w http.ResponseWriter, r *http
 		id = json.RawMessage("null")
 	}
 
-	// (1) Header / _meta version cross-check. Header may be absent
-	// (some clients only stamp _meta); _meta-only is fine. Mismatch
-	// when both are present → -32020 HeaderMismatch.
-	if hdrVer := r.Header.Get(mcpProtocolVersionHeader); hdrVer != "" {
-		metaVer := peekMetaProtocolVersion(req.Params.Raw())
-		if mismatchResp := statelessVersionMismatch(id, hdrVer, metaVer); mismatchResp != nil {
-			writeStatelessResponse(w, mismatchResp)
-			return
-		}
+	// (1) MCP-Protocol-Version is required and must match _meta → else
+	// -32020 HeaderMismatch.
+	if mismatchResp := statelessVersionMismatch(id, r.Header.Get(mcpProtocolVersionHeader), peekMetaProtocolVersion(req.Params.Raw())); mismatchResp != nil {
+		writeStatelessResponse(w, mismatchResp)
+		return
 	}
 
 	// (1b) SEP-2243 routing-header validation. The stateless wire only
@@ -181,12 +178,9 @@ func (t *streamableTransport) handleStatelessPostSSE(w http.ResponseWriter, r *h
 	dispatchCtx = core.WithStatelessNotifyFunc(dispatchCtx, t.server.interceptNotify(requestNotify))
 
 	// Header / _meta version cross-check (mirrored from handleStatelessPost).
-	if hdrVer := r.Header.Get(mcpProtocolVersionHeader); hdrVer != "" {
-		metaVer := peekMetaProtocolVersion(req.Params.Raw())
-		if mismatchResp := statelessVersionMismatch(req.ID, hdrVer, metaVer); mismatchResp != nil {
-			writeHeaderMismatch(w, mismatchResp)
-			return
-		}
+	if mismatchResp := statelessVersionMismatch(req.ID, r.Header.Get(mcpProtocolVersionHeader), peekMetaProtocolVersion(req.Params.Raw())); mismatchResp != nil {
+		writeHeaderMismatch(w, mismatchResp)
+		return
 	}
 
 	// SEP-2243 routing-header validation (mirrored from handleStatelessPost).

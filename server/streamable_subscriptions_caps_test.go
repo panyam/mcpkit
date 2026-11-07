@@ -234,6 +234,7 @@ func openSubscriptionWithHeader(t *testing.T, ctx context.Context, url, header, 
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "text/event-stream")
 	req.Header.Set(mcpProtocolVersionHeader, draftVersion)
+	stampRoutingHeaders(t, req, body)
 	if header != "" {
 		req.Header.Set(header, value)
 	}

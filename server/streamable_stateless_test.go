@@ -73,10 +73,10 @@ func postStatelessJSON(t *testing.T, url string, body any, headers map[string]st
 	return resp
 }
 
-// stampRoutingHeaders sets the SEP-2243 Mcp-Method and Mcp-Name headers a
-// 2026-07-28 client sends, derived from the JSON-RPC body, so tests aimed at
-// something else get past the stateless wire's routing-header check. Tests of
-// that check override or blank the headers afterwards.
+// stampRoutingHeaders sets the MCP-Protocol-Version, Mcp-Method and Mcp-Name
+// headers a 2026-07-28 client sends, derived from the JSON-RPC body, so tests
+// aimed at something else get past the stateless wire's header checks. Tests
+// of those checks override or blank the headers afterwards.
 func stampRoutingHeaders(t *testing.T, req *http.Request, raw []byte) {
 	t.Helper()
 	var body struct {
@@ -87,6 +87,10 @@ func stampRoutingHeaders(t *testing.T, req *http.Request, raw []byte) {
 		return
 	}
 	req.Header.Set(core.McpMethodHeader, body.Method)
+	params, _ := json.Marshal(body.Params)
+	if ver := peekMetaProtocolVersion(params); ver != "" {
+		req.Header.Set(mcpProtocolVersionHeader, ver)
+	}
 	if name := core.DeriveMcpName(body.Method, body.Params); name != "" {
 		enc, _ := core.EncodeMcpHeaderValue(name)
 		req.Header.Set(core.McpNameHeader, enc)
@@ -434,17 +438,54 @@ func TestStatelessRouting_MissingRoutingHeadersReturn400(t *testing.T) {
 		{"no-mcp-method", "tools/list", map[string]any{"_meta": meta}, map[string]string{"Mcp-Method": ""}},
 		{"no-mcp-name", "tools/call", map[string]any{"_meta": meta, "name": "echo", "arguments": map[string]any{}},
 			map[string]string{"Mcp-Method": "tools/call", "Mcp-Name": ""}},
+		{"listen-no-mcp-method", "subscriptions/listen", map[string]any{"_meta": meta, "notifications": map[string]any{}},
+			map[string]string{"Mcp-Method": ""}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			resp := postStatelessJSON(t, url, map[string]any{
 				"jsonrpc": "2.0", "id": 1, "method": tc.method, "params": tc.params,
 			}, tc.headers)
 			if resp.StatusCode != 400 {
-				body, _ := io.ReadAll(resp.Body)
-				t.Fatalf("status %d, want 400; body=%s", resp.StatusCode, string(body))
+				resp.Body.Close()
+				t.Fatalf("status %d, want 400", resp.StatusCode)
 			}
 			if r := decode(t, resp); r.Error == nil || r.Error.Code != core.ErrCodeHeaderMismatch {
 				t.Errorf("expected -32020, got %+v", r.Error)
+			}
+		})
+	}
+}
+
+// 2026-07-28 lists MCP-Protocol-Version among the headers a server must
+// require, so a stateless request that carries the version only in _meta is
+// refused on every stateless entry point (#1569).
+func TestStatelessRouting_MissingProtocolVersionReturns400(t *testing.T) {
+	_, url, teardown := newStatelessTestServer(t, stateless.ModeDual)
+	defer teardown()
+
+	for _, tc := range []struct {
+		name   string
+		method string
+		accept string
+	}{
+		{"json", "tools/list", "application/json"},
+		{"sse", "tools/list", core.StreamableHTTPAccept},
+		{"listen", "subscriptions/listen", core.StreamableHTTPAccept},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			resp := postStatelessJSON(t, url, map[string]any{
+				"jsonrpc": "2.0", "id": 1, "method": tc.method, "params": validMetaParams(),
+			}, map[string]string{mcpProtocolVersionHeader: "", "Accept": tc.accept})
+			if resp.StatusCode != 400 {
+				resp.Body.Close()
+				t.Fatalf("status %d, want 400", resp.StatusCode)
+			}
+			r := decode(t, resp)
+			if r.Error == nil || r.Error.Code != core.ErrCodeHeaderMismatch {
+				t.Fatalf("expected -32020, got %+v", r.Error)
+			}
+			if data, _ := r.Error.Data.(map[string]any); data["header"] != mcpProtocolVersionHeader {
+				t.Errorf("error data names header %v, want %s", data["header"], mcpProtocolVersionHeader)
 			}
 		})
 	}

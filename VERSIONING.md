@@ -17,6 +17,7 @@ While the project is pre-1.0, breaking API changes may land in minor releases. T
 - Patch releases (`Z` bumps) never break API.
 - Public surfaces slated for removal carry `// Deprecated:` annotations for at least 12 months before removal, with a pointer to the migration doc. Spec-driven deprecations (such as SEP-2577) additionally respect the spec's own deprecation window.
 - No release removes an MCP protocol capability while the targeted spec version still requires it.
+- Changing a wire-visible default counts as a breaking change, even when no Go signature changes. A client sees the new default without upgrading anything. Such a change ships in a minor release, with a CHANGELOG entry and an option that restores the old behavior. The list page size in #1356 is an example: it went from no paging to 250, and `WithDefaultPageSize(0)` restores the old behavior.
 
 ## Compatibility expectations
 

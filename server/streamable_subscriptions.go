@@ -257,12 +257,15 @@ func (t *streamableTransport) handleStatelessSubscribe(w http.ResponseWriter, r 
 	}
 
 	// Header / _meta cross-check (same precedence as handleStatelessPost).
-	if hdrVer := r.Header.Get(mcpProtocolVersionHeader); hdrVer != "" {
-		metaVer := peekMetaProtocolVersion(req.Params.Raw())
-		if resp := statelessVersionMismatch(id, hdrVer, metaVer); resp != nil {
-			writeStatelessResponse(w, resp)
-			return
-		}
+	if resp := statelessVersionMismatch(id, r.Header.Get(mcpProtocolVersionHeader), peekMetaProtocolVersion(req.Params.Raw())); resp != nil {
+		writeStatelessResponse(w, resp)
+		return
+	}
+
+	// SEP-2243 routing headers, as on the other stateless entry points (#1567).
+	if resp := validateRoutingHeaders(req, r.Header); resp != nil {
+		writeHeaderMismatch(w, resp)
+		return
 	}
 
 	// _meta envelope validation.

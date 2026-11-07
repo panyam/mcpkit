@@ -68,6 +68,7 @@ func TestStream_Stateless_SSE_DeliversEvents(t *testing.T) {
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", core.StreamableHTTPAccept)
 	req.Header.Set(core.McpMethodHeader, "events/stream")
+	req.Header.Set(core.HTTPProtocolVersionHeader, core.DraftProtocolVersion2026V1)
 	req.Header.Set(core.McpNameHeader, "fake.event")
 
 	resp, err := http.DefaultClient.Do(req)
@@ -160,6 +161,7 @@ func TestStream_Stateless_PlainJSON_ReturnsUnsupported(t *testing.T) {
 	require.NoError(t, err)
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set(core.McpMethodHeader, "events/stream")
+	req.Header.Set(core.HTTPProtocolVersionHeader, core.DraftProtocolVersion2026V1)
 	req.Header.Set(core.McpNameHeader, "fake.event")
 	// JSON-only Accept — NO text/event-stream. Stateless transport
 	// returns single-shot JSON and never attaches a NotifyFunc.
@@ -232,6 +234,7 @@ func TestResultType_CompleteOnEveryEventsResult(t *testing.T) {
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("Accept", "application/json")
 		req.Header.Set(core.McpMethodHeader, method)
+		req.Header.Set(core.HTTPProtocolVersionHeader, core.DraftProtocolVersion2026V1)
 		if name := core.DeriveMcpName(method, params); name != "" {
 			req.Header.Set(core.McpNameHeader, name)
 		}

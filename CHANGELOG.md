@@ -9,6 +9,27 @@ Releases before 0.3.0 were tag-only and are not back-filled here.
 
 ## [Unreleased]
 
+### Changed
+- **The stateless wire requires `MCP-Protocol-Version`.** A stateless request
+  without the header now gets HTTP 400 and `-32020`, as 2026-07-28 requires.
+  Before, the server accepted a request that carried the version only in
+  `_meta`. The check covers plain JSON, SSE responses and
+  `subscriptions/listen`. The mcpkit client already sends the header, so only
+  hand-built requests need to add it (#1569).
+- **The base list methods page at 250 items by default (breaking on the
+  wire).** `tools/list`, `resources/list`, `resources/templates/list` and
+  `prompts/list` used to return every item in one page. A server with more
+  than 250 of a kind now returns 250 and a `nextCursor`, on both wires. A
+  client that ignores `nextCursor` sees only the first 250. mcpkit's
+  `ListTools`, `ListResources` and `ListPrompts` already follow cursors.
+  `server.WithDefaultPageSize(n)` sets the size, and `WithDefaultPageSize(0)`
+  restores single-page lists (#1356).
+- **An invalid cursor on a list method is `-32602`.** The server used to
+  ignore a cursor it couldn't decode and return an empty page.
+- **`subscriptions/listen` checks `Mcp-Method`.** The other stateless entry
+  points have checked it since #1567, and listen now refuses a request without
+  it in the same way, with HTTP 400 and `-32020`.
+
 ## [0.8.16] - 2026-11-03
 
 Full write-up: [`docs/releases/v0.8.16.md`](docs/releases/v0.8.16.md).

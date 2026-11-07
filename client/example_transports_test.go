@@ -34,9 +34,9 @@ func ExampleWithSSEClient() {
 	fmt.Println(len(tools))
 }
 
-// Paging through a list method. mcpkit's own server returns everything in one
-// page, but a client cannot assume that of an arbitrary server: loop until
-// NextCursor comes back empty.
+// Paging through a list method. mcpkit's own server pages at 250 items by
+// default, and other servers pick their own size, so loop until NextCursor
+// comes back empty.
 //
 // Use ListToolsPage rather than ListTools when you want the envelope, since it
 // also carries the SEP-2549 ttlMs and cacheScope caching hints that the

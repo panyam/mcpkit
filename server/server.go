@@ -58,6 +58,7 @@ type serverOptions struct {
 	listen               string
 	bearerToken          string
 	toolTimeout          time.Duration
+	pageSize             int
 	allowedRoots         []string
 	authValidator        core.AuthValidator
 	extensions           []core.ExtensionProvider
@@ -405,6 +406,18 @@ func WithToolTimeout(d time.Duration) Option {
 	return func(o *serverOptions) { o.toolTimeout = d }
 }
 
+// WithDefaultPageSize sets how many items tools/list, resources/list,
+// resources/templates/list and prompts/list return per page, on both wires.
+// A longer list ends its page with a nextCursor, and the client passes it
+// back as cursor to get the next page. The default is 250.
+//
+// n <= 0 turns pagination off: every item comes back in one page with no
+// nextCursor, which was mcpkit's behavior before #1356. Use it only if your
+// clients ignore nextCursor and your lists are larger than 250.
+func WithDefaultPageSize(n int) Option {
+	return func(o *serverOptions) { o.pageSize = n }
+}
+
 // WithListTTLMs configures the SEP-2549 cache-freshness hint, in integer
 // milliseconds, attached to every tools/list, prompts/list, resources/list,
 // and resources/templates/list response. The hint tells clients how long
@@ -700,6 +713,7 @@ func NewServer(info core.Implementation, opts ...Option) *Server {
 	s.options.listCacheScope = core.CacheScopePublic
 	s.options.readTTLMs = &readTTLDefault
 	s.options.readCacheScope = core.CacheScopePrivate
+	s.options.pageSize = defaultPageSize
 
 	for _, opt := range opts {
 		opt(&s.options)
@@ -744,6 +758,7 @@ func NewServer(info core.Implementation, opts ...Option) *Server {
 	s.dispatcher.readTTLMs = s.options.readTTLMs
 	s.dispatcher.readCacheScope = s.options.readCacheScope
 	s.dispatcher.toolTimeout = s.options.toolTimeout
+	s.dispatcher.pageSize = s.options.pageSize
 	// issue 7 — install metrics middleware (and the sessions-active
 	// up-down counter for the streamable transport) when a non-Noop
 	// MeterProvider is configured. Zero-overhead when nil / Noop —

@@ -12,9 +12,8 @@ import (
 	"github.com/panyam/mcpkit/core"
 )
 
-// defaultDirectoryReadPageSize matches mcpkit's server-wide
-// defaultPageSize (0 = "return everything in one page, no cursor").
-// Override per Provider with WithDirectoryReadPageSize.
+// defaultDirectoryReadPageSize is 0, which returns everything in one page
+// with no cursor. Override per Provider with WithDirectoryReadPageSize.
 
 // handleDirectoryRead serves SEP-2640's resources/directory/read method.
 //
