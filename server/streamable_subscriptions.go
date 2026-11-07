@@ -262,6 +262,12 @@ func (t *streamableTransport) handleStatelessSubscribe(w http.ResponseWriter, r 
 		return
 	}
 
+	// SEP-2243 routing headers, as on the other stateless entry points (#1567).
+	if resp := validateRoutingHeaders(req, r.Header); resp != nil {
+		writeHeaderMismatch(w, resp)
+		return
+	}
+
 	// _meta envelope validation.
 	reqMeta, err := core.DecodeRequestMetaFromRawJSON(&req.Params)
 	if err != nil {

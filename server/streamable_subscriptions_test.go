@@ -89,6 +89,7 @@ func openSubscription(t *testing.T, ctx context.Context, url string, filter map[
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "text/event-stream")
 	req.Header.Set(mcpProtocolVersionHeader, draftVersion)
+	stampRoutingHeaders(t, req, body)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("do: %v", err)

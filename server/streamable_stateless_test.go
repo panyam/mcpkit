@@ -438,14 +438,16 @@ func TestStatelessRouting_MissingRoutingHeadersReturn400(t *testing.T) {
 		{"no-mcp-method", "tools/list", map[string]any{"_meta": meta}, map[string]string{"Mcp-Method": ""}},
 		{"no-mcp-name", "tools/call", map[string]any{"_meta": meta, "name": "echo", "arguments": map[string]any{}},
 			map[string]string{"Mcp-Method": "tools/call", "Mcp-Name": ""}},
+		{"listen-no-mcp-method", "subscriptions/listen", map[string]any{"_meta": meta, "notifications": map[string]any{}},
+			map[string]string{"Mcp-Method": ""}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			resp := postStatelessJSON(t, url, map[string]any{
 				"jsonrpc": "2.0", "id": 1, "method": tc.method, "params": tc.params,
 			}, tc.headers)
 			if resp.StatusCode != 400 {
-				body, _ := io.ReadAll(resp.Body)
-				t.Fatalf("status %d, want 400; body=%s", resp.StatusCode, string(body))
+				resp.Body.Close()
+				t.Fatalf("status %d, want 400", resp.StatusCode)
 			}
 			if r := decode(t, resp); r.Error == nil || r.Error.Code != core.ErrCodeHeaderMismatch {
 				t.Errorf("expected -32020, got %+v", r.Error)

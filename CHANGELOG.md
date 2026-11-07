@@ -16,6 +16,9 @@ Releases before 0.3.0 were tag-only and are not back-filled here.
   `_meta`. The check covers plain JSON, SSE responses and
   `subscriptions/listen`. The mcpkit client already sends the header, so only
   hand-built requests need to add it (#1569).
+- **`subscriptions/listen` checks `Mcp-Method`.** The other stateless entry
+  points have checked it since #1567, and listen now refuses a request without
+  it in the same way, with HTTP 400 and `-32020`.
 
 ## [0.8.16] - 2026-11-03
 
