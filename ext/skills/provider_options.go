@@ -127,8 +127,7 @@ func WithIndexCacheTTL(d time.Duration) ProviderOption {
 
 // WithSkillsListPageSize caps how many entries a skills/list response
 // carries, emitting a nextCursor when more remain. Zero (the default)
-// returns every entry in one page and never emits a cursor, matching
-// mcpkit's server-wide defaultPageSize.
+// returns every entry in one page and never emits a cursor.
 //
 // Set this on any server whose catalog is large enough that one response
 // is a problem. SEP-2640 permits either shape, so this is a scale knob

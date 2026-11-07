@@ -154,6 +154,11 @@ type Dispatcher struct {
 	// tools/call on both wires before any per-tool Timeout.
 	toolTimeout time.Duration
 
+	// pageSize is the WithDefaultPageSize page size for tools/list,
+	// resources/list, resources/templates/list and prompts/list. 0 or less
+	// returns every item in one page.
+	pageSize int
+
 	// allowLegacyOnDraft is an opt-in back-compat escape hatch: when true,
 	// the legacy initialize+session wire is accepted on 2026-07-28 without
 	// per-request _meta enforcement. Default false — SEP-2575 (Accepted)
@@ -347,6 +352,7 @@ func (d *Dispatcher) newSession() *Dispatcher {
 		readTTLMs:            d.readTTLMs,
 		readCacheScope:       d.readCacheScope,
 		toolTimeout:          d.toolTimeout,
+		pageSize:             d.pageSize,
 		allowLegacyOnDraft:   d.allowLegacyOnDraft,
 		allowReinitialize:    d.allowReinitialize,
 		configuredVersions:   d.configuredVersions,
@@ -648,13 +654,17 @@ func (d *Dispatcher) handleToolsList(ctx context.Context, wire wireKind, id json
 		fileInputs = core.HasFileInputs(ctx)
 	}
 	ttlMs, scope := d.listCacheHints(wire)
-	return core.NewResponse(id, toolsListResult(d.Reg, params, fileInputs, ttlMs, scope))
+	result, err := toolsListResult(d.Reg, params, d.pageSize, fileInputs, ttlMs, scope)
+	if err != nil {
+		return core.NewErrorResponse(id, core.ErrCodeInvalidParams, err.Error())
+	}
+	return core.NewResponse(id, result)
 }
 
 // toolsListResult builds the tools/list result for both wires, which differ
 // only in where the caller's fileInputs declaration comes from.
-func toolsListResult(reg *Registry, params json.RawMessage, fileInputs bool, ttlMs *int, cacheScope string) core.ToolsListResult {
-	cursor, _ := parsePaginationParams(params)
+func toolsListResult(reg *Registry, params json.RawMessage, pageSize int, fileInputs bool, ttlMs *int, cacheScope string) (core.ToolsListResult, error) {
+	cursor := parseCursor(params)
 
 	reg.mu.RLock()
 	tools := make([]core.ToolDef, 0, len(reg.toolOrder))
@@ -665,7 +675,10 @@ func toolsListResult(reg *Registry, params json.RawMessage, fileInputs bool, ttl
 	}
 	reg.mu.RUnlock()
 
-	page, nextCursor, _ := paginate(tools, cursor, defaultPageSize)
+	page, nextCursor, err := paginate(tools, cursor, pageSize)
+	if err != nil {
+		return core.ToolsListResult{}, err
+	}
 
 	// SEP-2356: clients that did not declare the `fileInputs` capability
 	// MUST NOT see the `x-mcp-file` keyword. Strip it (keeping the
@@ -675,7 +688,7 @@ func toolsListResult(reg *Registry, params json.RawMessage, fileInputs bool, ttl
 		page = stripFileInputsFromTools(page)
 	}
 
-	return core.ToolsListResult{Tools: page, NextCursor: nextCursor, TTLMs: ttlMs, CacheScope: cacheScope}
+	return core.ToolsListResult{Tools: page, NextCursor: nextCursor, TTLMs: ttlMs, CacheScope: cacheScope}, nil
 }
 
 // stripFileInputsFromTools returns a copy of `tools` with every
@@ -691,16 +704,16 @@ func stripFileInputsFromTools(tools []core.ToolDef) []core.ToolDef {
 	return out
 }
 
-// parsePaginationParams extracts cursor from request params.
-func parsePaginationParams(params json.RawMessage) (cursor string, pageSize int) {
+// parseCursor extracts the pagination cursor from list request params.
+func parseCursor(params json.RawMessage) string {
 	if params == nil {
-		return "", defaultPageSize
+		return ""
 	}
 	var p struct {
 		Cursor string `json:"cursor"`
 	}
 	json.Unmarshal(params, &p)
-	return p.Cursor, defaultPageSize
+	return p.Cursor
 }
 
 // handleToolsCall serves tools/call on both wires: the stateless backend calls
@@ -867,7 +880,7 @@ func toolValidationErrorResult(toolName string, ve *ValidationErrors) core.ToolR
 // --- Resources ---
 
 func (d *Dispatcher) handleResourcesList(wire wireKind, id json.RawMessage, params json.RawMessage) *core.Response {
-	cursor, _ := parsePaginationParams(params)
+	cursor := parseCursor(params)
 
 	d.Reg.mu.RLock()
 	resources := make([]core.ResourceDef, 0, len(d.Reg.resourceOrder))
@@ -878,7 +891,10 @@ func (d *Dispatcher) handleResourcesList(wire wireKind, id json.RawMessage, para
 	}
 	d.Reg.mu.RUnlock()
 
-	page, nextCursor, _ := paginate(resources, cursor, defaultPageSize)
+	page, nextCursor, err := paginate(resources, cursor, d.pageSize)
+	if err != nil {
+		return core.NewErrorResponse(id, core.ErrCodeInvalidParams, err.Error())
+	}
 	ttlMs, scope := d.listCacheHints(wire)
 	return core.NewResponse(id, core.ResourcesListResult{Resources: page, NextCursor: nextCursor, TTLMs: ttlMs, CacheScope: scope})
 }
@@ -955,7 +971,7 @@ func (d *Dispatcher) handleResourcesRead(ctx context.Context, wire wireKind, id 
 }
 
 func (d *Dispatcher) handleResourcesTemplatesList(wire wireKind, id json.RawMessage, params json.RawMessage) *core.Response {
-	cursor, _ := parsePaginationParams(params)
+	cursor := parseCursor(params)
 
 	d.Reg.mu.RLock()
 	templates := make([]core.ResourceTemplate, 0, len(d.Reg.templateOrder))
@@ -966,7 +982,10 @@ func (d *Dispatcher) handleResourcesTemplatesList(wire wireKind, id json.RawMess
 	}
 	d.Reg.mu.RUnlock()
 
-	page, nextCursor, _ := paginate(templates, cursor, defaultPageSize)
+	page, nextCursor, err := paginate(templates, cursor, d.pageSize)
+	if err != nil {
+		return core.NewErrorResponse(id, core.ErrCodeInvalidParams, err.Error())
+	}
 	ttlMs, scope := d.listCacheHints(wire)
 	return core.NewResponse(id, core.ResourceTemplatesListResult{ResourceTemplates: page, NextCursor: nextCursor, TTLMs: ttlMs, CacheScope: scope})
 }
@@ -1022,7 +1041,7 @@ func (d *Dispatcher) handleResourcesUnsubscribe(id json.RawMessage, params json.
 // --- Prompts ---
 
 func (d *Dispatcher) handlePromptsList(wire wireKind, id json.RawMessage, params json.RawMessage) *core.Response {
-	cursor, _ := parsePaginationParams(params)
+	cursor := parseCursor(params)
 
 	d.Reg.mu.RLock()
 	prompts := make([]core.PromptDef, 0, len(d.Reg.promptOrder))
@@ -1033,7 +1052,10 @@ func (d *Dispatcher) handlePromptsList(wire wireKind, id json.RawMessage, params
 	}
 	d.Reg.mu.RUnlock()
 
-	page, nextCursor, _ := paginate(prompts, cursor, defaultPageSize)
+	page, nextCursor, err := paginate(prompts, cursor, d.pageSize)
+	if err != nil {
+		return core.NewErrorResponse(id, core.ErrCodeInvalidParams, err.Error())
+	}
 	ttlMs, scope := d.listCacheHints(wire)
 	return core.NewResponse(id, core.PromptsListResult{Prompts: page, NextCursor: nextCursor, TTLMs: ttlMs, CacheScope: scope})
 }

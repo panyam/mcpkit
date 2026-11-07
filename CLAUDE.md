@@ -342,13 +342,12 @@ These span packages and will bite on a task that never opens a routed doc.
   that suite by hand, all of its wired scenarios rather than the one you had in mind. Run it through
   `make testconf-*`, not `node dist/index.js` directly: only the make path rebuilds `dist/`, and a
   stale build reports the previous suite's numbers with no warning.
-- **mcpkit does not paginate by default, anywhere.** `server/pagination.go` sets
-  `defaultPageSize = 0` for tools, resources, templates and prompts, which `paginate` reads as
-  "return everything, emit no cursor". `ext/skills` gained `WithSkillsListPageSize` and
-  `WithDirectoryReadPageSize` in 2026-09, and the four base methods still have no override. Conformant
-  (the spec makes paging optional) but it means a large catalog ships in one response, and it meant
-  the paging helpers were unreachable while unit tests certified them. Tracked as #1356 against the
-  1.0 freeze, since changing the default afterwards is a breaking wire change.
+- **The four base list methods page at 250 by default.** `tools/list`, `resources/list`,
+  `resources/templates/list` and `prompts/list` return 250 items and a `nextCursor`, on both wires
+  (#1356). `WithDefaultPageSize(0)` turns paging off. An invalid cursor is `-32602`. `ext/skills`
+  still defaults to 0, with its own `WithSkillsListPageSize` and `WithDirectoryReadPageSize`. Test
+  paging over the wire, as the `TestWireParity` 1356 rows do: unit tests of `paginate` with
+  hand-passed sizes once certified a path no server could reach.
 
 ## Conformance
 

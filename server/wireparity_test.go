@@ -580,6 +580,78 @@ func TestWireParity(t *testing.T) {
 		}
 	})
 
+	t.Run("1356 list methods page at 250 by default", func(t *testing.T) {
+		lists := []struct{ method, key string }{
+			{"tools/list", "tools"},
+			{"resources/list", "resources"},
+			{"resources/templates/list", "resourceTemplates"},
+			{"prompts/list", "prompts"},
+		}
+		pageSizes := func(t *testing.T, w parityWire, method, key string) []int {
+			var sizes []int
+			cursor := ""
+			for range 10 {
+				params := map[string]any{}
+				if cursor != "" {
+					params["cursor"] = cursor
+				}
+				res, rpcErr := w.call(t, method, params)
+				if rpcErr != nil {
+					t.Fatalf("%s %s: %v", w.name, method, rpcErr)
+				}
+				var items []json.RawMessage
+				_ = json.Unmarshal(res[key], &items)
+				sizes = append(sizes, len(items))
+				cursor = ""
+				_ = json.Unmarshal(res["nextCursor"], &cursor)
+				if cursor == "" {
+					return sizes
+				}
+			}
+			t.Fatalf("%s %s: no last page after 10 pages", w.name, method)
+			return nil
+		}
+
+		for _, tc := range []struct {
+			name string
+			opts []Option
+			want []int
+		}{
+			{"default", nil, []int{250, 1}},
+			{"off", []Option{WithDefaultPageSize(0)}, []int{251}},
+		} {
+			s := parityFixture(t, tc.opts...)
+			for i := range 250 {
+				s.RegisterTool(core.ToolDef{Name: fmt.Sprintf("bulk_%03d", i)},
+					func(core.ToolContext, core.ToolRequest) (core.ToolResponse, error) { return core.TextResult("ok"), nil })
+				s.RegisterResource(core.ResourceDef{URI: fmt.Sprintf("test://bulk/%03d", i), Name: "bulk"},
+					func(core.ResourceContext, core.ResourceRequest) (core.ResourceResult, error) { return core.ResourceResult{}, nil })
+				s.RegisterResourceTemplate(core.ResourceTemplate{URITemplate: fmt.Sprintf("test://bulk/%03d/{id}", i), Name: "bulk"},
+					func(core.ResourceContext, string, map[string]string) (core.ResourceResult, error) { return core.ResourceResult{}, nil })
+				s.RegisterPrompt(core.PromptDef{Name: fmt.Sprintf("bulk_%03d", i)},
+					func(core.PromptContext, core.PromptRequest) (core.PromptResponse, error) { return core.PromptResult{}, nil })
+			}
+			for _, w := range parityWires(t, s, map[string]any{}) {
+				for _, l := range lists {
+					if got := pageSizes(t, w, l.method, l.key); !slices.Equal(got, tc.want) {
+						t.Errorf("%s %s wire %s: page sizes %v, want %v", tc.name, w.name, l.method, got, tc.want)
+					}
+				}
+			}
+		}
+	})
+
+	t.Run("1356 an invalid cursor is invalid params", func(t *testing.T) {
+		for _, w := range parityWires(t, parityFixture(t), map[string]any{}) {
+			for _, method := range []string{"tools/list", "resources/list", "resources/templates/list", "prompts/list"} {
+				_, rpcErr := w.call(t, method, map[string]any{"cursor": "not-a-cursor"})
+				if rpcErr == nil || rpcErr.Code != core.ErrCodeInvalidParams {
+					t.Errorf("%s wire %s: got %+v, want %d", w.name, method, rpcErr, core.ErrCodeInvalidParams)
+				}
+			}
+		}
+	})
+
 	t.Run("same result on both wires", func(t *testing.T) {
 		wires := parityWires(t, parityFixture(t), map[string]any{})
 		for _, c := range parityCalls {

@@ -58,15 +58,15 @@ func ExampleServer_Dispatch_loggingSetLevel() {
 	// Output: true unknown log level: louder
 }
 
-// Pagination on a list method. mcpkit servers return every item in one page:
-// the page size is a compile-time constant of 0, meaning "no pagination", so
-// nextCursor is always empty regardless of how many items are registered.
+// Pagination on a list method. The four base list methods return 250 items per
+// page by default, and WithDefaultPageSize changes that. Here a page size of 2
+// splits three tools across two pages. The first page ends with a nextCursor,
+// and the client passes it back as cursor to get the rest.
 //
-// The cursor is still part of the wire contract, and mcpkit's client handles
-// servers that do paginate. Loop with ListToolsPage, passing the previous
-// NextCursor, until it comes back empty.
+// mcpkit's client follows cursors in ListTools. Loop with ListToolsPage instead
+// when you want each page's envelope.
 func ExampleServer_Dispatch_pagination() {
-	srv := server.NewServer(core.ServerInfo{Name: "docs", Version: "1.0"})
+	srv := server.NewServer(core.ServerInfo{Name: "docs", Version: "1.0"}, server.WithDefaultPageSize(2))
 	for i := range 3 {
 		name := fmt.Sprintf("tool-%d", i)
 		srv.Register(core.TextTool[struct{}](name, "noop",
@@ -74,12 +74,15 @@ func ExampleServer_Dispatch_pagination() {
 	}
 	testutil.InitHandshake(srv)
 
-	resp := exampleDispatch(srv, "tools/list", map[string]any{})
-	var out core.ToolsListResult
-	_ = resp.ResultAs(&out)
+	var first, second core.ToolsListResult
+	_ = exampleDispatch(srv, "tools/list", map[string]any{}).ResultAs(&first)
+	_ = exampleDispatch(srv, "tools/list", map[string]any{"cursor": first.NextCursor}).ResultAs(&second)
 
-	fmt.Println(len(out.Tools), out.NextCursor == "")
-	// Output: 3 true
+	fmt.Println(len(first.Tools), first.NextCursor != "")
+	fmt.Println(len(second.Tools), second.NextCursor != "")
+	// Output:
+	// 2 true
+	// 1 false
 }
 
 // An elicitation schema with an enum. The client renders a fixed choice rather

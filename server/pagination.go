@@ -6,9 +6,11 @@ import (
 	"strconv"
 )
 
-// defaultPageSize is the default number of items per page.
-// 0 means return all items (no pagination).
-const defaultPageSize = 0
+// defaultPageSize is the page size for the four base list methods when
+// WithDefaultPageSize is not set. It is high so that typical servers never
+// paginate, and a client that ignores nextCursor only loses items on servers
+// that were already sending very large responses (#1356).
+const defaultPageSize = 250
 
 // paginate applies cursor-based pagination to a slice of items.
 // The cursor is an opaque base64-encoded offset. If cursor is empty, starts from

@@ -148,8 +148,8 @@ func (i *Indexer) handleSkillsGet(ctx core.MethodContext, id, params json.RawMes
 		fmt.Sprintf("skills: skills/get: unknown skill URI: %s", req.URI))
 }
 
-// Zero page size disables server-side paging, matching mcpkit's
-// server-wide defaultPageSize. Override with WithSkillsListPageSize.
+// Zero page size disables server-side paging. Override with
+// WithSkillsListPageSize.
 
 // paginateEntries slices entries by an integer offset cursor. Entries are
 // whole, so a skill's resources never straddle a page boundary.
