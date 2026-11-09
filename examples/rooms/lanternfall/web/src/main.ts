@@ -51,6 +51,7 @@ function feed(dir: "out" | "in" | "info", text: string, tag = ""): void {
   li.querySelector(".t")!.textContent = time;
   li.querySelector(".arrow")!.textContent = arrow;
   li.querySelector(".what")!.textContent = text;
+  li.title = `${arrow} ${tag ? `[${tag}] ` : ""}${text}`;
   if (tag) {
     const t = li.querySelector(".tag")!;
     t.textContent = tag;
@@ -368,8 +369,17 @@ function followContext(): void {
     status.textContent = "The game master's stream ended. Below is the last context it sent; it reconnects when the game master runs again.";
   };
   es.onmessage = (msg) => {
-    seen = true;
     const s = JSON.parse(msg.data);
+    // A game master on this port may be playing someone else's game.
+    const game = new URLSearchParams(location.search).get("game") || "demo";
+    const player = $("#player").textContent;
+    if (s.game !== game || (player && player !== "…" && s.player !== player)) {
+      status.textContent = `The game master on :${port} plays ${s.player} in game ${s.game}, not this tab. Start one for this game with make gm, or open this page with ?gm=<its port>.`;
+      $("#ctx").replaceChildren();
+      $("#ctx-meta").textContent = "";
+      return;
+    }
+    seen = true;
     status.textContent = `${s.model} for ${s.player}: ${s.status}. ${s.turns} turn${s.turns === 1 ? "" : "s"} so far.`;
     const pct = Math.min(100, Math.round((s.tokens / s.budget) * 100));
     const fill = $("#ctx-fill");
@@ -377,10 +387,10 @@ function followContext(): void {
     fill.classList.toggle("over", s.tokens > s.budget);
     const last = s.compactions[s.compactions.length - 1];
     $("#ctx-meta").textContent =
-      `≈${s.tokens} of ${s.budget} tokens in ${s.entries.length} rows, plus a ${s.systemTokens}-token system prompt. ` +
+      `≈${s.tokens} of ${s.budget} tokens, ${s.entries.length} rows, plus a ${s.systemTokens}-token system prompt. ` +
       (last
-        ? `Compacted ${s.compactions.length} time${s.compactions.length === 1 ? "" : "s"}; the last folded ${last.folded} messages (≈${last.tokensBefore} tokens) into the summary at the top.`
-        : "Not compacted yet: it compacts when the conversation passes the budget.");
+        ? `Compacted ${s.compactions.length}×: the last folded ${last.folded} messages (≈${last.tokensBefore} tokens) into the summary at the top.`
+        : "Compacts when it passes the budget.");
     $("#ctx-system-text").textContent = s.system;
     const list = $("#ctx");
     list.replaceChildren();
