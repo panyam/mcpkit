@@ -186,3 +186,20 @@ agreement check entirely. That was true before #1610 too; passing a caller just 
 transports stamp on each message. The TS page's `trustBridges` does the same with
 `CollabClient.getPeer(from)?.identity?.subject` (#1621), which it couldn't before massrelay v0.3.1:
 until then `CollabClient` dropped `identity` when it reported peers (massrelay issue 42).
+
+## The join endpoint and its signer live in two modules (#1677)
+
+`rooms.JoinHandler` decides who joins which room, and that is the same for any relay. The token is
+the relay's format: massrelay's `rooms` claim, `client_id` and `iss`. Constraint C4 keeps this module
+from importing massrelay, so the handler takes a `TokenMinter` and the `massrelay` module's `Signer`
+implements it. `massrelay.NewLocal` exists because the tests for the handler needed a relay that
+trusts the signer, which is the same thing a web app needs. Agni wrote it by hand before
+(`internal/viewerrooms`).
+
+The signing belongs in massrelay, beside `RelayAuthenticator`, which reads the claims. massrelay#78
+tracks moving it there. Until that releases, `Signer` mints the claims itself, and
+`TestSigner_ClaimsAreWhatTheRelayReads` checks them against the relay's own validator.
+
+The page refreshes through massrelay's `CollabClient.getToken`, which sends `ReAuth` on the open
+socket. The relay ends a connection at its token's exp otherwise, and the page cannot rejoin under
+the same id, since a pairing names the id.

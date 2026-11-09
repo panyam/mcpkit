@@ -115,6 +115,39 @@ bridge := rooms.New(massrelay.Embedded(relayApp.Service, &services.Principal{Sub
 page, _ := rooms.JoinPage(ctx, massrelay.Dial("https://relay.example.com", relayToken), room)
 ```
 
+## A web app's own relay, and how its pages join
+
+A web app that lets agents drive its own pages needs three things beside its MCP endpoint: a relay,
+the bridge joined to it, and an endpoint that tells a signed-in page which room to join with which
+token. `massrelay.NewLocal` builds the relay with a token signer it trusts, and its `JoinHandler`
+is `rooms.JoinHandler` with the signer and the bridge's subject filled in:
+
+```go
+local, err := massrelay.NewLocal(massrelay.LocalOptions{Origins: []string{"app.example.com"}})
+bridge := rooms.New(local.Transport())
+bridge.Register(srv)
+mux.Handle("/relay/", http.StripPrefix("/relay", local.Relay()))
+mux.Handle("POST /rooms/join", requireLogin(local.JoinHandler(rooms.JoinOptions{
+    Subject:  func(r *http.Request) (string, error) { return userOf(r), nil },
+    RoomOf:   func(r *http.Request) (string, error) { return roomFor(r, r.URL.Query().Get("doc")) },
+    RelayURL: "/relay",
+})))
+```
+
+The page calls `joinToolRoomFrom("/rooms/join?doc=42")` from the TypeScript client and needs nothing
+else ([`ts/`](ts/)).
+
+`JoinHandler` answers POST with `{room, relayUrl, token, bridgeSubjects, expiresAt}`. `Subject` reads
+the host's own authentication, and an error is a 401. `RoomOf` is the host's access check for the
+room, and an error is a 403. The token's `rooms` claim names that one room, so the relay refuses it
+anywhere else. `bridgeSubjects` becomes the page's `trustBridges`. Tokens last
+`massrelay.DefaultTokenTTL` (10 minutes), and the page calls the endpoint again before each expiry
+and hands the relay the new token over its open connection, keeping its peer id.
+
+A relay that runs elsewhere takes `rooms.JoinHandler` directly with any `rooms.TokenMinter` its
+operator trusts. `massrelay.NewSigner` is one, with a key the app keeps. The relay must accept
+that key.
+
 ## Offering tools from a page
 
 A browser page uses the TypeScript client in [`ts/`](ts/), `joinToolRoom`, which takes WebMCP's
