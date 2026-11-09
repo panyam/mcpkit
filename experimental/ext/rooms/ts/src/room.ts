@@ -20,6 +20,10 @@ const PAIRED_BY_CODE = "notifications/rooms/paired_by_code";
 const PRESENCE = "notifications/rooms/presence";
 const NOTIFY = "notifications/rooms/notify";
 const TOOL_REFUSED = "notifications/rooms/tool_refused";
+const EVENT_REFUSED = "notifications/rooms/event_refused";
+const EVENTS_LIST_CHANGED = "notifications/events/list_changed";
+/** The `_meta` key a declared event type's context hint rides under, matching `rooms.MetaContextHint`. */
+export const META_CONTEXT_HINT = "io.github.panyam.mcpkit/context-hint";
 
 /** How long an agent's attach code stays acceptable, matching `rooms.DefaultAgentCodeTTL`. */
 const AGENT_CODE_TTL_MS = 10 * 60 * 1000;
@@ -154,6 +158,33 @@ export interface JoinToolRoomOptions {
   sendRate?: number;
 }
 
+/**
+ * An event type the page emits, declared so agents can see it in
+ * `events/list` before it happens (Go: `rooms.PageEventDecl`). Declared data
+ * is a JSON object, and its fields reach subscribers at the top level of the
+ * payload beside where it came from (resource, page, user, label, at), so a
+ * context hint's template can name them.
+ */
+export interface PageEventDecl {
+  /** The event type, as `validEventName` accepts. */
+  name: string;
+  description?: string;
+  /** JSON Schema for the data object. Omitted accepts any object. */
+  payloadSchema?: Record<string, unknown>;
+  /**
+   * How a host should put occurrences in front of a model: priority,
+   * aggregate, template, retention, sensitivity. The bridge passes it on
+   * unread.
+   */
+  contextHint?: Record<string, unknown>;
+}
+
+/** A bridge refusing one of the page's event declarations, or an event it emitted. */
+export interface EventRefusal {
+  name: string;
+  reason: string;
+}
+
 /** A page's membership in a tool room. */
 export interface ToolRoom {
   /** The page's peer id, which agents pass as a tool's `page` argument. */
@@ -250,6 +281,20 @@ export interface ToolRoom {
    * before any bridge listed its tools goes nowhere.
    */
   emit(name: string, data?: unknown): void;
+  /**
+   * Declares an event type the page emits, or replaces its declaration, and
+   * tells the bridges. Declare before emitting: a bridge treats a name it has
+   * no declaration for as undeclared.
+   */
+  registerEvent(decl: PageEventDecl): { unregister(): void };
+  /** Withdraws a declared event type. */
+  unregisterEvent(name: string): void;
+  /**
+   * Called when a bridge refuses an event declaration (a schema that differs
+   * from the one it already offers, a name its host did not declare) or an
+   * event the page emitted (data that does not match its declaration).
+   */
+  onEventRefused(fn: (refused: EventRefusal) => void): void;
   /** Emits `room.ask`: the page's user asked the agents `text`. */
   ask(text: string): void;
   /** Emits `page.selection_changed` with whatever the page counts as its selection. */
@@ -308,6 +353,8 @@ class Page implements ToolRoom {
   private onPresenceFn?: (agents: Presence[]) => void;
   private refused = new Map<string, ToolRefusal>();
   private onToolRefusedFn?: (refused: ToolRefusal) => void;
+  private events = new Map<string, PageEventDecl>();
+  private onEventRefusedFn?: (refused: EventRefusal) => void;
   private notifyHandlers = new Map<string, (data: unknown) => void>();
   private left = false;
   private modelContext?: ModelContextLike;
@@ -458,6 +505,34 @@ class Page implements ToolRoom {
     this.emit(EVENT_ASK, { text });
   }
 
+  registerEvent(decl: PageEventDecl): { unregister(): void } {
+    if (!validEventName(decl.name)) throw new Error(`invalid page event name ${JSON.stringify(decl.name)}`);
+    this.events.set(decl.name, decl);
+    this.notifyBridges(EVENTS_LIST_CHANGED);
+    return { unregister: () => this.unregisterEvent(decl.name) };
+  }
+
+  unregisterEvent(name: string): void {
+    if (!this.events.delete(name)) return;
+    this.notifyBridges(EVENTS_LIST_CHANGED);
+  }
+
+  onEventRefused(fn: (refused: EventRefusal) => void): void {
+    this.onEventRefusedFn = fn;
+  }
+
+  private eventDescriptors(): unknown[] {
+    return [...this.events.keys()].sort().map((name) => {
+      const d = this.events.get(name)!;
+      return {
+        name: d.name,
+        ...(d.description ? { description: d.description } : {}),
+        ...(d.payloadSchema ? { payloadSchema: d.payloadSchema } : {}),
+        ...(d.contextHint ? { _meta: { [META_CONTEXT_HINT]: d.contextHint } } : {}),
+      };
+    });
+  }
+
   selectionChanged(selection: unknown): void {
     this.emit(EVENT_SELECTION_CHANGED, { selection });
   }
@@ -555,6 +630,14 @@ class Page implements ToolRoom {
       case "tools/call":
         this.greet(from);
         void this.call(from, m);
+        return;
+      case "events/list":
+        this.reply(from, m.id, { events: this.eventDescriptors() });
+        return;
+      case EVENT_REFUSED:
+        if (typeof m.params?.name === "string") {
+          this.onEventRefusedFn?.({ name: m.params.name, reason: typeof m.params.reason === "string" ? m.params.reason : "" });
+        }
         return;
       case "notifications/cancelled":
         this.running.get(`${from}/${JSON.stringify(m.params?.requestId)}`)?.abort();

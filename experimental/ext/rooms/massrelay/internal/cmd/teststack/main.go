@@ -122,6 +122,18 @@ func main() {
 		return core.StructuredResult("page events", map[string]any{"events": out}), nil
 	})
 	srv.RegisterTool(core.ToolDef{
+		Name:        "teststack_event_catalog",
+		Description: "Test only: the bridge's declared page event types, as EventCatalog returns them.",
+		InputSchema: map[string]any{"type": "object"},
+	}, func(core.ToolContext, core.ToolRequest) (core.ToolResponse, error) {
+		out := []map[string]any{}
+		for _, d := range bridge.EventCatalog() {
+			out = append(out, map[string]any{"name": d.Name, "description": d.Description,
+				"payloadSchema": d.PayloadSchema, "contextHint": d.ContextHint})
+		}
+		return core.StructuredResult("event catalog", map[string]any{"events": out}), nil
+	})
+	srv.RegisterTool(core.ToolDef{
 		Name:        "teststack_notify",
 		Description: "Test only: the host's Bridge.Notify, with {rooms, users, name, data}.",
 		InputSchema: map[string]any{"type": "object"},

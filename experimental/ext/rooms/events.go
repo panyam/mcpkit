@@ -114,23 +114,24 @@ func (b *Bridge) agreedLocked(p Principal, resource string, page PeerID) bool {
 	return pg != nil && agreesLocked(pg, p)
 }
 
-// pageEventLocked validates an event a page sent and returns it for the hook,
-// or false when the bridge drops it.
-func (b *Bridge) pageEventLocked(rs *roomState, pg *pageState, params json.RawMessage) (PageEvent, bool) {
+// pageEventLocked parses an event a page sent. It returns false when the
+// bridge drops it silently (no hook, a bad name, oversized data), and a
+// reason when it refuses the event and tells the page why.
+func (b *Bridge) pageEventLocked(rs *roomState, pg *pageState, params json.RawMessage) (PageEvent, string, bool) {
 	if b.onEvent == nil && b.fb == nil {
-		return PageEvent{}, false
+		return PageEvent{}, "", false
 	}
 	var e struct {
 		Name string          `json:"name"`
 		Data json.RawMessage `json:"data"`
 	}
 	if json.Unmarshal(params, &e) != nil || !ValidEventName(e.Name) || len(e.Data) > MaxEventDataBytes {
-		return PageEvent{}, false
+		return PageEvent{}, "", false
 	}
 	if len(e.Data) == 0 {
 		e.Data = json.RawMessage("null")
 	}
-	return PageEvent{
+	pe := PageEvent{
 		Resource: rs.resource,
 		Page:     pg.peer.ID,
 		Subject:  pg.peer.Subject,
@@ -138,7 +139,8 @@ func (b *Bridge) pageEventLocked(rs *roomState, pg *pageState, params json.RawMe
 		Name:     e.Name,
 		Data:     e.Data,
 		At:       time.Now().UTC(),
-	}, true
+	}
+	return pe, b.checkEventLocked(e.Name, e.Data), true
 }
 
 // ErrInvalidEvent is what Emit returns for a name ValidEventName refuses or

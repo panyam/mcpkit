@@ -136,6 +136,11 @@ type Bridge struct {
 	scopeFilter bool
 	onEvent     func(PageEvent)
 	fb          *fallbacks
+	// eventCatalog is the fixed event catalog from WithPageEventCatalog;
+	// nil means pages declare event types as they go. onCatalog hears
+	// changes to evDefs.
+	eventCatalog []PageEventDecl
+	onCatalog    func()
 
 	srv    *server.Server
 	ctx    context.Context
@@ -147,6 +152,7 @@ type Bridge struct {
 	sessions map[string]*session
 	pending  map[string]*pendingCall
 	defs     map[string]toolSpec
+	evDefs   map[string]eventSpec
 	// pairFails are the times a principal entered a wrong code with pair,
 	// within the last minute, keyed by Principal.key.
 	pairFails map[string][]time.Time
@@ -181,6 +187,8 @@ type pageState struct {
 	allowAgents bool
 	grants      []Principal // the page's own list, as it last sent it
 	tools       map[string]bool
+	// events are the event types the page declared and the bridge accepted.
+	events map[string]bool
 	// presence is the agents this bridge has seen around the page, and
 	// reported what it last sent the page of each, both by Principal.key.
 	presence map[string]Presence
@@ -227,11 +235,13 @@ func New(t RoomTransport, opts ...Option) *Bridge {
 		sessions:    make(map[string]*session),
 		pending:     make(map[string]*pendingCall),
 		defs:        make(map[string]toolSpec),
+		evDefs:      make(map[string]eventSpec),
 		pairFails:   make(map[string][]time.Time),
 	}
 	for _, o := range opts {
 		o(b)
 	}
+	b.initEventCatalogLocked()
 	return b
 }
 
@@ -556,6 +566,7 @@ func (b *Bridge) fromPage(rs *roomState, from PeerID, m rpcMessage) {
 
 	var notify []context.Context
 	var event *PageEvent
+	var eventRefused map[string]any
 	var paired *PairedByCode
 	b.mu.Lock()
 	pg := rs.pages[from]
@@ -566,12 +577,18 @@ func (b *Bridge) fromPage(rs *roomState, from PeerID, m rpcMessage) {
 	switch m.Method {
 	case MethodPageEvent:
 		if pg.listed {
-			if e, ok := b.pageEventLocked(rs, pg, m.Params); ok {
+			e, reason, ok := b.pageEventLocked(rs, pg, m.Params)
+			switch {
+			case ok && reason != "":
+				eventRefused = map[string]any{"name": e.Name, "reason": reason}
+			case ok:
 				event = &e
 			}
 		}
 	case "notifications/tools/list_changed":
 		go b.listTools(rs, from)
+	case "notifications/events/list_changed":
+		go b.listEvents(rs, from)
 	case "notifications/progress":
 		var p struct {
 			Token json.RawMessage `json:"progressToken"`
@@ -650,6 +667,9 @@ func (b *Bridge) fromPage(rs *roomState, from PeerID, m rpcMessage) {
 	for _, ctx := range notify {
 		core.Notify(ctx, "notifications/tools/list_changed", nil)
 	}
+	if eventRefused != nil {
+		b.sendTo(rs, from, rpcMessage{Method: MethodEventRefused, Params: mustJSON(eventRefused)})
+	}
 	if event != nil {
 		if b.onEvent != nil {
 			b.onEvent(*event)
@@ -664,6 +684,7 @@ func (b *Bridge) fromPage(rs *roomState, from PeerID, m rpcMessage) {
 // at its deadline, and drops tools no page offers any more.
 func (b *Bridge) pageLeft(rs *roomState, id PeerID) {
 	b.mu.Lock()
+	evBefore := sortedKeys(b.evDefs)
 	pg := rs.pages[id]
 	delete(rs.pages, id)
 	delete(rs.offers, id)
@@ -685,6 +706,7 @@ func (b *Bridge) pageLeft(rs *roomState, id PeerID) {
 		pc.done <- callOutcome{err: err}
 	}
 	b.syncTools(rs)
+	b.eventsAfterPageLeft(evBefore)
 }
 
 func pageName(id PeerID, label string) string {
@@ -774,6 +796,7 @@ func (b *Bridge) listTools(rs *roomState, page PeerID) {
 	if json.Unmarshal(resp.Result, &list) != nil {
 		return
 	}
+
 	type refusal struct{ name, reason string }
 	var refused []refusal
 
@@ -822,6 +845,12 @@ func (b *Bridge) listTools(rs *roomState, page PeerID) {
 		b.sendTo(rs, page, rpcMessage{Method: MethodToolRefused, Params: mustJSON(map[string]any{"name": r.name, "reason": r.reason})})
 	}
 	b.syncTools(rs)
+	// Event types after listing, never before: a peer that does not answer
+	// events/list would otherwise hold the page out of the roster until the
+	// call times out.
+	if firstListing {
+		go b.listEvents(rs, page)
+	}
 }
 
 // admitLocked decides whether the bridge can offer a page's tool. The first

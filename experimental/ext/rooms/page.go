@@ -78,6 +78,9 @@ type Page struct {
 	presenceTTL time.Duration
 	onPresence  func([]Presence)
 	onNotify    map[string]func(json.RawMessage)
+	// events are the event types the page declares, by name.
+	events         map[string]PageEventDecl
+	onEventRefused func(name, reason string)
 
 	ctx    context.Context
 	cancel context.CancelFunc
@@ -118,6 +121,7 @@ func JoinPage(ctx context.Context, t RoomTransport, room string, opts ...PageOpt
 		presence:    make(map[string]Presence),
 		presenceTTL: DefaultPresenceTTL,
 		onNotify:    make(map[string]func(json.RawMessage)),
+		events:      make(map[string]PageEventDecl),
 		ctx:         pctx,
 		cancel:      cancel,
 		done:        make(chan struct{}),
@@ -139,6 +143,32 @@ func (p *Page) RegisterTool(t PageTool) {
 	p.tools[t.Name] = t
 	p.mu.Unlock()
 	p.notifyBridges("notifications/tools/list_changed", nil)
+}
+
+// DeclareEvent adds or replaces an event type the page emits and tells known
+// bridges its list changed. Declare a type before emitting it: until a bridge
+// has the declaration, it treats the name as undeclared.
+func (p *Page) DeclareEvent(d PageEventDecl) {
+	p.mu.Lock()
+	p.events[d.Name] = d
+	p.mu.Unlock()
+	p.notifyBridges("notifications/events/list_changed", nil)
+}
+
+// RemoveEvent withdraws a declared event type.
+func (p *Page) RemoveEvent(name string) {
+	p.mu.Lock()
+	delete(p.events, name)
+	p.mu.Unlock()
+	p.notifyBridges("notifications/events/list_changed", nil)
+}
+
+// OnEventRefused calls fn when a bridge refuses one of the page's event
+// declarations, or an event it emitted, with the bridge's reason.
+func (p *Page) OnEventRefused(fn func(name, reason string)) {
+	p.mu.Lock()
+	p.onEventRefused = fn
+	p.mu.Unlock()
 }
 
 // SetLabel sets what list_pages shows for this page.
@@ -288,6 +318,26 @@ func (p *Page) handle(from PeerID, m rpcMessage) {
 	case "tools/call":
 		p.greet(from)
 		p.call(from, m)
+	case "events/list":
+		p.mu.Lock()
+		list := make([]wireEventDecl, 0, len(p.events))
+		for _, name := range sortedKeys(p.events) {
+			list = append(list, p.events[name].wire())
+		}
+		p.mu.Unlock()
+		p.reply(from, m.ID, map[string]any{"events": list})
+	case MethodEventRefused:
+		var r struct {
+			Name   string `json:"name"`
+			Reason string `json:"reason"`
+		}
+		_ = json.Unmarshal(m.Params, &r)
+		p.mu.Lock()
+		fn := p.onEventRefused
+		p.mu.Unlock()
+		if fn != nil {
+			fn(r.Name, r.Reason)
+		}
 	case "notifications/cancelled":
 		var c struct {
 			RequestID json.RawMessage `json:"requestId"`
