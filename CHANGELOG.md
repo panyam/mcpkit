@@ -9,7 +9,19 @@ Releases before 0.3.0 were tag-only and are not back-filled here.
 
 ## [Unreleased]
 
+## [0.8.17] - 2026-11-08
+
+Full write-up: [`docs/releases/v0.8.17.md`](docs/releases/v0.8.17.md).
+
 ### Added
+- **`agentsclient.WithExtension()`** declares `io.modelcontextprotocol/agents`
+  on a Go client. A client needs it now that the server refuses undeclared
+  ones (see Changed).
+- **`core.CreateTaskResult` and `core.DetailedTask` keep extension fields.**
+  Both gain `Extras map[string]any`, which holds every top-level key the
+  struct doesn't model and writes them back on encode. A typed field wins on
+  a collision. SEP-2663 results extend the open `Result`, and a Go client
+  used to drop a server's extra keys such as `eventSource` (#1665).
 - **The server checks `Mcp-Param-{Name}` headers on `tools/call`.** For each
   argument a tool's schema marks with `x-mcp-header`, the header must mirror
   the body, after Base64 decoding. Numbers compare numerically. A missing
@@ -22,6 +34,22 @@ Releases before 0.3.0 were tag-only and are not back-filled here.
   get the `isError` tool result #1637 chose.
 
 ### Changed
+- **`agents/list` and `agents/get` refuse a client that didn't declare the
+  agents extension**, with `-32021` and the missing capability in `data`. On
+  the stateless wire that is HTTP 400. The check runs before step-up, so an
+  undeclared client never sees a 403 naming an agent's scopes. The Agents WG
+  agreed the rule on Discord, and the proposal text doesn't state it yet. Go
+  clients add `agentsclient.WithExtension()` (#1673).
+- **`ext/skills` skips hidden files and directories by default.** A skill
+  directory's `.env` or `.git/` used to be served as skill resources. The
+  filter covers listing, the manifest, directory reads, packing and the
+  watcher, and `mcpskills pack` no longer ships `.git/`. `WithHiddenFiles()`
+  turns it off.
+- **Events webhooks mint a `webhook-id` per message.** One event matching two
+  subscriptions to the same receiver used to go out twice under one id, so a
+  receiver deduplicating on `webhook-id` dropped the second. Each (event,
+  subscription) pair now gets its own `msg_` id, reused across retries, as
+  SEP-3415 requires (#1664).
 - **`core.DecodeMcpHeaderValue` treats `=?base64?` without the closing `?=` as
   a literal value**, as the SEP-2243 test-case table says. It used to be an
   error, so such an `Mcp-Name` now compares as plain text.
@@ -44,6 +72,13 @@ Releases before 0.3.0 were tag-only and are not back-filled here.
 - **`subscriptions/listen` checks `Mcp-Method`.** The other stateless entry
   points have checked it since #1567, and listen now refuses a request without
   it in the same way, with HTTP 400 and `-32020`.
+
+### Fixed
+- **The events bridge lost events fired while it restarted.** The upstream
+  treated the bridge's resubscribe as a refresh and replayed nothing. The
+  bridge now unsubscribes each watch that has a cursor before resubscribing,
+  so the upstream replays from the cursor (#1671).
+- **`-32020` data showed a string argument in JSON quotes.**
 
 ## [0.8.16] - 2026-11-03
 
