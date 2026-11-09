@@ -15,6 +15,13 @@ Production-grade MCP (Model Context Protocol) server and client library for Go.
 
 **[Docs site](https://panyam.github.io/mcpkit/)** · **[Examples](https://panyam.github.io/mcpkit/examples/)** · **[Conformance report](https://panyam.github.io/mcpkit/conformance/)** · **[Capabilities](https://panyam.github.io/mcpkit/capabilities/)** · **[Changelog](CHANGELOG.md)** · **[Quick Start](#quick-start)**
 
+## Why mcpkit
+
+- **Batteries included.** OAuth and JWT auth, Tasks, Skills, MCP Apps, Events and OpenTelemetry ship beside the core. Each is its own Go module, so the core never pulls in their dependencies.
+- **Conformance first.** mcpkit passes every tier-scored scenario in the official [MCP conformance suite](https://github.com/modelcontextprotocol/conformance): server 31/31 and client 21/21. CI regenerates the report on every PR.
+- **Both wires.** One server answers session clients on 2025-11-25 and stateless clients on the 2026-07-28 draft, through one request path.
+- **Draft SEPs early.** Extensions still in review, such as MCP Events and agent discovery, ship under `experimental/` with conformance scenarios of their own. Their APIs can change between releases.
+
 ## Quick Start
 
 ```go
@@ -80,29 +87,27 @@ out, err := c.ToolCall(ctx, "greet", map[string]any{"name": "world"})
 | **ext/otel** | `github.com/panyam/mcpkit/ext/otel` | Separate module: SEP-414 OpenTelemetry tracing adapter |
 | **ext/skills** | `github.com/panyam/mcpkit/ext/skills` | Separate module: SEP-2640 skills (data-only, served over resource primitives) |
 | **experimental/ext/events** | `github.com/panyam/mcpkit/experimental/ext/events` | Separate module: MCP Events protocol (webhooks, polling, streaming) |
+| **experimental/ext/agents** | `github.com/panyam/mcpkit/experimental/ext/agents` | Separate module: server-declared agent discovery (agents-wg#22), with a Go client |
 | **testutil** | `github.com/panyam/mcpkit/testutil` | TestClient wrapper for e2e tests |
 
 ## Conformance
 
-mcpkit passes the [official MCP conformance suite](https://github.com/modelcontextprotocol/conformance) for the base protocol **and** the conformance scenarios for a long list of draft/recent SEPs, the "batteries" that set it apart from a minimal SDK:
+mcpkit passes the [official MCP conformance suite](https://github.com/modelcontextprotocol/conformance) for the base protocol, and the scenarios for the newer SEPs it implements:
 
 | Suite | Spec | Result |
 |-------|------|--------|
-| Server (base protocol) | MCP 2025-11-25 | **31/31** scenarios |
-| Auth | MCP authorization | **14/14** scenarios |
-| MCP Apps | ext-apps | **21** tests |
-| Tasks v1 (frozen) | — | **26/27** (1 skipped — SDK-client limitation) |
-| Tasks v2 | [SEP-2663](https://github.com/modelcontextprotocol/conformance) | **47/47** (upstream) |
-| MRTR | [SEP-2322](https://github.com/modelcontextprotocol/conformance) | **3/3** negative (upstream) |
-| Stateless wire | [SEP-2575](https://github.com/modelcontextprotocol/conformance) | **30/30** (upstream) |
-| List-TTL | SEP-2549 | **5/5** |
-| File-Inputs | SEP-2356 (withdrawn upstream, see below) | **7/7** |
-| Skills | SEP-2640 | fixture-driven |
-| Keycloak interop | — | **12/12** |
+| Server tier-check | MCP 2025-11-25 | **31/31** scenarios, 73 checks |
+| Client tier-check | MCP 2025-11-25 | **21/21** scenarios, 581 checks |
+| Tasks v2 | SEP-2663 | **44** pass, 1 skip |
+| MRTR | SEP-2322 | **36** pass, 1 warn |
+| Stateless wire | SEP-2575 | **30/30** |
+| Skills | SEP-2640 | **45/45** |
+| Events (draft) | SEP-3415 | **130** pass, 11 warn |
+| Agent discovery (draft) | agents-wg#22 | **32/32** |
 
-Tasks v2, MRTR, and the SEP-2575 stateless wire all run against [`modelcontextprotocol/conformance`](https://github.com/modelcontextprotocol/conformance) `main` directly (merged upstream). The full per-SEP rollup is published at [panyam.github.io/mcpkit/conformance](https://panyam.github.io/mcpkit/conformance/).
+The first six run against upstream `main`. We wrote the Events and agent discovery scenarios ourselves and proposed them upstream, where they are still in review. Authorization, MCP Apps, Tasks v1 and Keycloak interop have test suites of their own, and `make testall` runs everything.
 
-**On SEP-2356:** the working group closed it on 2026-06-26 in favour of SEP-2631 (File Objects and Transfer), which is still in draft. The file-input surface mcpkit ships and the scenarios above continue to work and are still exercised in CI; the row is kept so the behaviour stays covered, not as a claim of conformance to a live proposal. Migration to SEP-2631 is tracked in issue 827.
+The counts come from [`CONFORMANCE.md`](CONFORMANCE.md). It is generated, and CI fails a PR that leaves it stale, so read numbers there before quoting them.
 
 Three artifacts describe mcpkit's conformance posture at increasing granularity:
 
