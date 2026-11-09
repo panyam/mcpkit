@@ -223,7 +223,7 @@ func validateParamHeaders(req *core.Request, headers http.Header, reg *Registry)
 		case !inBody:
 			return headerMismatchResponse(req.ID, header, values[0], "", "bodyField", bodyField)
 		case len(values) == 0:
-			return headerMismatchResponse(req.ID, header, "", string(body), "bodyField", bodyField)
+			return headerMismatchResponse(req.ID, header, "", paramBodyText(body), "bodyField", bodyField)
 		}
 
 		received := strings.TrimSpace(values[0])
@@ -232,11 +232,11 @@ func validateParamHeaders(req *core.Request, headers http.Header, reg *Registry)
 			err = fmt.Errorf("header value %q has characters that need Base64 encoding", received)
 		}
 		if err != nil {
-			return headerMismatchResponse(req.ID, header, received, string(body),
+			return headerMismatchResponse(req.ID, header, received, paramBodyText(body),
 				"bodyField", bodyField, "decodeError", err.Error())
 		}
 		if !paramHeaderMatches(decoded, body) {
-			return headerMismatchResponse(req.ID, header, received, string(body), "bodyField", bodyField)
+			return headerMismatchResponse(req.ID, header, received, paramBodyText(body), "bodyField", bodyField)
 		}
 	}
 	return nil
@@ -272,4 +272,14 @@ func isVisibleASCII(s string) bool {
 		}
 	}
 	return true
+}
+
+// paramBodyText renders a body value for a -32020 error's "expected" field:
+// a JSON string without its quotes, anything else as raw JSON.
+func paramBodyText(body json.RawMessage) string {
+	var str string
+	if json.Unmarshal(body, &str) == nil {
+		return str
+	}
+	return string(body)
 }
