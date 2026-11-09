@@ -106,3 +106,29 @@ func TestMCP_RefusesAnAgentWithoutAPlayerToken(t *testing.T) {
 		t.Fatal("connected without a player token")
 	}
 }
+
+func TestSignin_CookieIsSecureOnlyOverHTTPS(t *testing.T) {
+	ts := newTestServer(t)
+	noRedirect := &http.Client{CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+	for _, tc := range []struct {
+		proto  string
+		secure bool
+	}{{"", false}, {"https", true}} {
+		req, _ := http.NewRequest(http.MethodGet, ts.URL+"/signin?as=alice&game=demo", nil)
+		if tc.proto != "" {
+			req.Header.Set("X-Forwarded-Proto", tc.proto)
+		}
+		res, err := noRedirect.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		res.Body.Close()
+		cookies := res.Cookies()
+		if len(cookies) != 1 || cookies[0].Name != playerCookie {
+			t.Fatalf("proto %q: cookies %v", tc.proto, cookies)
+		}
+		if cookies[0].Secure != tc.secure {
+			t.Errorf("proto %q: Secure=%v, want %v", tc.proto, cookies[0].Secure, tc.secure)
+		}
+	}
+}

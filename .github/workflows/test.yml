@@ -6,6 +6,11 @@ on:
   pull_request:
     branches: [main]
 
+# Jobs only read the repository. The two that post reports set their own
+# permissions below, which take precedence over this.
+permissions:
+  contents: read
+
 jobs:
   test:
     runs-on: ubuntu-latest
