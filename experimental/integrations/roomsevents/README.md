@@ -30,8 +30,12 @@ Every payload also carries `resource`, `page`, `user` (the page's subject from i
 
 Who hears what follows the bridge's rules:
 
-- A session may subscribe to a room's events only while it is attached to that room. A stream
-  opened before `attach` ends with the refusal.
+- Any MCP session may subscribe, before or after it attaches. It hears a room's events only while
+  it is attached to that room, and only events from after it attached. A stream opened before
+  `attach` stays open and quiet, and starts delivering once the session attaches. `detach` pauses
+  it, and attaching again resumes it. A host that opens its streams as soon as it connects needs
+  no setup call first. A call with no MCP session is refused, since attachment belongs to a
+  session.
 - It receives a page's events only if that page agreed to it, the same agreement that lets it call
   the page's tools: the page's agents switch for its own user, or an accepted pairing code.
 - Delivery is push (`events/stream`) and poll. Webhooks aren't offered, because attachment ends with

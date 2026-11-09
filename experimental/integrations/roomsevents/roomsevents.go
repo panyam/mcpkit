@@ -13,11 +13,12 @@
 //	bridge.Register(srv)
 //	ev.Register(srv, bridge, events.Config{})
 //
-// Who hears what follows the bridge's own rules. A session may subscribe to a
-// room's events only while it is attached to that room, and it receives a
-// page's events only if that page agreed to it, the same agreement that lets
-// it call the page's tools. One user's page never talks to another user's
-// agent unless that user accepted its pairing code.
+// Who hears what follows the bridge's own rules. Any MCP session may subscribe
+// to a room's events, before or after it attaches. It receives an event only
+// while it is attached to that room, only if the event happened after it
+// attached, and only if the page agreed to it, the same agreement that lets it
+// call the page's tools. One user's page never talks to another user's agent
+// unless that user accepted its pairing code.
 //
 // Delivery is push (events/stream) and poll only. Attachment lasts as long as
 // the MCP session, and a webhook subscription outlives every session, so this
@@ -349,14 +350,19 @@ func (e *Events) sessionOf(hc events.HookContext) string {
 	return e.streams[hc.SubscriptionID()]
 }
 
+// onSubscribe accepts a subscription from any MCP session, attached to the
+// room or not: match decides what it hears. A host that opens its streams as
+// soon as it connects, before it calls attach, gets a quiet stream that starts
+// delivering once the session attaches (#1676). A call with no session is
+// refused, since attachment belongs to a session.
 func (e *Events) onSubscribe(hc events.HookContext, params map[string]any) error {
 	resource := resourceOf(params)
 	sid := core.GetSessionID(hc.Context())
 	e.mu.Lock()
 	b := e.bridge
 	e.mu.Unlock()
-	if b == nil || sid == "" || !b.Attached(sid, resource) {
-		return fmt.Errorf("attach to %q before subscribing to its events: %w", resource, events.ErrSubscribeForbidden)
+	if b == nil || sid == "" {
+		return fmt.Errorf("the events of %q need an MCP session, which attaches to the room: %w", resource, events.ErrSubscribeForbidden)
 	}
 	if id := hc.SubscriptionID(); id != "" {
 		e.mu.Lock()
@@ -374,8 +380,11 @@ func (e *Events) onUnsubscribe(hc events.HookContext, _ map[string]any) {
 	}
 }
 
-// match delivers an event to a subscription only for its own resource, and
-// only while the session is attached and the emitting page agrees to it.
+// match delivers an event to a subscription only for its own resource, only
+// while the session is attached and the emitting page agrees to it, and only
+// if the event happened after the session attached. A poll runs match when it
+// arrives, not when the event happened, so "attached now" alone would hand a
+// session that subscribed early the events from before its attach.
 func (e *Events) match(hc events.HookContext, ev events.Event, params map[string]any) bool {
 	var o Origin
 	if json.Unmarshal(ev.Data, &o) != nil || o.Resource != resourceOf(params) {
@@ -385,7 +394,11 @@ func (e *Events) match(hc events.HookContext, ev events.Event, params map[string
 	b := e.bridge
 	e.mu.Unlock()
 	sid := e.sessionOf(hc)
-	return b != nil && sid != "" && b.HearsPage(sid, o.Resource, rooms.PeerID(o.Page))
+	if b == nil || sid == "" {
+		return false
+	}
+	since, attached := b.AttachedSince(sid, o.Resource)
+	return attached && !o.At.Before(since) && b.HearsPage(sid, o.Resource, rooms.PeerID(o.Page))
 }
 
 // mergeOrigin puts the origin fields beside a declared event's own. The

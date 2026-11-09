@@ -26,9 +26,21 @@ looks it up there.
 ## A refused stream is refused up front
 
 experimental/ext/events used to send `notifications/events/active` before it ran `OnSubscribe`, so a
-stream opened before `attach` was confirmed and then ended with `-32025`. Since #1603 the hook runs
-first, and the attach check wraps `events.ErrSubscribeForbidden`, so the client's `Stream` fails at
-once with `-32024`.
+refused stream was confirmed and then ended with `-32025`. Since #1603 the hook runs first, and a
+refusal wraps `events.ErrSubscribeForbidden`, so the client's `Stream` fails at once with `-32024`.
+The only refusal left is a call with no MCP session.
+
+## A subscription before attach is held, and matched by attach time (#1676)
+
+`OnSubscribe` used to refuse a session that had not attached yet. Hosts that open their streams as
+soon as they connect (chakra) then heard nothing unless they ordered their own calls. It now accepts
+any session, and `Match` decides what it hears.
+
+`Match` checks when the session attached (`Bridge.AttachedSince`), not only that it is attached now,
+because `events/poll` runs `Match` when the poll arrives rather than when the event happened. With
+"attached now" alone, a session that polled before attaching would get, on its next poll from that
+cursor, the events from before its attach. The attach time is kept through a repeated `attach` and
+dropped on `detach`, so a later attach starts a new one and nothing from the detached gap arrives.
 
 ## The channel contract, and what was checked
 

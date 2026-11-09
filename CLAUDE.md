@@ -47,7 +47,7 @@ upstream changes to watch.
 | `ext/otel/` — SEP-414 OpenTelemetry adapter | `ext/otel/README.md`, `docs/SEP_414_OTEL.md` |
 | `experimental/ext/events/` — MCP Events protocol; `clients/go/bridge` is the watch-and-act daemon (#1579) | `experimental/ext/events/README.md`, `experimental/ext/events/NOTES.md`, `experimental/ext/events/clients/go/bridge/README.md` |
 | `experimental/ext/agents/` — Server-declared agent discovery (pre-SEP) | `experimental/ext/agents/README.md`, `experimental/ext/agents/NOTES.md` |
-| `experimental/ext/rooms/` — Room bridge: agents call tools web pages offer (#1581) | `experimental/ext/rooms/README.md`, `experimental/ext/rooms/NOTES.md` |
+| `experimental/ext/rooms/` — Room bridge: agents call tools web pages offer (#1581); `examples/rooms/lanternfall` is the end-to-end example | `experimental/ext/rooms/README.md`, `experimental/ext/rooms/NOTES.md`, `experimental/ext/rooms/WIRE.md` (the page wire, replayed by both pages from `testdata/wire/page.jsonl`) |
 | `experimental/integrations/roomsevents/` — Room events as SEP-3415, plus the Claude Code channel front end (#1581) | `experimental/integrations/roomsevents/README.md`, `experimental/integrations/roomsevents/NOTES.md` |
 | `experimental/ext/rooms/massrelay/` — `RoomTransport` over massrelay, embedded or WebSocket (separate go.mod) | `experimental/ext/rooms/massrelay/README.md`, `experimental/ext/rooms/massrelay/NOTES.md` |
 | `experimental/ext/rooms/ts/` — `joinToolRoom`, the browser page client for the room bridge (pnpm) | `experimental/ext/rooms/ts/README.md`, `experimental/ext/rooms/ts/NOTES.md` |
@@ -112,9 +112,11 @@ each worked in its own worktree:
   agent drives the page through the room bridge (`experimental/ext/rooms`). The agent is any MCP
   client. An interactive one like Claude Code keeps its own system prompt and learns the page from
   the server's instructions and tool descriptions. A custom one on LangGraph, Mastra or another
-  agent SDK may set its own. Exercise `make exercise-aipage`, which #1682 adds and which runs
-  first. Aligning the page wire with WebMCP is wanted but comes after the custom-app case works
-  (#1679's "Later" section).
+  agent SDK may set its own. Exercise `make exercise-aipage` (CI job `rooms-aipage`), which plays
+  `examples/rooms/lanternfall` with a scripted client, with the bundled LangGraph game master when
+  `ANTHROPIC_API_KEY` is set, and prints by-hand steps for Claude Code through `rooms-channel`.
+  The by-hand run is the one check CI can't do. Aligning the page wire with WebMCP is wanted but
+  comes after the custom-app case works (`experimental/ext/rooms/WIRE.md`, "Later").
 - **#1553** (`mission_release_installable`): every tagged module installs from the proxy at release.
   Exercise in the issue. #1488 (`go install …/cmd/mcpskills@<tag>` failing on in-repo `replace`
   directives) closed with #1624, which tags a tree without them.
@@ -303,6 +305,18 @@ These span packages and will bite on a task that never opens a routed doc.
   `-race`. The other experimental scripts don't either: the events bridge shipped a test-helper race
   that failed 5 runs in 6 under `-race` and never showed in CI. After touching anything concurrent,
   run `go test -race` on the package a few times by hand.
+- **A commit message can close an issue across a line break.** A title ending in "closed" and a
+  body starting with "#1683" read to GitHub as "closed #1683", and merging the PR closed the
+  mission. Keep a closing word (close, fix, resolve and their forms) away from the end of a line
+  when the next line starts with an issue number, and check the mission is still open after a
+  merge.
+- **`go test ./experimental/ext/rooms/` from the repo root reports `[setup failed]`**, which reads
+  like a flaky failure. The experimental modules are separate modules: run `go test` inside the
+  module directory, or through its `make test-experimental-*` target.
+- **A failed `bump-root` tidy can break `check-install` for an hour after tagging.** A module
+  missing a `replace` makes tidy ask the Go proxy for the new version before its tag exists, and
+  the proxy and sum.golang.org cache the miss. Fix the module and finish the steps `bump-root`
+  skipped before tagging. Detail and the workaround in `RELEASING.md` step 2.
 - **A mutation that breaks the build reads as a pass** to a red-before-green runner that greps for
   `--- FAIL`. Check for `build failed` too, or a "no test went red" result means nothing. It hid two
   mutations in #1613 until a direct run showed the build error.
