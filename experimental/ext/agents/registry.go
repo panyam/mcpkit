@@ -141,6 +141,9 @@ func Register(cfg Config) (*Registry, error) {
 	_ = cfg.Server.RegisterSubscriptionFilter(server.ListChangedFilterKey(ListChangedFilterKey, NotificationListChanged))
 	cfg.Server.HandleMethod(MethodList, r.handleList)
 	cfg.Server.HandleMethod(MethodGet, r.handleGet)
+	// requireDeclared runs ahead of stepUp, so a client that never declared
+	// the extension gets -32021 rather than a 403 for an agent it cannot use.
+	cfg.Server.UseMiddleware(requireDeclared)
 	// The step-up gate is middleware because only a refusal raised before
 	// dispatch becomes a real HTTP 403 with a WWW-Authenticate header. The
 	// stateless wire routes extension methods through the same chain.
@@ -248,6 +251,22 @@ func (r *Registry) stepUp(ctx context.Context, req *core.Request, next server.Mi
 		Message:         "insufficient scope",
 		WWWAuthenticate: core.InsufficientScopeChallenge(r.cfg.ResourceMetadataURL, desc, scopes...),
 	}
+}
+
+// requireDeclared answers agents/list and agents/get with -32021 when the
+// client has not declared the extension, in its initialize capabilities or
+// in the request's _meta. It returns a JSON-RPC error response rather than a
+// Go error, because a middleware error becomes an HTTP auth failure. The
+// stateless wire maps -32021 to HTTP 400.
+func requireDeclared(ctx context.Context, req *core.Request, next server.MiddlewareFunc) (*core.Response, error) {
+	if (req.Method != MethodList && req.Method != MethodGet) || core.ClientSupportsExtension(ctx, ExtensionID) {
+		return next(ctx, req)
+	}
+	return core.NewErrorResponseWithData(req.ID, core.ErrCodeMissingRequiredClientCapability,
+		req.Method+": client did not declare the "+ExtensionID+" extension",
+		core.MissingRequiredClientCapabilityData{RequiredCapabilities: core.ClientCapabilities{
+			Extensions: map[string]core.ClientExtensionCap{ExtensionID: {}},
+		}}), nil
 }
 
 func (r *Registry) visible(ctx core.MethodContext, name string) bool {

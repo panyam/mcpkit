@@ -67,7 +67,7 @@ func TestStepUpScopesAndCacheRetry(t *testing.T) {
 	t.Cleanup(ts.Close)
 
 	tok := &swapToken{tok: "reader"}
-	c := client.NewClient(ts.URL+"/mcp", core.ClientInfo{Name: "t", Version: "1"}, client.WithTokenSource(tok))
+	c := client.NewClient(ts.URL+"/mcp", core.ClientInfo{Name: "t", Version: "1"}, client.WithTokenSource(tok), agentsclient.WithExtension())
 	require.NoError(t, c.Connect(t.Context()))
 	t.Cleanup(func() { c.Close() })
 	cache := agentsclient.NewCache(agentsclient.New(c))

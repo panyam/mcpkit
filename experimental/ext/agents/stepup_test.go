@@ -85,7 +85,12 @@ func newStepUpServer(t *testing.T, statelessWire bool, mutate func(*agents.Confi
 
 func connectAs(t *testing.T, url, token string, statelessWire bool) *client.Client {
 	t.Helper()
-	opts := []client.ClientOption{client.WithTokenSource(staticToken(token))}
+	return dialAs(t, url, token, statelessWire, declareAgents)
+}
+
+func dialAs(t *testing.T, url, token string, statelessWire bool, extra ...client.ClientOption) *client.Client {
+	t.Helper()
+	opts := append([]client.ClientOption{client.WithTokenSource(staticToken(token))}, extra...)
 	if statelessWire {
 		opts = append(opts, client.WithClientMode(client.ClientModeStateless))
 	}

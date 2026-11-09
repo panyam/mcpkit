@@ -1,9 +1,9 @@
 # experimental/ext/agents — implementation notes
 
-Server-declared agent discovery, tracking the agents-wg#22 SEP draft (head `9b16840e`). For the API see `README.md`.
+Server-declared agent discovery, tracking agents-wg#22. It merged on 2026-10-20 as `137d88bd`, with the same text as head `9b16840e`. For the API see `README.md`.
 
 Research surface under `experimental/ext/`, with its own go.mod, mirroring `experimental/ext/events`.
-**Promote to `ext/agents` only when a SEP merges.** Both modules run in the per-PR `test.yml`
+**Promote to `ext/agents` only when a SEP merges.** #22 merging doesn't count: it merged as a proposal in the agents-wg repo and has no SEP number yet. Both modules run in the per-PR `test.yml`
 matrix, added with the #22 alignment because the parity tests are the only thing holding the
 "fields MUST match" rule.
 
@@ -157,6 +157,24 @@ same way `events.Register` handles `eventsListChanged` (#1531). Declaring it unc
 deliberate, since a server that starts with no agents and adds them later still owes its clients
 the notification. Changes the registry cannot see, such as a `Visible` policy that starts
 answering differently, need an explicit `NotifyListChanged`.
+
+## Undeclared clients get -32021, ahead of the SEP text
+
+A client that never declared `io.modelcontextprotocol/agents` gets `-32021` from `agents/list` and
+`agents/get` (#1673). #22 merged with no rule here. Luca said on the Agents WG Discord on 2026-10-16
+that it should be `-32021` (msg `1560791130545721445`), and the Python reference already refuses
+these clients. The SEP text is a pending follow-up, so this module is briefly stricter than the
+document it tracks.
+
+The check is `requireDeclared`, a middleware registered ahead of the step-up one. Two reasons it is
+middleware and sits first. Without it, a 403 from step-up would tell an undeclared client which
+scopes an agent needs. And both methods share one check instead of two handler preambles. It
+returns a JSON-RPC error response rather than a Go error, since a middleware error turns into an
+HTTP auth failure. The stateless wire maps `-32021` to HTTP 400 like every other `-32021`.
+
+`core.ClientSupportsExtension` reads session caps and the request's `_meta`, so one check covers
+both wires. Hosts declare with `agentsclient.WithExtension()`. Before #1673 the Go client never
+declared the extension, and nothing noticed, because nothing checked.
 
 ## Step-up is middleware, and checks visibility first
 

@@ -27,6 +27,15 @@ func New(mcp *client.Client) *Client {
 	return &Client{mcp: mcp}
 }
 
+// WithExtension declares the agents extension in the client's capabilities.
+// A server following agents-wg#22 answers agents/list and agents/get with
+// -32021 to a client that did not declare it, so pass this to
+// client.NewClient for every client that discovers agents. On the stateless
+// wire the declaration rides in each request's _meta.
+func WithExtension() client.ClientOption {
+	return client.WithExtension(agents.ExtensionID, core.ClientExtensionCap{})
+}
+
 // SupportsAgents reports whether the connected server advertised the agents
 // extension in its initialize (or server/discover) response. Reads the cached
 // handshake, so it makes no network call. Hosts iterating connected servers

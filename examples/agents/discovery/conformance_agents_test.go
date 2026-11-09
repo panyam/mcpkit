@@ -24,7 +24,7 @@ func TestConformanceFixture(t *testing.T) {
 	ts := httptest.NewServer(srv.Handler(server.WithStreamableHTTP(true), server.WithStatelessMode(stateless.ModeStateless)))
 	t.Cleanup(ts.Close)
 
-	c := client.NewClient(ts.URL+"/mcp", core.ClientInfo{Name: "harness", Version: "1"}, client.WithClientMode(client.ClientModeStateless))
+	c := client.NewClient(ts.URL+"/mcp", core.ClientInfo{Name: "harness", Version: "1"}, client.WithClientMode(client.ClientModeStateless), agentsclient.WithExtension())
 	ctx := context.Background()
 	require.NoError(t, c.Connect(ctx))
 	t.Cleanup(func() { c.Close() })

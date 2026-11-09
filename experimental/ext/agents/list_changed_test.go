@@ -26,7 +26,7 @@ func listenForListChanged(t *testing.T) (*agents.Registry, *client.Listener, <-c
 	ts := httptest.NewServer(srv.Handler(server.WithStreamableHTTP(true), server.WithStatelessMode(stateless.ModeStateless)))
 	t.Cleanup(ts.Close)
 
-	c := client.NewClient(ts.URL+"/mcp", core.ClientInfo{Name: "test", Version: "0.0.1"}, client.WithClientMode(client.ClientModeStateless))
+	c := client.NewClient(ts.URL+"/mcp", core.ClientInfo{Name: "test", Version: "0.0.1"}, client.WithClientMode(client.ClientModeStateless), declareAgents)
 	require.NoError(t, c.Connect(t.Context()))
 	t.Cleanup(func() { c.Close() })
 

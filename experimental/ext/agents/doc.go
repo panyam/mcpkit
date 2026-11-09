@@ -35,9 +35,9 @@ package agents
 // Beta, so it should not change again. See NOTES.md.
 const ExtensionID = "io.modelcontextprotocol/agents"
 
-// SpecVersion is the draft the implementation tracks: agents-wg#22 at head
-// 9b16840e, dated by that commit. Bump it when the implementation follows a
-// newer revision of the SEP.
+// SpecVersion is the revision the implementation tracks: agents-wg#22 at head
+// 9b16840e, dated by that commit. The proposal merged unchanged as 137d88bd.
+// Bump it when the implementation follows a newer revision.
 const SpecVersion = "2026-10-09"
 
 // MethodList and MethodGet are the two JSON-RPC methods this primitive adds.

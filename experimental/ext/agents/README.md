@@ -82,6 +82,7 @@ wire:
 | Unknown or hidden agent | `-32602` | `agent_not_found` |
 | Agent names an unregistered tool | `-32603` | `invalid_agent_definition` |
 | Empty name, malformed params, bad cursor | `-32602` | none |
+| Client did not declare `io.modelcontextprotocol/agents` | `-32021` (HTTP 400 on stateless) | none, `data.requiredCapabilities` names the extension |
 
 ### Config
 
@@ -133,6 +134,8 @@ tracing abstraction, never on `ext/otel`. See `docs/SEP_414_OTEL.md`
 ```go
 import agentsclient "github.com/panyam/mcpkit/experimental/ext/agents/clients/go"
 
+mcp := client.NewClient(url, info, agentsclient.WithExtension()) // servers refuse undeclared clients with -32021
+// ... mcp.Connect(ctx)
 ac := agentsclient.New(mcp) // over a connected *client.Client
 if !ac.SupportsAgents() {
     return // no agents; fall back to plain tools/list
