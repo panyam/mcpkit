@@ -11,7 +11,11 @@ main { display: grid; grid-template-columns: minmax(0, 3fr) minmax(220px, 2fr); 
 #map { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; align-content: start; }
 .tile { position: relative; min-height: 120px; padding: 10px; border: 1px solid #4a3f30; border-radius: 10px; background: var(--tile); color: var(--ink); font: inherit; text-align: left; cursor: pointer; transition: transform .12s, box-shadow .12s; display: flex; flex-direction: column; gap: 4px; }
 .tile:hover { transform: translateY(-2px); box-shadow: 0 6px 18px #0008; }
-.tile.near { background: var(--near); }
+.tile.near { background: var(--near); border-style: dashed; border-color: #8a6f45; }
+.tile.near:hover { border-color: var(--glow); }
+.action { margin-top: auto; font-size: 12px; color: var(--glow); opacity: .85; }
+#hint { margin: 0 0 14px; padding: 10px 14px; border: 1px solid #8a6f45; border-left: 4px solid var(--glow); border-radius: 8px; background: #ffb3470f; color: var(--ink); }
+#hint code { background: #00000055; padding: 1px 5px; border-radius: 4px; }
 .tile.here { border-color: var(--glow); box-shadow: 0 0 0 2px #ffb34755, 0 0 24px #ffb34733; }
 .icon { font-size: 28px; }
 .name { font-weight: bold; }

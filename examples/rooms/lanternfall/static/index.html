@@ -13,13 +13,14 @@
     <label class="switch"><input type="checkbox" id="gm-switch" data-testid="gm-switch" disabled> Let my game master drive this tab</label>
   </header>
   <p id="status" data-testid="status">Joining the room…</p>
+  <div id="hint" data-testid="hint" hidden></div>
   <main>
     <section id="map" data-testid="map" aria-label="Map"></section>
     <aside>
       <h2>Story</h2>
       <ol id="log" data-testid="log"></ol>
       <p class="carry">You carry: <span id="inventory" data-testid="inventory">nothing yet</span></p>
-      <p class="presence">Game master: <span id="presence" data-testid="presence">no game master yet</span></p>
+      <p class="presence">Game master: <span id="presence" data-testid="presence">none connected yet</span></p>
     </aside>
   </main>
   <footer>

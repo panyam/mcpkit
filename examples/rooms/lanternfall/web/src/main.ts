@@ -45,9 +45,10 @@ function render(): void {
     if (p.id === state.at) tile.classList.add("here");
     if (near.has(p.id)) tile.classList.add("near");
     const reveals = state.reveals.get(p.id) ?? [];
+    const action = p.id === state.at ? "🔍 click to search" : near.has(p.id) ? "👣 click to walk here" : "";
     tile.innerHTML = `<span class="icon">${p.icon}</span><span class="name"></span>${
       p.id === state.at ? '<span class="token" data-testid="token">🧭 you</span>' : ""
-    }<ul class="reveals"></ul>`;
+    }<ul class="reveals"></ul>${action ? `<span class="action">${action}</span>` : ""}`;
     tile.querySelector(".name")!.textContent = p.name;
     for (const r of reveals) {
       const li = document.createElement("li");
@@ -111,6 +112,7 @@ const handlers: Record<string, PageTool["execute"]> = {
   },
   narrate: ({ text }) => {
     say("gm", String(text));
+    if ($("#status").textContent === "The game master is thinking…") $("#status").textContent = "";
     return "said";
   },
 };
@@ -158,10 +160,33 @@ function onTileClick(p: Place): void {
   room?.emit("player.moved", { place: p.id, name: p.name });
 }
 
+let gamemasters: Presence[] = [];
+
 function showPresence(agents: Presence[]): void {
+  gamemasters = agents;
   $("#presence").textContent = agents.length
-    ? agents.map((a) => `${a.subject}${a.client ? ` (${a.client})` : ""}${a.acting ? " is acting" : " is here"}`).join(" · ")
-    : "no game master yet";
+    ? agents.map((a) => `${a.client || "an agent"} for ${a.subject}${a.acting ? ", acting" : ", listening"}`).join(" · ")
+    : "none connected yet";
+  updateHint();
+}
+
+/** The banner under the header: what the player has to do next for a game master to play. */
+function updateHint(): void {
+  const hint = $("#hint");
+  const allowed = ($("#gm-switch") as HTMLInputElement).checked;
+  if (!gamemasters.length) {
+    hint.hidden = false;
+    hint.innerHTML =
+      "<strong>No game master is connected yet.</strong> You can walk and search on your own, but nobody will answer. " +
+      "To bring one in, run <code>make gm</code> in <code>examples/rooms/lanternfall</code> (needs <code>ANTHROPIC_API_KEY</code>), " +
+      "or connect Claude Code as described under <em>Connect an agent</em> below.";
+  } else if (!allowed) {
+    hint.hidden = false;
+    hint.innerHTML =
+      "<strong>Your game master is here.</strong> Turn on <em>Let my game master drive this tab</em> so it can hear you and change your map.";
+  } else {
+    hint.hidden = true;
+  }
 }
 
 async function start(): Promise<void> {
@@ -211,6 +236,7 @@ async function start(): Promise<void> {
     $("#status").textContent = sw.checked
       ? "Your game master may drive this tab. Walk around, search, and ask it anything below."
       : "Your game master can no longer drive this tab.";
+    updateHint();
   });
   $("#ask-form").addEventListener("submit", (e) => {
     e.preventDefault();
@@ -220,6 +246,13 @@ async function start(): Promise<void> {
     room?.ask(text);
     say("you", `You ask: ${text}`);
     input.value = "";
+    if (!gamemasters.length) {
+      say("world", "(No game master is connected, so nobody heard that. See the note at the top to start one.)");
+    } else if (!sw.checked) {
+      say("world", "(Your game master can't hear you until you turn on the switch at the top.)");
+    } else {
+      $("#status").textContent = "The game master is thinking…";
+    }
   });
   $("#code-form").addEventListener("submit", (e) => {
     e.preventDefault();
@@ -227,7 +260,8 @@ async function start(): Promise<void> {
     if (input.value.trim()) room?.acceptPairing(input.value.trim());
     input.value = "";
   });
-  $("#status").textContent = "In the room. Turn on the switch to let your game master play.";
+  $("#status").textContent = `In the room as ${who.player}.`;
+  updateHint();
   document.body.dataset.ready = "true";
   (window as any).lanternfall = { room, state };
 }
