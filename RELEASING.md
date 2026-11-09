@@ -50,6 +50,19 @@ From a green `main`:
    `@panyam/mcpkit-rooms` (`experimental/ext/rooms/ts/package.json`), which is
    published at the release's version. Commit the resulting go.mod and
    package.json changes to `main` and push.
+
+   **If its tidy fails, fix the module and run `make tidy-all` and
+   `make verify-submodule-deps` before tagging.** `bump-root` stops at the
+   failure, so the steps after it never ran. The failure has a second cost: a
+   module missing a `replace` makes tidy ask proxy.golang.org for the new
+   version before its tag exists. The proxy and sum.golang.org cache that
+   miss as "unknown revision", and serve it after the tag is pushed. Then
+   `make check-install` fails for every command that needs the module, for up
+   to about an hour. v0.8.18 hit this: Lanternfall lacked the replace for
+   `experimental/ext/events/clients/go`, and `rooms-channel` and
+   `events-bridge` would not install from the proxy. The tag was fine, and
+   `GOPROXY=direct GONOSUMDB=github.com/panyam/mcpkit go install …` worked.
+   Wait it out and rerun `check-install`.
 3. **Tag + push.** `make tag-push V=<version>` — creates and pushes the root
    tag plus one per sub-module (`ext/tasks/<version>`, …). The `Makefile` just
    string-interpolates `V`, so hyphenated pre-release strings are valid git
