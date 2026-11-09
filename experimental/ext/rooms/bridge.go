@@ -203,6 +203,9 @@ type session struct {
 	principal Principal
 	notify    context.Context
 	attached  map[string]bool
+	// attachedAt is when the session attached to each resource in attached,
+	// kept through a repeated attach and dropped on detach.
+	attachedAt map[string]time.Time
 }
 
 type toolSpec struct {

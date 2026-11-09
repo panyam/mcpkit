@@ -158,29 +158,93 @@ func TestEvents_PageEventsOfItsOwnArriveAsPageEvent(t *testing.T) {
 	assert.JSONEq(t, `{"sheet":"s-power"}`, string(got.Data))
 }
 
-// A stream opened before attach is refused up front as Forbidden, never
-// confirmed and then ended (#1603).
-func TestEvents_SubscribingBeforeAttachIsRefused(t *testing.T) {
+// A stream opened before attach is accepted and stays quiet: nothing from
+// before the attach arrives, the first event after it does, and the stream is
+// never confirmed and then ended (#1603, #1676).
+func TestEvents_StreamOpenedBeforeAttachStaysQuietThenDelivers(t *testing.T) {
+	st := rt.New(t)
+	early := st.Agent(t, "alice")
+	ch, err := stream(t, early, roomsevents.EventAsk, rt.Room)
+	require.NoError(t, err, "a stream opened before attach is accepted")
+
+	// Another of alice's sessions brings the bridge into the room, so the
+	// page's events reach it while the early session is still unattached.
+	other := st.Agent(t, "alice")
+	rt.Attach(t, other, rt.Room)
+	p := alicePage(t, st, other)
+	require.NoError(t, p.Ask("before the attach"))
+	none(t, ch)
+
+	rt.Attach(t, early, rt.Room)
+	st.WaitAgreed(t, early.SessionID(), rt.Room, p.ID())
+	require.NoError(t, p.Ask("after the attach"))
+	var got roomsevents.AskPayload
+	require.NoError(t, json.Unmarshal(next(t, ch).Data, &got))
+	assert.Equal(t, "after the attach", got.Text)
+	none(t, ch)
+}
+
+func TestEvents_DetachPausesDeliveryAndAttachResumesIt(t *testing.T) {
 	st := rt.New(t)
 	a := st.Agent(t, "alice")
-	call, err := eventsclient.Stream(t.Context(), a, eventsclient.StreamOptions{
-		EventName:        roomsevents.EventAsk,
-		Arguments:        map[string]any{"resource": rt.Room},
-		DisableReconnect: true,
-	})
-	if err == nil {
-		t.Cleanup(call.Stop)
-		select {
-		case <-call.Done():
-			err = call.Err()
-		case <-time.After(3 * time.Second):
-			t.Fatal("a stream opened before attach stayed open")
-		}
+	rt.Attach(t, a, rt.Room)
+	p := alicePage(t, st, a)
+	// Keeps the bridge in the room while a is detached.
+	other := st.Agent(t, "alice")
+	rt.Attach(t, other, rt.Room)
+	ch, err := stream(t, a, roomsevents.EventAsk, rt.Room)
+	require.NoError(t, err)
+
+	require.NoError(t, p.Ask("one"))
+	assert.Contains(t, string(next(t, ch).Data), `"one"`)
+
+	_, err = a.ToolCall(t.Context(), "detach", map[string]any{"resource": rt.Room})
+	require.NoError(t, err)
+	require.NoError(t, p.Ask("while detached"))
+	none(t, ch)
+
+	rt.Attach(t, a, rt.Room)
+	require.NoError(t, p.Ask("two"))
+	assert.Contains(t, string(next(t, ch).Data), `"two"`, "the same stream delivers again after a new attach")
+}
+
+// A poll runs match when it arrives, so a session that polled before it
+// attached must not get the events from before its attach on its next poll.
+func TestEvents_PollFromBeforeAttachReplaysNothingFromBeforeIt(t *testing.T) {
+	st := rt.New(t)
+	other := st.Agent(t, "alice")
+	rt.Attach(t, other, rt.Room)
+	p := alicePage(t, st, other)
+
+	a := st.Agent(t, "alice")
+	opts := eventsclient.PollOptions{EventName: roomsevents.EventAsk, Arguments: map[string]any{"resource": rt.Room}}
+	head, err := eventsclient.Poll(t.Context(), a, opts)
+	require.NoError(t, err, "a poll before attach is accepted")
+	opts.Cursor = head.Cursor()
+	head.Stop()
+
+	require.NoError(t, p.Ask("before the attach"))
+	time.Sleep(50 * time.Millisecond)
+	rt.Attach(t, a, rt.Room)
+	st.WaitAgreed(t, a.SessionID(), rt.Room, p.ID())
+	require.NoError(t, p.Ask("after the attach"))
+
+	var texts []string
+	opts.OnEvent = func(ev events.Event) {
+		var got roomsevents.AskPayload
+		_ = json.Unmarshal(ev.Data, &got)
+		texts = append(texts, got.Text)
 	}
-	var rpcErr *client.RPCError
-	require.ErrorAs(t, err, &rpcErr)
-	assert.Equal(t, events.ErrCodeForbidden, rpcErr.Code)
-	assert.Contains(t, rpcErr.Message, "attach to")
+	require.Eventually(t, func() bool {
+		texts = nil
+		pr, err := eventsclient.Poll(t.Context(), a, opts)
+		if err != nil {
+			return false
+		}
+		pr.Stop()
+		return len(texts) > 0
+	}, 3*time.Second, 50*time.Millisecond)
+	assert.Equal(t, []string{"after the attach"}, texts)
 }
 
 // A page's events reach only sessions it agreed to, the same rule as calls.

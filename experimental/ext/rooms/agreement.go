@@ -153,6 +153,12 @@ func (b *Bridge) attach(tc core.ToolContext, req core.ToolRequest) (core.ToolRes
 
 	b.mu.Lock()
 	if s != nil {
+		if !s.attached[resource] {
+			if s.attachedAt == nil {
+				s.attachedAt = make(map[string]time.Time)
+			}
+			s.attachedAt[resource] = time.Now().UTC()
+		}
 		s.attached[resource] = true
 	}
 	code := b.agentCodeLocked(rs, p)
@@ -195,6 +201,7 @@ func (b *Bridge) detach(tc core.ToolContext, req core.ToolRequest) (core.ToolRes
 		return core.ErrorResult("this session has no default room " + resource), nil
 	}
 	delete(s.attached, resource)
+	delete(s.attachedAt, resource)
 	notify := s.notify
 	b.mu.Unlock()
 	core.Notify(notify, "notifications/tools/list_changed", nil)

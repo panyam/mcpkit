@@ -71,6 +71,21 @@ func (b *Bridge) Attached(sessionID, resource string) bool {
 	return s != nil && s.attached[resource]
 }
 
+// AttachedSince reports when the MCP session attached to resource, and
+// whether it is attached now. Attaching again while attached keeps the first
+// time; detaching forgets it, so a later attach starts a new one. An events
+// layer compares it with an event's time to deliver nothing from before the
+// attach, whether the subscription was open then or polls for it later.
+func (b *Bridge) AttachedSince(sessionID, resource string) (time.Time, bool) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	s := b.sessions[sessionID]
+	if s == nil || !s.attached[resource] {
+		return time.Time{}, false
+	}
+	return s.attachedAt[resource], true
+}
+
 // PageAgreed reports whether page, in resource's room, agreed to the
 // principal acting in the MCP session: by its agents switch for the page's own
 // user, or by a grant. It is the same agreement that lets that principal call
