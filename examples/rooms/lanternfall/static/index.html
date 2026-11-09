@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Lanternfall</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <header>
+    <h1>🏮 Lanternfall</h1>
+    <div class="who"><span data-testid="player" id="player">…</span> in game <span id="game">…</span></div>
+    <label class="switch"><input type="checkbox" id="gm-switch" data-testid="gm-switch" disabled> Let my game master drive this tab</label>
+  </header>
+  <p id="status" data-testid="status">Joining the room…</p>
+  <main>
+    <section id="map" data-testid="map" aria-label="Map"></section>
+    <aside>
+      <h2>Story</h2>
+      <ol id="log" data-testid="log"></ol>
+      <p class="carry">You carry: <span id="inventory" data-testid="inventory">nothing yet</span></p>
+      <p class="presence">Game master: <span id="presence" data-testid="presence">no game master yet</span></p>
+    </aside>
+  </main>
+  <footer>
+    <form id="ask-form"><input id="ask" data-testid="ask" placeholder="Ask the game master… (what's behind the clocktower door?)" autocomplete="off"><button>Ask</button></form>
+    <form id="code-form"><input id="code" data-testid="code" placeholder="Another player's agent code" autocomplete="off" size="14"><button>Accept</button></form>
+    <details>
+      <summary>Connect an agent</summary>
+      <p>MCP endpoint <code>/mcp</code>, bearer token <code id="mcp-token"></code>, resource <code id="resource"></code>.
+      Walk to a neighbouring place by clicking it. Click where you stand to search it. Rest the pointer on a place to wonder about it.</p>
+    </details>
+  </footer>
+  <script type="module" src="/app.js"></script>
+</body>
+</html>

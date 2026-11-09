@@ -1,0 +1,27 @@
+# examples/rooms/lanternfall — recipe bodies live in scripts/*.sh (C8).
+
+# Start the game on :8080 (open http://localhost:8080/signin?as=alice&game=demo)
+run:
+    go run .
+
+serve: run
+
+# Go tests
+test:
+    go test ./...
+
+# Rebuild static/app.js from web/ (requires pnpm + Node)
+build-web:
+    @bash scripts/build-web.sh
+
+# Typecheck web/ and fail if static/app.js is stale
+check-web:
+    @bash scripts/check-web.sh
+
+# Drive a player's page in Chromium; also runs the LangGraph game master when ANTHROPIC_API_KEY is set
+test-e2e:
+    @bash scripts/test-e2e.sh
+
+# Run the LangGraph game master for PLAYER (default alice) in GAME (default demo)
+gm player="alice" game="demo":
+    @cd web && pnpm gm --player {{player}} --game {{game}}

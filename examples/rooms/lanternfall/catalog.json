@@ -1,0 +1,111 @@
+{
+  "tools": [
+    {
+      "name": "look",
+      "description": "Look at a place on the player's map: its description, what the game master revealed there, any item lying in the open, and where the player is. Without place, looks where the player stands.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "place": { "type": "string", "description": "A place id, such as well or archive. Omit for the player's own place." }
+        }
+      },
+      "readOnly": true
+    },
+    {
+      "name": "move_player",
+      "description": "Move the player's token to a place, as the game master. Any place, adjacent or not.",
+      "inputSchema": {
+        "type": "object",
+        "properties": { "place": { "type": "string", "description": "The place id to move to." } },
+        "required": ["place"]
+      },
+      "readOnly": false
+    },
+    {
+      "name": "reveal",
+      "description": "Write a new detail onto a place, which the player sees on the map: something that was always there, now noticed.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "place": { "type": "string", "description": "The place id." },
+          "detail": { "type": "string", "description": "One or two sentences, in the voice of the world." }
+        },
+        "required": ["place", "detail"]
+      },
+      "readOnly": false
+    },
+    {
+      "name": "place_item",
+      "description": "Hide an item at a place. The player finds it by searching there.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "place": { "type": "string", "description": "The place id." },
+          "item": { "type": "string", "description": "The item, such as a brass key." }
+        },
+        "required": ["place", "item"]
+      },
+      "readOnly": false
+    },
+    {
+      "name": "narrate",
+      "description": "Speak to the player as the game master. The text appears in the story log on their page. Use it to answer a question the player asked from the page.",
+      "inputSchema": {
+        "type": "object",
+        "properties": { "text": { "type": "string", "description": "What the game master says." } },
+        "required": ["text"]
+      },
+      "readOnly": false
+    }
+  ],
+  "events": [
+    {
+      "name": "place.examined",
+      "description": "The player rested the pointer on a place for a moment, curious about it.",
+      "payloadSchema": {
+        "type": "object",
+        "properties": {
+          "place": { "type": "string" },
+          "name": { "type": "string" }
+        },
+        "required": ["place", "name"],
+        "additionalProperties": false
+      },
+      "contextHint": {
+        "priority": "low",
+        "aggregate": { "windowMs": 1500, "strategy": "last-wins" },
+        "template": "{{user}} is looking at {{name}}",
+        "retention": "turn"
+      }
+    },
+    {
+      "name": "player.moved",
+      "description": "The player walked to a neighbouring place.",
+      "payloadSchema": {
+        "type": "object",
+        "properties": {
+          "place": { "type": "string" },
+          "name": { "type": "string" }
+        },
+        "required": ["place", "name"],
+        "additionalProperties": false
+      },
+      "contextHint": { "priority": "medium", "template": "{{user}} is at {{name}}", "retention": "session" }
+    },
+    {
+      "name": "item.found",
+      "description": "The player searched a place and found an item there.",
+      "payloadSchema": {
+        "type": "object",
+        "properties": {
+          "item": { "type": "string" },
+          "place": { "type": "string" },
+          "name": { "type": "string" }
+        },
+        "required": ["item", "place", "name"],
+        "additionalProperties": false
+      },
+      "contextHint": { "priority": "high", "template": "{{user}} found {{item}} at {{name}}" }
+    }
+  ]
+}

@@ -463,6 +463,69 @@ jobs:
             ~/.cache/go-build
           key: go-${{ runner.os }}-${{ steps.go.outputs.go-version }}-${{ github.job }}-${{ hashFiles('**/go.sum') }}-${{ github.run_id }}
 
+  # Mission #1683's exercise: an agent drives a player's page in
+  # examples/rooms/lanternfall, through the room bridge, in Chromium. The
+  # LangGraph game master needs a model key, so CI runs the scripted check and
+  # skips it.
+
+  rooms-ai-inside-ui:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: examples/rooms/lanternfall
+    steps:
+      - uses: actions/checkout@v7
+
+      # Its own Go cache, as the test job explains.
+      - id: go
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: false
+
+      - uses: actions/cache/restore@v6.1.0
+        with:
+          path: |
+            ~/go/pkg/mod
+            ~/.cache/go-build
+          key: go-${{ runner.os }}-${{ steps.go.outputs.go-version }}-${{ github.job }}-${{ hashFiles('**/go.sum') }}-${{ github.run_id }}
+          restore-keys: |
+            go-${{ runner.os }}-${{ steps.go.outputs.go-version }}-${{ github.job }}-${{ hashFiles('**/go.sum') }}-
+            go-${{ runner.os }}-${{ steps.go.outputs.go-version }}-${{ github.job }}-
+
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 12.4.1
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: pnpm
+          cache-dependency-path: |
+            examples/rooms/lanternfall/web/pnpm-lock.yaml
+            experimental/ext/rooms/ts/pnpm-lock.yaml
+
+      - name: Go tests
+        run: go test ./... -count=1
+
+      - name: Typecheck the page and check the committed build is current
+        run: bash scripts/check-web.sh
+
+      - name: Install Chromium and its system libraries
+        working-directory: examples/rooms/lanternfall/web
+        run: pnpm install --frozen-lockfile --silent && pnpm exec playwright install --with-deps chromium
+
+      - name: An agent drives a player's page
+        run: bash scripts/test-e2e.sh
+
+      - if: github.ref == 'refs/heads/main' && !cancelled()
+        uses: actions/cache/save@v6.1.0
+        with:
+          path: |
+            ~/go/pkg/mod
+            ~/.cache/go-build
+          key: go-${{ runner.os }}-${{ steps.go.outputs.go-version }}-${{ github.job }}-${{ hashFiles('**/go.sum') }}-${{ github.run_id }}
+
   conformance-report:
     # Regenerates CONFORMANCE.md against the current testserver + the upstream
     # conformance SHA pinned in the committed file's stamp line, and fails if
