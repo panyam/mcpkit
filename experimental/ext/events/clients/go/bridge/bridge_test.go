@@ -392,6 +392,10 @@ func TestBridge_ResumesWatchesAcrossRestart(t *testing.T) {
 	require.NotNil(t, saved[0].Cursor, "the cursor after the delivered event is persisted")
 
 	require.NoError(t, up.yield(t.Context(), alert{Severity: "P2", Msg: "while down"}))
+	// Let the upstream's POST reach the stopped bridge and fail before the
+	// new one starts. Without the wait the race usually hides #1671: the new
+	// handler is mounted first and takes the delivery itself.
+	time.Sleep(300 * time.Millisecond)
 
 	sink2 := make(recordingSink, 4)
 	b2 := newBridge(t, hs, sink2, bridge.NewFileStore(path), map[string]upstream{"ops": up})

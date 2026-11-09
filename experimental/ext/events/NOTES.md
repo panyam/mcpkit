@@ -396,8 +396,7 @@ does. `events_conformance_catalog` on kitchen-sink adds and removes types (the a
 
 ## The Go client dedups on eventId, and the receiver scopes it per subscription (#1558)
 
-The server mints `eventId` once at yield and every copy carries it, and `webhook-id` on an event
-POST is that same id. Nothing on the client used it, so a webhook retry or a poll backfill that
+The server mints `eventId` once at yield and every copy carries it. Nothing on the client used it, so a webhook retry or a poll backfill that
 overlapped push delivery reached the application twice. That was harmless for a dashboard and
 expensive for the bridges in #1579 and #1581, where each delivery starts an agent turn.
 
@@ -405,11 +404,14 @@ The seen-set is a value (`Deduper`) rather than a field of each loop because the
 matters crosses delivery modes: a stream's push frames and the poll backfill after it. A private
 set per call catches retries only.
 
-The receiver keys on `X-MCP-Subscription-Id` plus `eventId`, not `webhook-id` alone. One event
-matching two subscriptions to the same URL arrives as two POSTs with the same `webhook-id`, and
-whether SEP-3415 means that to be one delivery or two is an open question for the WG. Scoping by
-subscription delivers both, which is the reversible choice: a caller can collapse them, but cannot
-recover one that was dropped. A side effect is that sharing a `Deduper` between a `Receiver` and a
+The receiver keys on `X-MCP-Subscription-Id` plus `eventId`. One event matching two
+subscriptions to the same URL arrives as two POSTs, and both are delivered. This was an open
+question when #1558 landed, and SEP-3415 settled it at `b0efd116`: the two are separate deliveries,
+and a receiver that dedups on `eventId` MUST scope it to the subscription. The same revision made
+`webhook-id` a server-generated id per message, reused across retries and never derived from
+`eventId`. Before #1664 the server sent the `eventId` as `webhook-id`, so a receiver that keyed
+on `webhook-id` alone dropped the second subscription's copy. The Go receiver never did, because
+it keys on the subscription and `eventId` instead. A side effect is that sharing a `Deduper` between a `Receiver` and a
 `Poll` dedups nothing across them when the POST carries a subscription id, which the README says.
 
 A delivery dropped on a full channel is forgotten again, so the server's retry is delivered.
@@ -497,3 +499,20 @@ and one it drops on a full buffer still answers 200, so the server doesn't retry
 waiting through a burst loses events until the bridge restarts and resubscribes from its cursor,
 which still points before them. Worth a bounded per-watch queue if anyone hits it.
 
+
+## A bridge restart drops its subscriptions before resubscribing (#1671)
+
+An event fires while the bridge restarts. The upstream POSTs it to the stopped bridge, gets a 404,
+and abandons it, because a 4xx is never retried. The new bridge resubscribes with the saved cursor.
+The upstream still holds the subscription and treats the call as a refresh. SEP-3415 says a refresh
+of a live subscription replays nothing, so the event was lost, and the restart replay the README
+promises never happened. `TestBridge_ResumesWatchesAcrossRestart` covered this and flaked on CI for
+weeks. It passed whenever the new bridge mounted its handler before the first POST arrived.
+
+`Start` now sends `events/unsubscribe` for every active watch with a cursor before resubscribing.
+The resubscribe is then a fresh subscription, and the upstream replays it from the cursor.
+Duplicates from a retry that also lands are dropped by the shared `Deduper`, since the derived
+subscription id does not change. The handler also answers 503, not 404, for a watch it holds but is
+not running. A quick restart then gets the upstream's retry as well. The test waits 300 ms before
+starting the second bridge, so the old behaviour fails every run. The SEP-3415 field report on
+abandoned webhook events covers the protocol gap underneath, which is still open upstream.

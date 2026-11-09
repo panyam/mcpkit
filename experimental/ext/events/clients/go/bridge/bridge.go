@@ -185,12 +185,33 @@ func (b *Bridge) Start(ctx context.Context) error {
 		if w.Status != StatusActive {
 			continue
 		}
+		b.dropForReplay(ctx, w)
 		if err := b.run(ctx, w); err != nil {
 			b.setError(w.ID, err)
 			b.logf("bridge: resubscribe %s (%s): %v", w.ID, w.Event, err)
 		}
 	}
 	return nil
+}
+
+// dropForReplay unsubscribes a persisted watch that has a cursor, so the
+// resubscribe in run creates a fresh subscription that replays from it.
+// Without this, an upstream that still holds the subscription treats the
+// resubscribe as a refresh, which replays nothing. Events it delivered while
+// the bridge was down, and abandoned when nothing answered, would then be
+// lost (#1671). A failure is logged and ignored: the subscription may already
+// be gone, and run reports a dead upstream on its own.
+func (b *Bridge) dropForReplay(ctx context.Context, w Watch) {
+	if w.Cursor == nil {
+		return
+	}
+	up, ok := b.upstreams[w.Server]
+	if !ok {
+		return
+	}
+	if err := eventsclient.Unsubscribe(ctx, up.Client, w.Name, b.callbackURL(w.ID), w.Arguments); err != nil {
+		b.logf("bridge: unsubscribe %s before replay: %v", w.ID, err)
+	}
 }
 
 // Close stops every subscription's refresh loop and every delivery loop. It
@@ -214,8 +235,16 @@ func (b *Bridge) Handler() http.Handler {
 		id := strings.TrimPrefix(r.URL.Path, HookPathPrefix)
 		b.mu.Lock()
 		lw := b.live[id]
+		_, known := b.watches[id]
 		b.mu.Unlock()
 		if lw == nil {
+			if known {
+				// A watch this bridge holds but is not running, such as
+				// one mid-restart. SEP-3415 asks for a retryable status
+				// for a delivery the receiver cannot route yet.
+				http.Error(w, "watch not running", http.StatusServiceUnavailable)
+				return
+			}
 			http.Error(w, "no such watch", http.StatusNotFound)
 			return
 		}

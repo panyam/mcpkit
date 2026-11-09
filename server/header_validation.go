@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/panyam/mcpkit/core"
@@ -145,4 +147,139 @@ func headerMismatchResponse(id json.RawMessage, header, received, expected strin
 		data[extra[i]] = extra[i+1]
 	}
 	return core.NewErrorResponseWithData(id, core.ErrCodeHeaderMismatch, reason, data)
+}
+
+// validateParamHeaders enforces SEP-2243 §Server Behavior for Custom Headers
+// on tools/call. For each argument the tool's inputSchema marks with
+// `x-mcp-header`, the `Mcp-Param-{Name}` header must mirror the body:
+//
+//   - a value in the body needs the header, and a header needs a value in the
+//     body (an omitted or null optional argument has neither);
+//   - a required annotated argument missing from the body fails here, as the
+//     SEP's "MUST reject with JSON-RPC error" asks, rather than becoming the
+//     isError tool result other schema failures get (#1111);
+//   - the header is decoded with core.DecodeMcpHeaderValue, and a plain value
+//     a client should have Base64-wrapped fails as invalid characters;
+//   - numbers compare numerically, booleans as "true"/"false".
+//
+// Mcp-Param headers no annotation names are ignored, as are unknown tools,
+// which the dispatcher answers. Returns nil when the request passes, or the
+// -32020 frame for writeHeaderMismatch.
+func validateParamHeaders(req *core.Request, headers http.Header, reg *Registry) *core.Response {
+	if req.Method != "tools/call" {
+		return nil
+	}
+	var p struct {
+		Name      string                     `json:"name"`
+		Arguments map[string]json.RawMessage `json:"arguments"`
+	}
+	if err := req.Params.Bind(&p); err != nil {
+		return nil
+	}
+	def, ok := reg.ToolDef(p.Name)
+	if !ok {
+		return nil
+	}
+	annotated := core.ExtractMcpHeaderParams(def.InputSchema)
+	if len(annotated) == 0 {
+		return nil
+	}
+	required := map[string]bool{}
+	if schema, ok := def.InputSchema.(map[string]any); ok {
+		switch r := schema["required"].(type) {
+		case []any:
+			for _, n := range r {
+				if s, ok := n.(string); ok {
+					required[s] = true
+				}
+			}
+		case []string:
+			for _, s := range r {
+				required[s] = true
+			}
+		}
+	}
+
+	props := make([]string, 0, len(annotated))
+	for prop := range annotated {
+		props = append(props, prop)
+	}
+	sort.Strings(props)
+	for _, prop := range props {
+		header := core.McpParamHeaderName(annotated[prop])
+		values := headers.Values(header)
+		body, inBody := p.Arguments[prop]
+		inBody = inBody && string(body) != "null"
+		bodyField := "arguments." + prop
+
+		switch {
+		case !inBody && required[prop]:
+			reason := fmt.Sprintf("required parameter %q is missing", prop)
+			return core.NewErrorResponseWithData(req.ID, core.ErrCodeHeaderMismatch, reason, map[string]any{
+				"reason": reason, "header": header, "bodyField": bodyField,
+			})
+		case !inBody && len(values) == 0:
+			continue
+		case !inBody:
+			return headerMismatchResponse(req.ID, header, values[0], "", "bodyField", bodyField)
+		case len(values) == 0:
+			return headerMismatchResponse(req.ID, header, "", paramBodyText(body), "bodyField", bodyField)
+		}
+
+		received := strings.TrimSpace(values[0])
+		decoded, err := core.DecodeMcpHeaderValue(received)
+		if err == nil && decoded == received && !isVisibleASCII(received) {
+			err = fmt.Errorf("header value %q has characters that need Base64 encoding", received)
+		}
+		if err != nil {
+			return headerMismatchResponse(req.ID, header, received, paramBodyText(body),
+				"bodyField", bodyField, "decodeError", err.Error())
+		}
+		if !paramHeaderMatches(decoded, body) {
+			return headerMismatchResponse(req.ID, header, received, paramBodyText(body), "bodyField", bodyField)
+		}
+	}
+	return nil
+}
+
+// paramHeaderMatches compares a decoded Mcp-Param value to the JSON body value
+// it mirrors: strings exactly, numbers numerically (so "5.0" matches 5), and
+// booleans as "true" or "false".
+func paramHeaderMatches(decoded string, body json.RawMessage) bool {
+	var v any
+	if err := json.Unmarshal(body, &v); err != nil {
+		return false
+	}
+	switch b := v.(type) {
+	case string:
+		return decoded == b
+	case float64:
+		f, err := strconv.ParseFloat(decoded, 64)
+		return err == nil && f == b
+	case bool:
+		return decoded == strconv.FormatBool(b)
+	default:
+		return false
+	}
+}
+
+// isVisibleASCII reports whether s is printable ASCII (0x20-0x7E), the only
+// characters a plain, unencoded Mcp-Param value may carry.
+func isVisibleASCII(s string) bool {
+	for i := 0; i < len(s); i++ {
+		if s[i] < 0x20 || s[i] > 0x7e {
+			return false
+		}
+	}
+	return true
+}
+
+// paramBodyText renders a body value for a -32020 error's "expected" field:
+// a JSON string without its quotes, anything else as raw JSON.
+func paramBodyText(body json.RawMessage) string {
+	var str string
+	if json.Unmarshal(body, &str) == nil {
+		return str
+	}
+	return string(body)
 }

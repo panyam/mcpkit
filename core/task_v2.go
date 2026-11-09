@@ -3,6 +3,7 @@ package core
 import (
 	"context"
 	"encoding/json"
+	"reflect"
 )
 
 // TasksExtensionID is the protocol extension identifier for SEP-2663 Tasks.
@@ -77,6 +78,38 @@ type TaskInfoV2 struct {
 type CreateTaskResult struct {
 	ResultType ResultType `json:"resultType"`
 	TaskInfoV2
+
+	// Extras holds top-level keys this type does not model. SEP-2663 makes
+	// the result open, so they belong to extensions (an `eventSource` from
+	// Task Event Sources, say). They survive a decode and re-encode, and a
+	// handler can set them. Typed fields win on a key collision.
+	Extras map[string]any `json:"-"`
+}
+
+// MarshalJSON spreads Extras at the top level beside the typed fields.
+func (c CreateTaskResult) MarshalJSON() ([]byte, error) {
+	type alias CreateTaskResult
+	b, err := json.Marshal(alias(c))
+	if err != nil {
+		return nil, err
+	}
+	return marshalWithExtras(b, c.Extras)
+}
+
+// UnmarshalJSON keeps unknown top-level keys in Extras.
+func (c *CreateTaskResult) UnmarshalJSON(data []byte) error {
+	type alias CreateTaskResult
+	var a alias
+	if err := json.Unmarshal(data, &a); err != nil {
+		return err
+	}
+	extras, err := unmarshalExtras(data, reflect.TypeOf(a))
+	if err != nil {
+		return err
+	}
+	*c = CreateTaskResult(a)
+	c.Extras = extras
+	return nil
 }
 
 // toolResponse marks CreateTaskResult as a [ToolResponse] variant. A handler
@@ -116,15 +149,41 @@ type DetailedTask struct {
 	// InputRequests is populated when Status == TaskInputRequired and lists
 	// the MRTR input requests the client must satisfy via tasks/update. // SEP-2322
 	InputRequests InputRequests `json:"inputRequests,omitempty"`
+
+	// Extras holds top-level keys this type does not model, which belong
+	// to extensions since SEP-2663 makes GetTaskResult open. They survive a
+	// decode and re-encode. Typed fields win on a key collision.
+	Extras map[string]any `json:"-"`
 }
 
 // MarshalJSON defaults ResultType to ResultTypeComplete when empty so every
 // tasks/get response carries the SEP-2322 polymorphic discriminator without
 // every call site having to set it. The task lifecycle stays on Status.
+// Extras spread at the top level beside the typed fields.
 func (d DetailedTask) MarshalJSON() ([]byte, error) {
 	type alias DetailedTask
 	defaultResultType(&d.ResultType, ResultTypeComplete)
-	return json.Marshal(alias(d))
+	b, err := json.Marshal(alias(d))
+	if err != nil {
+		return nil, err
+	}
+	return marshalWithExtras(b, d.Extras)
+}
+
+// UnmarshalJSON keeps unknown top-level keys in Extras.
+func (d *DetailedTask) UnmarshalJSON(data []byte) error {
+	type alias DetailedTask
+	var a alias
+	if err := json.Unmarshal(data, &a); err != nil {
+		return err
+	}
+	extras, err := unmarshalExtras(data, reflect.TypeOf(a))
+	if err != nil {
+		return err
+	}
+	*d = DetailedTask(a)
+	d.Extras = extras
+	return nil
 }
 
 // SEP-2663 narrowed aliases — convenient names for callers that have already

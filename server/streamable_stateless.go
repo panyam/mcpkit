@@ -51,6 +51,10 @@ func (t *streamableTransport) handleStatelessPost(w http.ResponseWriter, r *http
 		writeHeaderMismatch(w, errResp)
 		return
 	}
+	if errResp := validateParamHeaders(req, r.Header, t.server.Registry()); errResp != nil {
+		writeHeaderMismatch(w, errResp)
+		return
+	}
 
 	// (2) Dispatch. ResponseHeaderCollector lets handlers stage
 	// transport-level headers (SEP-2243 Mcp-Name etc.) the same way
@@ -185,6 +189,10 @@ func (t *streamableTransport) handleStatelessPostSSE(w http.ResponseWriter, r *h
 
 	// SEP-2243 routing-header validation (mirrored from handleStatelessPost).
 	if errResp := validateRoutingHeaders(req, r.Header); errResp != nil {
+		writeHeaderMismatch(w, errResp)
+		return
+	}
+	if errResp := validateParamHeaders(req, r.Header, t.server.Registry()); errResp != nil {
 		writeHeaderMismatch(w, errResp)
 		return
 	}

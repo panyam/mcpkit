@@ -18,12 +18,6 @@
 # Keep entries terse; the renderer puts them straight into a table cell.
 
 scenarios:
-  "http-header-validation":
-    issue: "https://github.com/modelcontextprotocol/conformance/issues/323"
-    note: "The single remaining fail is fail-open on a missing Mcp-Method header, disputed upstream (mcpkit matches the TypeScript SDK). Deliberately not implemented while the dispute is open; disputed tests are excluded from tier scoring."
-  "http-custom-header-server-validation":
-    issue: "https://github.com/panyam/mcpkit/issues/1111"
-    note: "Server-side x-mcp-header param validation not implemented and cmd/testserver has no annotated tool; scoped in issue 1111, activates when upstream conformance PR 325 merges."
   "tasks-status-notifications":
     issue: "https://github.com/panyam/mcpkit/issues/433"
     note: "Deliberately skipped: the upstream scenario predates subscriptions/listen and awaits its rewrite. mcpkit implements subscriptions/listen with ext-tasks' taskIds key since issue 1523 (ext/tasks/listen.go), so a rewritten scenario can grade it."
@@ -33,6 +27,8 @@ scenarios:
 
 checks:
   "sep-2243-server-not-expect-null":
-    note: "MCP-Name fail-closed semantics on tasks/* — covered locally by server/middleware test"
+    issue: "https://github.com/panyam/mcpkit/issues/1111"
+    note: "Untested upstream until conformance PR 325 merges. Covered locally by the TestWireParity 1111 row (optional omitted / optional null)."
   "sep-2243-server-reject-missing-required":
-    note: "MCP-Name fail-closed semantics on tasks/* — covered locally by server/middleware test"
+    issue: "https://github.com/panyam/mcpkit/issues/1111"
+    note: "Untested upstream until conformance PR 325 merges. Covered locally by the TestWireParity 1111 row (required omitted → 400 + -32020)."

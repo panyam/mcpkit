@@ -73,8 +73,8 @@ func TestSignMCP_ByteFormat(t *testing.T) {
 
 // TestSignStandardWebhooks_ByteFormat pins the Standard Webhooks v1 wire
 // format: signature is "v1,<base64>" computed over (msgId + "." + ts + "." + body),
-// and webhook-id is the caller-supplied message identifier (the eventId
-// for event deliveries — see TestStandardWebhooks_WebhookIDIsStableAcrossRetries).
+// and webhook-id is the caller-supplied message identifier (see
+// TestStandardWebhooks_WebhookIDIsStableAcrossRetries).
 // Pinning the byte format protects against accidental drift when refactoring.
 func TestSignStandardWebhooks_ByteFormat(t *testing.T) {
 	body := []byte(`{"hello":"world"}`)
@@ -116,15 +116,15 @@ func TestSignStandardWebhooks_ByteFormat(t *testing.T) {
 func TestStandardWebhooks_WebhookIDIsStableAcrossRetries(t *testing.T) {
 	body := []byte(`{"eventId":"evt_demo_42","data":{}}`)
 	secret := "topsecret"
-	eventID := "evt_demo_42"
+	msgID := newMessageID()
 
-	first := signStandardWebhooks(eventID, body, secret, time.Unix(1700000000, 0))
-	second := signStandardWebhooks(eventID, body, secret, time.Unix(1700000005, 0))
+	first := signStandardWebhooks(msgID, body, secret, time.Unix(1700000000, 0))
+	second := signStandardWebhooks(msgID, body, secret, time.Unix(1700000005, 0))
 
 	assert.Equal(t, first.headers["webhook-id"], second.headers["webhook-id"],
 		"webhook-id must be stable across retries; receiver dedup depends on it")
-	assert.Equal(t, eventID, first.headers["webhook-id"],
-		"webhook-id should be the eventId for event deliveries")
+	assert.Equal(t, msgID, first.headers["webhook-id"],
+		"webhook-id is the caller-supplied message id")
 	assert.NotEqual(t, first.headers["webhook-timestamp"], second.headers["webhook-timestamp"],
 		"timestamp regenerates per retry (spec — so receiver freshness window doesn't reject)")
 	assert.NotEqual(t, first.headers["webhook-signature"], second.headers["webhook-signature"],

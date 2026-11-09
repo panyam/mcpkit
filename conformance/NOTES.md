@@ -493,7 +493,12 @@ built. Three consequences worth knowing before touching any of it:
   differently from the sketch; the yaml header lists them. Traceability after: 137 / 124 / 13.
   Re-pinned to `2ec39b9c` on 2026-10-20 for the `Mcp-Name` section (#1567). No quoted row changed,
   checked by the same script, so the move was URLs plus three new rows. Diff the SEP before
-  re-extracting.
+  re-extracting. Re-pinned to `b08e4f9d` on 2026-11-08 (#1664): two rows changed wording, one
+  graded row and one excluded receiver row are new. The checking script was never committed.
+  It is about 20 lines: each row's whitespace-normalised `text` must be a substring of the
+  pinned file. Table rows fail that test by design, because they quote cells joined by a
+  colon. So diff the failures between the old pin and the new one, rather than reading the
+  raw count.
 - **`new-sep` does not apply cleanly.** It expects a PR in
   `modelcontextprotocol/modelcontextprotocol` touching `docs/specification/draft/*.mdx`, and
   `specPathToUrl` hard-requires that prefix, so `--spec-path` fails too. Scaffold with `--spec-url`.

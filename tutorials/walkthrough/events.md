@@ -351,7 +351,7 @@ The subscribe call (Q3) registers `(canonicalKey, derivedID, url, secret, ttl)` 
 POST /recv HTTP/1.1                                  ← server → callback URL
 Host: hook.example
 Content-Type: application/json
-webhook-id: evt_138                                  ← stable across retries; receiver dedups on this
+webhook-id: msg_2KWPBgLlAfxdpx2AI54pPJ               ← one per message, kept across retries; never the eventId
 webhook-timestamp: 1714814520
 webhook-signature: v1,5HxN...base64...               ← HMAC-SHA256(secret, id + "." + ts + "." + body)
 X-MCP-Subscription-Id: sub_xR9vK...                  ← MCP-specific; lets receiver pick the right secret

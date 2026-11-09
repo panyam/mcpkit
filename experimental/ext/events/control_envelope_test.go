@@ -19,7 +19,7 @@ import (
 // (type:terminated, carries error). Both use Standard Webhooks
 // headers + X-MCP-Subscription-Id, distinguished from event
 // deliveries by the top-level `type` field discriminator AND by the
-// webhook-id pattern: msg_<type>_<random> vs eventId for events.
+// webhook-id pattern: msg_<type>_<random> vs msg_<random> for events.
 
 // captureControlPost records what the receiver saw — body, headers —
 // for the test to inspect after PostGap / PostTerminated returns.
@@ -67,7 +67,7 @@ func readAll(r interface {
 // headers (webhook-id, webhook-timestamp, webhook-signature) and the
 // X-MCP-Subscription-Id header (SEP-3415 §"Webhook event delivery".
 // webhook-id format is msg_gap_<random> per spec, distinguishing
-// control POSTs from event deliveries (which use eventId).
+// control POSTs from event deliveries (plain msg_<random>).
 func TestControlEnvelope_GapShape(t *testing.T) {
 	cap := &captureControlPost{}
 	srv := httptest.NewServer(cap.handler())

@@ -62,8 +62,8 @@ func TestReceiver_DropsRetriedDelivery(t *testing.T) {
 }
 
 // One event matching two subscriptions to the same URL arrives once per
-// subscription, with the same webhook-id. Keying on eventId alone would drop
-// the second subscription's copy.
+// subscription. Keying on eventId alone would drop the second subscription's
+// copy, which SEP-3415 now forbids.
 func TestReceiver_DeliversOncePerSubscription(t *testing.T) {
 	recv := eventsclient.NewReceiver[fakePayload](dedupSecret)
 	defer recv.Close()

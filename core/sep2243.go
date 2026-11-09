@@ -281,19 +281,18 @@ func encodeMcpHeaderString(s string) string {
 // DecodeMcpHeaderValue is the inverse of the string case of
 // [EncodeMcpHeaderValue]: a value wrapped in the Base64 sentinel
 // (`=?base64?...?=`, case-sensitive markers) is decoded to its UTF-8
-// string, and anything else is returned unchanged. A value that starts
-// with the prefix but lacks the suffix, or whose payload is not valid
-// standard Base64, is an error. SEP-2243 counts that as a header with
-// invalid characters, so a server answers it with -32020.
+// string, and anything else is returned unchanged. That includes a value
+// with the prefix but no suffix, which the SEP-2243 test-case table treats
+// as a literal. A wrapped payload that is not valid, padded standard Base64
+// is an error. SEP-2243 counts that as a header with invalid characters, so
+// a server answers it with -32020.
 //
 // Servers MUST decode Mcp-Name and Mcp-Param-{Name} with this before
 // comparing them to the body.
 func DecodeMcpHeaderValue(v string) (string, error) {
-	if !strings.HasPrefix(v, mcpHeaderBase64Prefix) {
+	if !strings.HasPrefix(v, mcpHeaderBase64Prefix) || !strings.HasSuffix(v, mcpHeaderBase64Suffix) ||
+		len(v) < len(mcpHeaderBase64Prefix)+len(mcpHeaderBase64Suffix) {
 		return v, nil
-	}
-	if !strings.HasSuffix(v, mcpHeaderBase64Suffix) || len(v) < len(mcpHeaderBase64Prefix)+len(mcpHeaderBase64Suffix) {
-		return "", fmt.Errorf("header value %q starts with %q but does not end with %q", v, mcpHeaderBase64Prefix, mcpHeaderBase64Suffix)
 	}
 	payload := v[len(mcpHeaderBase64Prefix) : len(v)-len(mcpHeaderBase64Suffix)]
 	raw, err := base64.StdEncoding.DecodeString(payload)

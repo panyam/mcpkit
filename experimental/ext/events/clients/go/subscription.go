@@ -217,14 +217,25 @@ func (s *Subscription) Stop() {
 // after Stop, and more than once; a repeat returns the server's NotFound.
 func (s *Subscription) StopAndUnsubscribe(ctx context.Context) error {
 	s.Stop()
+	return Unsubscribe(ctx, s.sess, s.opts.EventName, s.opts.CallbackURL, s.opts.Arguments)
+}
+
+// Unsubscribe sends events/unsubscribe for the webhook subscription keyed by
+// name, callback URL and arguments, without a Subscription in hand. A process
+// that persisted its subscriptions uses it on restart: refreshing a
+// subscription the server still holds is a no-op that replays nothing, so
+// dropping it first makes the next Subscribe with the saved cursor a fresh
+// one, which replays from that cursor (#1671). A NotFound error means the
+// server had already dropped it.
+func Unsubscribe(ctx context.Context, sess *client.Client, name, callbackURL string, arguments map[string]any) error {
 	params := map[string]any{
-		"name":     s.opts.EventName,
-		"delivery": map[string]any{"url": s.opts.CallbackURL},
+		"name":     name,
+		"delivery": map[string]any{"url": callbackURL},
 	}
-	if len(s.opts.Arguments) > 0 {
-		params["arguments"] = s.opts.Arguments
+	if len(arguments) > 0 {
+		params["arguments"] = arguments
 	}
-	_, err := s.sess.Call(ctx, "events/unsubscribe", params)
+	_, err := sess.Call(ctx, "events/unsubscribe", params)
 	return err
 }
 

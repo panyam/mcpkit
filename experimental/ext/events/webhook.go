@@ -1275,7 +1275,7 @@ func (r *WebhookRegistry) DeliverToTarget(ctx context.Context, canonicalKey []by
 		return false
 	}
 	tc := traceContextForDelivery(ctx, event)
-	safeGo("events.webhook.deliver", func() { r.deliver(target, event.EventID, event.Name, body, tc) })
+	safeGo("events.webhook.deliver", func() { r.deliver(target, event.Name, body, tc) })
 	return true
 }
 
@@ -1390,7 +1390,7 @@ func (r *WebhookRegistry) Deliver(ctx context.Context, event Event) {
 		// outside the loop so each target's delivery span lifetime
 		// is independent). See SEP-414 P6 (issue 683).
 		tc := traceContextForDelivery(ctx, delivered)
-		safeGo("events.webhook.deliver", func() { r.deliver(t, delivered.EventID, delivered.Name, body, tc) })
+		safeGo("events.webhook.deliver", func() { r.deliver(t, delivered.Name, body, tc) })
 	}
 }
 
@@ -1567,9 +1567,9 @@ func classifyTransportError(err error) DeliveryErrorBucket {
 }
 
 // deliver attempts to POST the event with exponential backoff on failure.
-// eventID is the event's identifier; used as webhook-id (stable across
-// retries so the receiver's dedup works). Spec: SHOULD retry with
-// exponential backoff.
+// It mints one webhook-id per call, so each (event, subscription) message
+// gets its own id and every retry reuses it (#1664). Spec: SHOULD retry
+// with exponential backoff.
 //
 // tc is the W3C trace context resolved at Deliver-time; when non-zero
 // the `traceparent` (and `tracestate` if present) HTTP headers are
@@ -1578,7 +1578,7 @@ func classifyTransportError(err error) DeliveryErrorBucket {
 //
 // eventName is included as the `mcp.event.name` attribute on the
 // emitted span when WithWebhookTracerProvider is configured.
-func (r *WebhookRegistry) deliver(target WebhookTarget, eventID, eventName string, body []byte, tc core.TraceContext) {
+func (r *WebhookRegistry) deliver(target WebhookTarget, eventName string, body []byte, tc core.TraceContext) {
 	// SEP-414 P6 follow-up: span around the entire retry loop with
 	// per-attempt counts on the span attributes. Parent comes from
 	// the resolved tc (replica A's yield ctx ⇒ event.Meta ⇒ tc).
@@ -1613,6 +1613,12 @@ func (r *WebhookRegistry) deliver(target WebhookTarget, eventID, eventName strin
 	// on the next subscribe refresh.
 	lastErrBucket := DeliveryErrorNone
 
+	// SEP-3415 §"Signature scheme": webhook-id identifies the delivered
+	// message, not the event. It MUST NOT be derived from eventId: the same
+	// event on two subscriptions to one receiver would share an id, and a
+	// receiver deduplicating on webhook-id would drop the second.
+	msgID := newMessageID()
+
 	for attempt := 0; attempt <= maxRetries; attempt++ {
 		attempts = attempt + 1
 		if attempt > 0 {
@@ -1624,17 +1630,12 @@ func (r *WebhookRegistry) deliver(target WebhookTarget, eventID, eventName strin
 			}
 		}
 
-		// webhook-id == eventId for event deliveries: stable across retries
-		// (so receiver dedup works) and consistent across delivery paths
-		// (webhook emit + poll backfill of the same upstream event collapse
-		// under the receiver's eventId-keyed dedup).
-		//
 		// X-MCP-Subscription-Id carries target.ID (the spec's derived
 		// id over the canonical tuple, SEP-3415 §"Subscription identity" →
 		// "Derived id" L367) so the receiver can select the correct
 		// secret without parsing the body. Per SEP-3415 §"Webhook event delivery" + SEP-3415 §"Webhook security": this is the only
 		// MCP-specific header on a Standard Webhooks delivery.
-		signed := signFor(r.headerMode, eventID, body, target.Secret, time.Now()).
+		signed := signFor(r.headerMode, msgID, body, target.Secret, time.Now()).
 			withSubscriptionID(target.ID)
 
 		req, err := http.NewRequest("POST", target.URL, bytes.NewReader(signed.body))

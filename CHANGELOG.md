@@ -9,7 +9,22 @@ Releases before 0.3.0 were tag-only and are not back-filled here.
 
 ## [Unreleased]
 
+### Added
+- **The server checks `Mcp-Param-{Name}` headers on `tools/call`.** For each
+  argument a tool's schema marks with `x-mcp-header`, the header must mirror
+  the body, after Base64 decoding. Numbers compare numerically. A missing
+  header, a mismatched one, bad Base64, or an unencoded non-ASCII value gets
+  HTTP 400 and `-32020`. An omitted or null optional argument needs no header.
+  This runs on both wires, behind the session wire's existing 2026-07-28 gate
+  (#1111).
+- **A required `x-mcp-header` argument missing from the body is `-32020`.**
+  SEP-2243 asks for a JSON-RPC error there. Other required arguments still
+  get the `isError` tool result #1637 chose.
+
 ### Changed
+- **`core.DecodeMcpHeaderValue` treats `=?base64?` without the closing `?=` as
+  a literal value**, as the SEP-2243 test-case table says. It used to be an
+  error, so such an `Mcp-Name` now compares as plain text.
 - **The stateless wire requires `MCP-Protocol-Version`.** A stateless request
   without the header now gets HTTP 400 and `-32020`, as 2026-07-28 requires.
   Before, the server accepted a request that carried the version only in

@@ -15,8 +15,7 @@ package events
 // webhook-timestamp / webhook-signature) plus the X-MCP-Subscription-Id
 // header (SEP-3415 §"Webhook event delivery". webhook-id format is
 // msg_<type>_<random> per spec L417, distinguishing control POSTs from
-// event deliveries (which use the event's eventId so retries dedup
-// correctly).
+// event deliveries (plain msg_<random>).
 
 import (
 	"bytes"
