@@ -8,7 +8,7 @@ replace (
 )
 
 require (
-	github.com/panyam/mcpkit v0.8.17
+	github.com/panyam/mcpkit v0.8.18
 	github.com/panyam/mcpkit/experimental/ext/events v0.6.0
 )
 

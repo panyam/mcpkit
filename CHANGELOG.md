@@ -9,6 +9,36 @@ Releases before 0.3.0 were tag-only and are not back-filled here.
 
 ## [Unreleased]
 
+## [0.8.18] - 2026-11-09
+
+Full write-up: [`docs/releases/v0.8.18.md`](docs/releases/v0.8.18.md).
+
+### Added
+- **`rooms.JoinHandler`, `massrelay.NewLocal` and `massrelay.Signer`.** A web app mounts a relay
+  that trusts its own tokens, the bridge, and an endpoint that gives a page its room and a token
+  scoped to it, in a few lines (PR 1684).
+- **`joinToolRoomFrom(endpoint)`** joins a page through that endpoint, and `joinToolRoom`'s new
+  `getToken` option refreshes the relay token without leaving the room (PR 1684).
+- **Declared page events.** Pages declare event types with a payload schema and a context hint
+  (`Page.DeclareEvent`, `registerEvent`), the bridge validates each event and sends
+  `notifications/rooms/event_refused` for one it drops, and `rooms.WithPageEventCatalog` fixes the
+  types up front. roomsevents lists each as its own SEP-3415 event type, with the hint under
+  `_meta["io.github.panyam.mcpkit/context-hint"]` (PR 1686).
+- **`rooms.Instructions`**, server instructions that explain the bridge to an agent with a fixed
+  system prompt (PR 1686).
+- **`experimental/ext/rooms/WIRE.md`** and a wire fixture the Go and TypeScript pages both replay
+  (PR 1686).
+- **`examples/rooms/lanternfall`** and **`make exercise-aipage`**: a map game whose game master is
+  an agent, played by a scripted client, a LangGraph.js agent and Claude Code (PR 1686).
+
+### Changed
+- **`rooms-channel` subscribes to every room event type the bridge lists**, including declared
+  ones, not just the three built-in ones (PR 1686).
+- **`experimental/ext/rooms/massrelay` requires massrelay v0.3.7**, and its `Signer` wraps
+  `RelaySigner` with the same API (PR 1686).
+- **A Go `rooms.Page` greets a bridge in the TypeScript page's order** and sends its label once
+  (PR 1686).
+
 ## [0.8.17] - 2026-11-08
 
 Full write-up: [`docs/releases/v0.8.17.md`](docs/releases/v0.8.17.md).

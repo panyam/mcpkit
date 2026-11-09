@@ -6,6 +6,7 @@ replace (
 	github.com/panyam/mcpkit => ../../..
 	github.com/panyam/mcpkit/examples/common => ../../common
 	github.com/panyam/mcpkit/experimental/ext/events => ../../../experimental/ext/events
+	github.com/panyam/mcpkit/experimental/ext/events/clients/go => ../../../experimental/ext/events/clients/go
 	github.com/panyam/mcpkit/experimental/ext/rooms => ../../../experimental/ext/rooms
 	github.com/panyam/mcpkit/experimental/ext/rooms/massrelay => ../../../experimental/ext/rooms/massrelay
 	github.com/panyam/mcpkit/experimental/integrations/roomsevents => ../../../experimental/integrations/roomsevents
@@ -13,12 +14,12 @@ replace (
 )
 
 require (
-	github.com/panyam/mcpkit v0.8.17
+	github.com/panyam/mcpkit v0.8.18
 	github.com/panyam/mcpkit/examples/common v0.0.0-00010101000000-000000000000
-	github.com/panyam/mcpkit/experimental/ext/events v0.8.17
-	github.com/panyam/mcpkit/experimental/ext/rooms v0.8.17
-	github.com/panyam/mcpkit/experimental/ext/rooms/massrelay v0.8.17
-	github.com/panyam/mcpkit/experimental/integrations/roomsevents v0.8.17
+	github.com/panyam/mcpkit/experimental/ext/events v0.8.18
+	github.com/panyam/mcpkit/experimental/ext/rooms v0.8.18
+	github.com/panyam/mcpkit/experimental/ext/rooms/massrelay v0.8.18
+	github.com/panyam/mcpkit/experimental/integrations/roomsevents v0.8.18
 )
 
 require (
