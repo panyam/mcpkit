@@ -10,10 +10,10 @@ replace (
 )
 
 require (
-	github.com/panyam/mcpkit v0.8.18
-	github.com/panyam/mcpkit/experimental/ext/events v0.8.18
-	github.com/panyam/mcpkit/experimental/ext/events/clients/go v0.8.18
-	github.com/panyam/mcpkit/experimental/ext/rooms v0.8.18
+	github.com/panyam/mcpkit v0.8.19
+	github.com/panyam/mcpkit/experimental/ext/events v0.8.19
+	github.com/panyam/mcpkit/experimental/ext/events/clients/go v0.8.19
+	github.com/panyam/mcpkit/experimental/ext/rooms v0.8.19
 	github.com/stretchr/testify v1.12.1
 )
 

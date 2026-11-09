@@ -9,6 +9,21 @@ Releases before 0.3.0 were tag-only and are not back-filled here.
 
 ## [Unreleased]
 
+## [0.8.19] - 2026-11-09
+
+Full write-up: [`docs/releases/v0.8.19.md`](docs/releases/v0.8.19.md).
+
+### Added
+- **`rooms.Bridge.AttachedSince(session, resource)`**, when a session attached to a room
+  (PR 1688).
+
+### Changed
+- **roomsevents accepts a subscription before `attach`** and starts delivering once the session
+  attaches, only events from after the attach, on push and poll. It used to refuse with `-32024`.
+  A call with no MCP session is still refused (PR 1688).
+- **Lanternfall's game master** keeps one conversation per game and compacts it past a token
+  budget, a panel shows its context live, and the page uses a border layout.
+
 ## [0.8.18] - 2026-11-09
 
 Full write-up: [`docs/releases/v0.8.18.md`](docs/releases/v0.8.18.md).

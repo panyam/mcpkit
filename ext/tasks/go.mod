@@ -3,7 +3,7 @@ module github.com/panyam/mcpkit/ext/tasks
 go 1.26.9
 
 require (
-	github.com/panyam/mcpkit v0.8.18
+	github.com/panyam/mcpkit v0.8.19
 	github.com/stretchr/testify v1.12.1
 )
 
