@@ -396,8 +396,7 @@ does. `events_conformance_catalog` on kitchen-sink adds and removes types (the a
 
 ## The Go client dedups on eventId, and the receiver scopes it per subscription (#1558)
 
-The server mints `eventId` once at yield and every copy carries it, and `webhook-id` on an event
-POST is that same id. Nothing on the client used it, so a webhook retry or a poll backfill that
+The server mints `eventId` once at yield and every copy carries it. Nothing on the client used it, so a webhook retry or a poll backfill that
 overlapped push delivery reached the application twice. That was harmless for a dashboard and
 expensive for the bridges in #1579 and #1581, where each delivery starts an agent turn.
 
@@ -405,11 +404,14 @@ The seen-set is a value (`Deduper`) rather than a field of each loop because the
 matters crosses delivery modes: a stream's push frames and the poll backfill after it. A private
 set per call catches retries only.
 
-The receiver keys on `X-MCP-Subscription-Id` plus `eventId`, not `webhook-id` alone. One event
-matching two subscriptions to the same URL arrives as two POSTs with the same `webhook-id`, and
-whether SEP-3415 means that to be one delivery or two is an open question for the WG. Scoping by
-subscription delivers both, which is the reversible choice: a caller can collapse them, but cannot
-recover one that was dropped. A side effect is that sharing a `Deduper` between a `Receiver` and a
+The receiver keys on `X-MCP-Subscription-Id` plus `eventId`. One event matching two
+subscriptions to the same URL arrives as two POSTs, and both are delivered. This was an open
+question when #1558 landed, and SEP-3415 settled it at `b0efd116`: the two are separate deliveries,
+and a receiver that dedups on `eventId` MUST scope it to the subscription. The same revision made
+`webhook-id` a server-generated id per message, reused across retries and never derived from
+`eventId`. Before #1664 the server sent the `eventId` as `webhook-id`, so a receiver that keyed
+on `webhook-id` alone dropped the second subscription's copy. The Go receiver never did, because
+it keys on the subscription and `eventId` instead. A side effect is that sharing a `Deduper` between a `Receiver` and a
 `Poll` dedups nothing across them when the POST carries a subscription id, which the README says.
 
 A delivery dropped on a full channel is forgotten again, so the server's retry is delivered.

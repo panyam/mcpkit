@@ -137,7 +137,7 @@ func signMCP(_ string, body []byte, secret string, now time.Time) signedDelivery
 
 // signStandardWebhooks produces a Standard Webhooks v1 signed delivery.
 //
-//	webhook-id:        <msgID — caller-supplied; spec mandates eventId for event deliveries>
+//	webhook-id:        <msgID — caller-supplied; per message, never the eventId>
 //	webhook-timestamp: <unix>
 //	webhook-signature: v1,<base64(HMAC(secret, msgId + "." + ts + "." + body))>
 //
@@ -173,12 +173,10 @@ func signFor(mode WebhookHeaderMode, msgID string, body []byte, secret string, n
 	}
 }
 
-// newMessageID returns a Standard-Webhooks-shaped message ID. Uses the
-// "msg_" prefix Stripe / Standard Webhooks examples use, with 16 random
-// bytes as URL-safe base64. Reserved for non-event POSTs (control
-// envelopes per SEP-3415 §"Non-event webhook bodies" — event
-// deliveries use the event's own eventId so that retries dedup
-// correctly at the receiver.
+// newMessageID returns the webhook-id for one event delivery: "msg_" plus
+// 16 random bytes as URL-safe base64, so it is header-safe and never
+// derived from eventId. The caller reuses it across retries of that
+// message (SEP-3415 §"Signature scheme", #1664).
 func newMessageID() string {
 	var buf [16]byte
 	if _, err := rand.Read(buf[:]); err != nil {
@@ -193,8 +191,7 @@ func newMessageID() string {
 // the type-tagged form msg_<typ>_<random>, used for non-event control
 // envelope POSTs (type:gap, type:terminated per SEP-3415 §"Non-event webhook bodies". The type tag lets receivers and
 // operators distinguish control deliveries from event deliveries
-// (which use the event's eventId as webhook-id) without parsing the
-// body.
+// (plain msg_<random>) without parsing the body.
 //
 // Per SEP-3415 §"Non-event webhook bodies": control envelopes use the
 // pattern msg_<type>_<random> for webhook-id.
