@@ -112,7 +112,7 @@ each worked in its own worktree:
   agent drives the page through the room bridge (`experimental/ext/rooms`). The agent is any MCP
   client. An interactive one like Claude Code keeps its own system prompt and learns the page from
   the server's instructions and tool descriptions. A custom one on LangGraph, Mastra or another
-  agent SDK may set its own. Exercise `make exercise-ai-inside-ui`, which #1682 adds and which runs
+  agent SDK may set its own. Exercise `make exercise-aipage`, which #1682 adds and which runs
   first. Aligning the page wire with WebMCP is wanted but comes after the custom-app case works
   (#1679's "Later" section).
 - **#1553** (`mission_release_installable`): every tagged module installs from the proxy at release.

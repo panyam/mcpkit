@@ -2,7 +2,7 @@
 # The exercise for mission #1683: a user asks an agent from inside a custom
 # web app, and the agent drives the page. The app is examples/rooms/lanternfall.
 #
-#   make exercise-ai-inside-ui
+#   make exercise-aipage
 #
 # Three checks:
 #   1. Scripted: an MCP client attaches, calls the page's tools, and hears the
@@ -50,7 +50,7 @@ Or a custom agent instead of Claude Code:  (cd examples/rooms/lanternfall && mak
 STEPS
 
 if [ "$fail" -ne 0 ]; then
-  printf '\nexercise-ai-inside-ui: FAILED\n'
+  printf '\nexercise-aipage: FAILED\n'
   exit 1
 fi
-printf '\nexercise-ai-inside-ui: passed\n'
+printf '\nexercise-aipage: passed\n'

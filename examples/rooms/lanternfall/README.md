@@ -115,7 +115,7 @@ sequenceDiagram
   the events it emits.
 - [`web/src/agent/gm.ts`](web/src/agent/gm.ts) is the LangGraph game master.
 - [`web/tests/exercise.spec.ts`](web/tests/exercise.spec.ts) is the scripted check of mission #1683,
-  which `make exercise-ai-inside-ui` at the repo root runs.
+  which `make exercise-aipage` at the repo root runs.
 - `experimental/ext/rooms/WIRE.md` is the protocol between the page and the bridge.
 
 ## Make targets
