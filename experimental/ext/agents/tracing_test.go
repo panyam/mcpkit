@@ -60,7 +60,7 @@ func newTracedAgentsServer(t *testing.T, tp core.TracerProvider, defs ...agents.
 	srv := newCatalogServer()
 	_, err := agents.Register(agents.Config{Server: srv, Agents: defs, TracerProvider: tp})
 	require.NoError(t, err)
-	return testutil.NewTestClient(t, srv)
+	return testutil.NewTestClient(t, srv, declareAgents)
 }
 
 // TestListEmitsSpan asserts agents/list emits an agents.list span carrying the
@@ -116,7 +116,7 @@ func TestNoTracerProviderNoPanic(t *testing.T) {
 	srv := newCatalogServer()
 	_, err := agents.Register(agents.Config{Server: srv, Agents: []agents.AgentDef{sepWorkflowAgent()}})
 	require.NoError(t, err)
-	tc := testutil.NewTestClient(t, srv)
+	tc := testutil.NewTestClient(t, srv, declareAgents)
 
 	_, err = tc.Client.Call(t.Context(), agents.MethodList, nil)
 	require.NoError(t, err)

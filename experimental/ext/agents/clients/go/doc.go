@@ -3,12 +3,12 @@
 // progressive-disclosure host workflow: detect the capability, read the
 // roster, then resolve one agent's details.
 //
-// EXPERIMENTAL: tracks experimental/ext/agents, which follows an unmerged SEP
-// and may still change.
+// EXPERIMENTAL: tracks experimental/ext/agents, which follows agents-wg#22.
+// That proposal has no SEP number yet and may still change.
 //
 // Typical host workflow:
 //
-//	mcp := client.NewClient(serverURL, info)
+//	mcp := client.NewClient(serverURL, info, agentsclient.WithExtension())
 //	mcp.Connect()
 //	ac := agentsclient.New(mcp)
 //	if !ac.SupportsAgents() {

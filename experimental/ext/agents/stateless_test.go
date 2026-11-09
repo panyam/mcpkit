@@ -9,6 +9,7 @@ import (
 	"github.com/panyam/mcpkit/experimental/ext/agents"
 	"github.com/panyam/mcpkit/server"
 	"github.com/panyam/mcpkit/server/stateless"
+	"github.com/panyam/mcpkit/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -18,6 +19,11 @@ import (
 // client. The extension is captured via server/discover on this wire.
 func newStatelessClient(t *testing.T, opts []client.ClientOption, defs ...agents.AgentDef) *client.Client {
 	t.Helper()
+	return dialStateless(t, startStatelessServer(t, defs...), append([]client.ClientOption{declareAgents}, opts...)...)
+}
+
+func startStatelessServer(t *testing.T, defs ...agents.AgentDef) string {
+	t.Helper()
 	srv := newCatalogServer()
 	_, err := agents.Register(agents.Config{Server: srv, Agents: defs})
 	require.NoError(t, err)
@@ -25,9 +31,13 @@ func newStatelessClient(t *testing.T, opts []client.ClientOption, defs ...agents
 	handler := srv.Handler(server.WithStreamableHTTP(true), server.WithStatelessMode(stateless.ModeStateless))
 	ts := httptest.NewServer(handler)
 	t.Cleanup(ts.Close)
+	return ts.URL + "/mcp"
+}
 
+func dialStateless(t *testing.T, url string, opts ...client.ClientOption) *client.Client {
+	t.Helper()
 	opts = append([]client.ClientOption{client.WithClientMode(client.ClientModeStateless)}, opts...)
-	c := client.NewClient(ts.URL+"/mcp", core.ClientInfo{Name: "test", Version: "0.0.1"}, opts...)
+	c := client.NewClient(url, core.ClientInfo{Name: "test", Version: "0.0.1"}, opts...)
 	require.NoError(t, c.Connect(t.Context()))
 	return c
 }
@@ -74,6 +84,25 @@ func TestWireParity(t *testing.T) {
 		listed := toolsByName(t, testCall(t, c))
 		assert.NotContains(t, string(listed["upload_report"]), core.FileInputSchemaKey,
 			"a stateless client that declared no fileInputs must not see x-mcp-file")
+	})
+
+	t.Run("1673 an undeclared client gets -32021 from agents/list and agents/get", func(t *testing.T) {
+		wires := map[string]*client.Client{
+			"session":   testutil.NewTestClient(t, newRegisteredServer(t, sepWorkflowAgent())).Client,
+			"stateless": dialStateless(t, startStatelessServer(t, sepWorkflowAgent())),
+		}
+		for name, c := range wires {
+			for _, call := range []struct {
+				method string
+				params any
+			}{
+				{agents.MethodList, nil},
+				{agents.MethodGet, agents.GetAgentParams{Name: "workflow-agent"}},
+			} {
+				_, err := c.Call(t.Context(), call.method, call.params)
+				assertMissingAgentsCapability(t, err, name+" wire, "+call.method)
+			}
+		}
 	})
 
 	t.Run("1546 ttlMs and cacheScope on agents/list and agents/get", func(t *testing.T) {

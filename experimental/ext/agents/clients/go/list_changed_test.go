@@ -34,7 +34,7 @@ func TestCacheFollowsListChanged(t *testing.T) {
 	ts := httptest.NewServer(srv.Handler(server.WithStreamableHTTP(true), server.WithStatelessMode(stateless.ModeStateless)))
 	t.Cleanup(ts.Close)
 
-	c := client.NewClient(ts.URL+"/mcp", core.ClientInfo{Name: "t", Version: "1"}, client.WithClientMode(client.ClientModeStateless))
+	c := client.NewClient(ts.URL+"/mcp", core.ClientInfo{Name: "t", Version: "1"}, client.WithClientMode(client.ClientModeStateless), agentsclient.WithExtension())
 	require.NoError(t, c.Connect(t.Context()))
 	t.Cleanup(func() { c.Close() })
 

@@ -77,7 +77,7 @@ func newAgentsServerWith(t *testing.T, cfg agents.Config, defs ...agents.AgentDe
 	cfg.Agents = defs
 	reg, err := agents.Register(cfg)
 	require.NoError(t, err)
-	return testutil.NewTestClient(t, cfg.Server), reg
+	return testutil.NewTestClient(t, cfg.Server, declareAgents), reg
 }
 
 func newAgentsServer(t *testing.T, defs ...agents.AgentDef) (*testutil.TestClient, *agents.Registry) {
@@ -215,7 +215,7 @@ func TestGetToolsMatchToolsList(t *testing.T) {
 		srv := newCatalogServer()
 		_, err := agents.Register(agents.Config{Server: srv, Agents: []agents.AgentDef{opsAgent()}})
 		require.NoError(t, err)
-		tc := testutil.NewTestClient(t, srv, client.WithFileInputs())
+		tc := testutil.NewTestClient(t, srv, client.WithFileInputs(), declareAgents)
 		assertToolsMatchList(t, testCall(t, tc.Client), "ops-agent")
 	})
 }
@@ -227,7 +227,7 @@ func TestGetToolsFollowReregistration(t *testing.T) {
 	_, err := agents.Register(agents.Config{Server: srv, Agents: []agents.AgentDef{sepWorkflowAgent()}})
 	require.NoError(t, err)
 	srv.RegisterTool(core.ToolDef{Name: "list_failed_pipelines", Description: "v2", InputSchema: map[string]any{"type": "object"}}, noopTool)
-	tc := testutil.NewTestClient(t, srv)
+	tc := testutil.NewTestClient(t, srv, declareAgents)
 
 	res, err := tc.Client.Call(t.Context(), agents.MethodGet, agents.GetAgentParams{Name: "workflow-agent"})
 	require.NoError(t, err)
@@ -280,7 +280,7 @@ func TestUnregisteredToolIsInvalidDefinition(t *testing.T) {
 	require.Error(t, err, "Register must report a tool name the catalog does not hold")
 	assert.Contains(t, err.Error(), "no_such_tool")
 	require.NotNil(t, reg)
-	tc := testutil.NewTestClient(t, srv)
+	tc := testutil.NewTestClient(t, srv, declareAgents)
 
 	_, err = tc.Client.Call(t.Context(), agents.MethodGet, agents.GetAgentParams{Name: "broken"})
 	rpcErr := rpcError(t, err)
@@ -354,7 +354,7 @@ func TestRegisterDuplicateReportsError(t *testing.T) {
 	require.Error(t, err, "duplicate name must be reported")
 	require.NotNil(t, reg)
 
-	out := listAll(t, testCall(t, testutil.NewTestClient(t, srv).Client))
+	out := listAll(t, testCall(t, testutil.NewTestClient(t, srv, declareAgents).Client))
 	require.Len(t, out.Agents, 1)
 	assert.Equal(t, "Investigates delivery pipelines and approvals", out.Agents[0].Description)
 }

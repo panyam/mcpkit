@@ -51,6 +51,7 @@ func connect(ctx context.Context, url, token string, opts ...client.ClientOption
 	k := &caller{token: &swapToken{tok: token}}
 	opts = append([]client.ClientOption{
 		client.WithTokenSource(k.token),
+		agentsclient.WithExtension(),
 		client.WithGetSSEStream(),
 		client.WithNotificationCallback(func(method string, _ any) {
 			if method == agents.NotificationListChanged {

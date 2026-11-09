@@ -36,7 +36,7 @@ func newClientWith(t *testing.T, cfg agents.Config, defs ...agents.AgentDef) *ag
 	cfg.Server = srv
 	cfg.Agents = defs
 	_, _ = agents.Register(cfg)
-	tc := testutil.NewTestClient(t, srv)
+	tc := testutil.NewTestClient(t, srv, agentsclient.WithExtension())
 	return agentsclient.New(tc.Client)
 }
 
@@ -54,7 +54,7 @@ func TestSupportsAgents(t *testing.T) {
 // host skips discovery.
 func TestSupportsAgentsFalseWhenAbsent(t *testing.T) {
 	srv := server.NewServer(core.ServerInfo{Name: "plain", Version: "0.0.1"})
-	tc := testutil.NewTestClient(t, srv)
+	tc := testutil.NewTestClient(t, srv, agentsclient.WithExtension())
 	ac := agentsclient.New(tc.Client)
 	assert.False(t, ac.SupportsAgents())
 }
