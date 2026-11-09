@@ -69,7 +69,7 @@ func Message(d eventsclient.Delivery) (string, map[string]string, error) {
 		return "", nil, fmt.Errorf("channel: event %s is not a room event: %w", d.Event.EventID, err)
 	}
 	body := string(d.Event.Data)
-	what := d.Event.Name
+	what := "sent " + d.Event.Name
 	switch d.Event.Name {
 	case roomsevents.EventAsk:
 		var p roomsevents.AskPayload

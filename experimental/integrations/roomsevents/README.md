@@ -61,7 +61,8 @@ and go with the pages that declare them, and each change announces `notification
 `rooms-channel` is a [channel](https://code.claude.com/docs/en/channels-reference): an MCP server
 Claude Code starts over stdio that pushes events into the session. It offers the bridge's tools as
 its own (`attach`, `list_pages`, and the tools of the pages in attached rooms). After an `attach` it
-subscribes to that room's three event types, and each event arrives as
+subscribes to every room event type the bridge lists: the three built-in ones and each type a page
+declared. A type declared after the attach is picked up at the next one. Each event arrives as
 
 ```text
 <channel source="rooms" event="room.ask" resource="design:demo/board.kicad_sch" page="..." user="alice" event_id="...">
