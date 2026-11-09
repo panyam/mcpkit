@@ -33,6 +33,9 @@ const parityInstructions = "Call upload_report with the quarterly PDF."
 type parityWire struct {
 	name string
 	call func(t *testing.T, method string, params map[string]any) (map[string]json.RawMessage, *core.Error)
+	// callHeaders is call with extra HTTP headers, and it also returns the
+	// HTTP status.
+	callHeaders func(t *testing.T, method string, params map[string]any, headers map[string]string) (int, map[string]json.RawMessage, *core.Error)
 	// initResult is the initialize result on the session wire and the
 	// server/discover result on the stateless wire.
 	initResult map[string]json.RawMessage
@@ -83,7 +86,7 @@ func parityWires(t *testing.T, s *Server, caps map[string]any) []parityWire {
 	}
 	var nextID atomic.Int64
 
-	post := func(t *testing.T, sid, method string, params map[string]any) (*core.Response, string) {
+	post := func(t *testing.T, sid, method string, params map[string]any, extra map[string]string) (*core.Response, string, int) {
 		t.Helper()
 		if params == nil {
 			params = map[string]any{}
@@ -99,13 +102,16 @@ func parityWires(t *testing.T, s *Server, caps map[string]any) []parityWire {
 		if sid != "" {
 			headers[mcpSessionIDHeader] = sid
 		}
+		for k, v := range extra {
+			headers[k] = v
+		}
 		url := statelessURL
 		if sid != "" || method == "initialize" {
 			url = sessionURL
 		}
 		httpResp := postStatelessJSON(t, url, body, headers)
 		gotSID := httpResp.Header.Get(mcpSessionIDHeader)
-		return decode(t, httpResp), gotSID
+		return decode(t, httpResp), gotSID, httpResp.StatusCode
 	}
 	result := func(t *testing.T, resp *core.Response) (map[string]json.RawMessage, *core.Error) {
 		t.Helper()
@@ -120,11 +126,11 @@ func parityWires(t *testing.T, s *Server, caps map[string]any) []parityWire {
 		return out, nil
 	}
 
-	initResp, sid := post(t, "", "initialize", map[string]any{
+	initResp, sid, _ := post(t, "", "initialize", map[string]any{
 		"protocolVersion": draftVersion,
 		"capabilities":    caps,
 		"clientInfo":      map[string]any{"name": "parity", "version": "1"},
-	})
+	}, nil)
 	initResult, rpcErr := result(t, initResp)
 	if rpcErr != nil || sid == "" {
 		t.Fatalf("initialize at %s: err=%v sid=%q", draftVersion, rpcErr, sid)
@@ -141,14 +147,21 @@ func parityWires(t *testing.T, s *Server, caps map[string]any) []parityWire {
 	}
 
 	session := parityWire{name: "session", initResult: initResult}
-	session.call = func(t *testing.T, method string, params map[string]any) (map[string]json.RawMessage, *core.Error) {
-		resp, _ := post(t, sid, method, params)
-		return result(t, resp)
+	callOn := func(sid string) func(t *testing.T, method string, params map[string]any, headers map[string]string) (int, map[string]json.RawMessage, *core.Error) {
+		return func(t *testing.T, method string, params map[string]any, headers map[string]string) (int, map[string]json.RawMessage, *core.Error) {
+			resp, _, status := post(t, sid, method, params, headers)
+			res, rpcErr := result(t, resp)
+			return status, res, rpcErr
+		}
 	}
 	stateless := parityWire{name: "stateless"}
-	stateless.call = func(t *testing.T, method string, params map[string]any) (map[string]json.RawMessage, *core.Error) {
-		resp, _ := post(t, "", method, params)
-		return result(t, resp)
+	session.callHeaders, stateless.callHeaders = callOn(sid), callOn("")
+	for _, w := range []*parityWire{&session, &stateless} {
+		callHeaders := w.callHeaders
+		w.call = func(t *testing.T, method string, params map[string]any) (map[string]json.RawMessage, *core.Error) {
+			_, res, rpcErr := callHeaders(t, method, params, nil)
+			return res, rpcErr
+		}
 	}
 	discover, rpcErr := stateless.call(t, "server/discover", nil)
 	if rpcErr != nil {
@@ -647,6 +660,59 @@ func TestWireParity(t *testing.T) {
 				_, rpcErr := w.call(t, method, map[string]any{"cursor": "not-a-cursor"})
 				if rpcErr == nil || rpcErr.Code != core.ErrCodeInvalidParams {
 					t.Errorf("%s wire %s: got %+v, want %d", w.name, method, rpcErr, core.ErrCodeInvalidParams)
+				}
+			}
+		}
+	})
+
+	t.Run("1111 Mcp-Param headers match the arguments they mirror", func(t *testing.T) {
+		s := parityFixture(t)
+		s.RegisterTool(core.ToolDef{
+			Name: "route_order",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"region":   map[string]any{"type": "string", "x-mcp-header": "Region"},
+					"priority": map[string]any{"type": "integer", "x-mcp-header": "Priority"},
+					"urgent":   map[string]any{"type": "boolean", "x-mcp-header": "Urgent"},
+					"note":     map[string]any{"type": "string"},
+				},
+				"required": []any{"region"},
+			},
+		}, func(core.ToolContext, core.ToolRequest) (core.ToolResponse, error) { return core.TextResult("ok"), nil })
+
+		for _, tc := range []struct {
+			name    string
+			args    map[string]any
+			headers map[string]string
+			accept  bool
+		}{
+			{"match", map[string]any{"region": "us-east", "priority": 5}, map[string]string{"Mcp-Param-Region": "us-east", "Mcp-Param-Priority": "5"}, true},
+			{"string mismatch", map[string]any{"region": "us-east"}, map[string]string{"Mcp-Param-Region": "eu-west"}, false},
+			{"header missing", map[string]any{"region": "us-east"}, nil, false},
+			{"base64", map[string]any{"region": "Hello"}, map[string]string{"Mcp-Param-Region": "=?base64?SGVsbG8=?="}, true},
+			{"base64 bad padding", map[string]any{"region": "Hello"}, map[string]string{"Mcp-Param-Region": "=?base64?SGVsbG8?="}, false},
+			{"base64 bad chars", map[string]any{"region": "Hello"}, map[string]string{"Mcp-Param-Region": "=?base64?SGVs!!!bG8=?="}, false},
+			{"no prefix is literal", map[string]any{"region": "SGVsbG8="}, map[string]string{"Mcp-Param-Region": "SGVsbG8="}, true},
+			{"no suffix is literal", map[string]any{"region": "=?base64?SGVsbG8="}, map[string]string{"Mcp-Param-Region": "=?base64?SGVsbG8="}, true},
+			{"unencoded non-ascii", map[string]any{"region": "café"}, map[string]string{"Mcp-Param-Region": "café"}, false},
+			{"optional omitted", map[string]any{"region": "us-east"}, map[string]string{"Mcp-Param-Region": "us-east"}, true},
+			{"optional null", map[string]any{"region": "us-east", "priority": nil}, map[string]string{"Mcp-Param-Region": "us-east"}, true},
+			{"header without body value", map[string]any{"region": "us-east"}, map[string]string{"Mcp-Param-Region": "us-east", "Mcp-Param-Priority": "5"}, false},
+			{"number compared numerically", map[string]any{"region": "us-east", "priority": 5}, map[string]string{"Mcp-Param-Region": "us-east", "Mcp-Param-Priority": "5.0"}, true},
+			{"number mismatch", map[string]any{"region": "us-east", "priority": 5}, map[string]string{"Mcp-Param-Region": "us-east", "Mcp-Param-Priority": "6"}, false},
+			{"boolean", map[string]any{"region": "us-east", "urgent": true}, map[string]string{"Mcp-Param-Region": "us-east", "Mcp-Param-Urgent": "true"}, true},
+			{"boolean mismatch", map[string]any{"region": "us-east", "urgent": true}, map[string]string{"Mcp-Param-Region": "us-east", "Mcp-Param-Urgent": "yes"}, false},
+			{"required omitted", map[string]any{"note": "n"}, nil, false},
+			{"unannotated header ignored", map[string]any{"region": "us-east"}, map[string]string{"Mcp-Param-Region": "us-east", "Mcp-Param-Other": "x"}, true},
+		} {
+			for _, w := range parityWires(t, s, map[string]any{}) {
+				status, _, rpcErr := w.callHeaders(t, "tools/call", map[string]any{"name": "route_order", "arguments": tc.args}, tc.headers)
+				switch {
+				case tc.accept && rpcErr != nil:
+					t.Errorf("%s %s wire: refused with %+v", tc.name, w.name, rpcErr)
+				case !tc.accept && (rpcErr == nil || rpcErr.Code != core.ErrCodeHeaderMismatch || status != http.StatusBadRequest):
+					t.Errorf("%s %s wire: got HTTP %d and %+v, want 400 and %d", tc.name, w.name, status, rpcErr, core.ErrCodeHeaderMismatch)
 				}
 			}
 		}

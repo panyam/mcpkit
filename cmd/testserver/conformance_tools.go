@@ -19,6 +19,25 @@ type emptyInput = struct{}
 
 // registerConformanceTools adds all tools required by the MCP conformance suite.
 func registerConformanceTools(srv *server.Server) {
+	// test_custom_header_echo: SEP-2243 custom headers. tenant is required and
+	// region optional, both mirrored into Mcp-Param-* headers, so
+	// http-custom-header-server-validation can test a missing required
+	// argument and an omitted optional one (#1111).
+	srv.RegisterTool(core.ToolDef{
+		Name:        "test_custom_header_echo",
+		Description: "Echoes its x-mcp-header arguments for SEP-2243 conformance testing",
+		InputSchema: map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"tenant": map[string]any{"type": "string", "x-mcp-header": "Tenant"},
+				"region": map[string]any{"type": "string", "x-mcp-header": "Region"},
+			},
+			"required": []any{"tenant"},
+		},
+	}, func(_ core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
+		return core.TextResult(string(req.Arguments)), nil
+	})
+
 	// test_simple_text: returns a fixed text response (no arguments)
 	srv.Register(core.TextTool[emptyInput]("test_simple_text", "Returns a simple text response for conformance testing",
 		func(ctx core.ToolContext, _ emptyInput) (string, error) {

@@ -344,7 +344,7 @@ func TestDecodeMcpHeaderValue(t *testing.T) {
 		{"sentinel-lookalike", "=?base64?PT9iYXNlNjQ/bGl0ZXJhbD89?=", "=?base64?literal?=", false},
 		{"prefix-case-sensitive", "=?BASE64?SGk=?=", "=?BASE64?SGk=?=", false},
 		{"bad-base64", "=?base64?!!!?=", "", true},
-		{"missing-suffix", "=?base64?SGk=", "", true},
+		{"missing-suffix-is-literal", "=?base64?SGk=", "=?base64?SGk=", false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			got, err := DecodeMcpHeaderValue(tc.in)
