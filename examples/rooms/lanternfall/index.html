@@ -269,14 +269,36 @@ messages. Install it from this tree, so it subscribes to the page&rsquo;s declar
 in Claude Code as a <code>room.ask</code> message, and the answer appears on your map.</p>
 <p><strong>A LangGraph.js agent</strong>, with <code>ANTHROPIC_API_KEY</code> set:</p>
 <pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span>make gm                                    <span style="color:#998;font-style:italic"># PLAYER=alice GAME=demo by default</span>
-</span></span></code></pre><p>It defaults to <code>claude-opus-5-5</code> and reads <code>LANTERNFALL_MODEL</code> to use another. It waits for the<br />
-player&rsquo;s events with <code>next_request</code>, keeps the quiet ones as context, and answers each question with<br />
-the page&rsquo;s tools.</p>
+</span></span></code></pre><p>It defaults to <code>claude-opus-5-5</code> and reads <code>LANTERNFALL_MODEL</code> to use another. It reads each event<br />
+type&rsquo;s context hint from <code>events/list</code> and follows it, printing what it decided:</p>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span>[gm] context hints: item.found=high, place.examined=low, player.moved=medium
+</span></span><span style="display:flex;"><span>[gm] player.moved is medium priority: kept as context
+</span></span><span style="display:flex;"><span>[gm] item.found is high priority: reacting now
+</span></span><span style="display:flex;"><span>[gm] answered with lanternfall_look, lanternfall_reveal, lanternfall_narrate
+</span></span><span style="display:flex;"><span>[gm] place.examined is low priority: kept as context, keeping only the latest
+</span></span><span style="display:flex;"><span>[gm] alice asks: What does the ledger page say?
+</span></span></code></pre><p>A high-priority event gets a reaction at once, unasked. A <code>last-wins</code> aggregate keeps only the newest<br />
+event of its kind, and <code>session</code> retention keeps an event as context across answers. A question<br />
+asked from the page is always answered.</p>
+<p>To watch events drive it, turn the switch on and walk Gate → Market → Clocktower → Old Archive, then<br />
+click the Archive to search it. The torn ledger page is high priority, so the game master narrates<br />
+without being asked. Then ask it what the page says.</p>
 <p><strong>A second player.</strong> Open <a href="http://localhost:8080/signin?as=bob&amp;game=demo">http://localhost:8080/signin?as=bob&amp;game=demo</a> in another browser profile.<br />
 Bob&rsquo;s tab is his own map. Alice&rsquo;s agent cannot drive it unless Bob accepts that agent&rsquo;s code in the<br />
 &ldquo;Another player&rsquo;s agent code&rdquo; box.</p>
 <p>The bearer token <code>player:&lt;name&gt;</code> acts for <code>&lt;name&gt;</code>. That is the demo&rsquo;s whole auth, so it is for<br />
 localhost only.</p>
+<h2 id="what-the-page-shows-you">What the page shows you <a class="anchor" href="#what-the-page-shows-you">¶</a></h2>
+<p>The <strong>Activity</strong> panel under the map lists everything that crosses between the page and agents:</p>
+<ul>
+<li><code>→ event</code>: what the page sent, with its declared priority (<code>high</code>, <code>medium</code>, <code>low</code>, or <code>built in</code><br />
+for <code>room.ask</code>)</li>
+<li><code>← tool call</code>: what an agent did to the page, with its arguments, whether it was read-only, and<br />
+whom it acts for</li>
+<li><code>•</code>: joining, the switch, and agents attaching or starting to act</li>
+</ul>
+<p>With no game master connected, a banner says how to start one, and a question asked with nobody<br />
+listening says so in the story log.</p>
 <h2 id="what-the-page-offers">What the page offers <a class="anchor" href="#what-the-page-offers">¶</a></h2>
 <p><code>catalog.json</code> declares both lists. The Go server passes them to the bridge as fixed catalogs<br />
 (<code>rooms.WithPageTools</code>, <code>rooms.WithPageEventCatalog</code>), and the page imports the same file, so the<br />
