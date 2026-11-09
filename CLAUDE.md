@@ -108,22 +108,33 @@ the tree.
 Work is queued by mission, per `~/.claude/skills/retriage/CONVENTIONS.md`. Two missions are active,
 each worked in its own worktree:
 
-- **#1552** (`mission_wire_2026_07_28`): a 2026-07-28 client gets spec-correct results from mcpkit
-  on both wires. Exercise `make exercise-wire`: session-vs-stateless parity rows
-  (`TestWireParity` in `server/` and `experimental/ext/agents`, one row per ticket) plus
-  `testconf testconf-stateless testconf-agents`. A new wire bug gets a row there first. Those
-  rows are the only cross-wire check anywhere: each upstream suite grades one wire on its own
-  fixture (`testconf` on `cmd/testserver` sessions, `testconf-stateless` on the cart example), so
-  #1352, #1355 and the #1637 gaps all shipped with every suite green.
-  The #1580 exercise (chakra's `make host-exercise`) runs against `../mcpkit/main` through chakra's
-  replaces, and that shared checkout is often stale or carries another session's edits. To grade
-  your own tree, `git clone --local` chakra into your scratch directory and rewrite every
-  `=> (../)+mcpkit/main` replace in its `go.mod` files to your checkout's absolute path.
+- **#1683** (`mission_ai_inside_ui`): a user asks an agent from inside a custom web app, and the
+  agent drives the page through the room bridge (`experimental/ext/rooms`). The agent is any MCP
+  client. An interactive one like Claude Code keeps its own system prompt and learns the page from
+  the server's instructions and tool descriptions. A custom one on LangGraph, Mastra or another
+  agent SDK may set its own. Exercise `make exercise-ai-inside-ui`, which #1682 adds and which runs
+  first. Aligning the page wire with WebMCP is wanted but comes after the custom-app case works
+  (#1679's "Later" section).
 - **#1553** (`mission_release_installable`): every tagged module installs from the proxy at release.
   Exercise in the issue. #1488 (`go install …/cmd/mcpskills@<tag>` failing on in-repo `replace`
   directives) closed with #1624, which tags a tree without them.
 
-#1554 (`mission_apps_host`) is queued behind #1552. #1508 (events, SEP-3415) closed 2026-10-16.
+#1554 (`mission_apps_host`) is queued behind #1683. Its tickets and every MCP Apps ticket carry the
+`mcpapps` label, and `proposals/mcp-apps-wg/CURRENT_GAPS.md` in mcpcontrib tracks upstream against them.
+
+#1552 (`mission_wire_2026_07_28`) closed 2026-11-09, and its exercise still guards the wire. Run
+`make exercise-wire` after any wire change: session-vs-stateless parity rows (`TestWireParity` in
+`server/` and `experimental/ext/agents`) plus `testconf testconf-stateless testconf-agents`. A new
+wire bug gets a parity row first. Those rows are the only cross-wire check anywhere. Each upstream
+suite grades one wire on its own fixture (`testconf` on `cmd/testserver` sessions,
+`testconf-stateless` on the cart example), so #1352, #1355 and the #1637 gaps all shipped with every
+suite green.
+
+The #1580 exercise (chakra's `make host-exercise`) runs against `../mcpkit/main` through chakra's
+replaces, and that shared checkout is often stale or carries another session's edits. To grade your
+own tree, `git clone --local` chakra into your scratch directory and rewrite every
+`=> (../)+mcpkit/main` replace in its `go.mod` files to your checkout's absolute path.
+#1508 (events, SEP-3415) closed 2026-10-16.
 Run a mission's exercise after each merged PR on it and log the result on the mission issue. A new
 issue gets a priority (`P0`–`P3`) and either a mission link (blocked-by on the mission issue) or
 `waiting` with its trigger.
