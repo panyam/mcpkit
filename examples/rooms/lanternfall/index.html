@@ -272,14 +272,15 @@ in Claude Code as a <code>room.ask</code> message, and the answer appears on you
 </span></span></code></pre><p>It defaults to <code>claude-opus-5-5</code> and reads <code>LANTERNFALL_MODEL</code> to use another. It reads each event<br />
 type&rsquo;s context hint from <code>events/list</code> and follows it, printing what it decided:</p>
 <pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span>[gm] context hints: item.found=high, place.examined=low, player.moved=medium
-</span></span><span style="display:flex;"><span>[gm] player.moved is medium priority: kept as context
+</span></span><span style="display:flex;"><span>[gm] player.moved is medium priority: added to the context
 </span></span><span style="display:flex;"><span>[gm] item.found is high priority: reacting now
 </span></span><span style="display:flex;"><span>[gm] answered with lanternfall_look, lanternfall_reveal, lanternfall_narrate
-</span></span><span style="display:flex;"><span>[gm] place.examined is low priority: kept as context, keeping only the latest
+</span></span><span style="display:flex;"><span>[gm] compacted 13 messages (~644 tokens) into a summary
+</span></span><span style="display:flex;"><span>[gm] place.examined is low priority: added to the context, replacing an unseen older one
 </span></span><span style="display:flex;"><span>[gm] alice asks: What does the ledger page say?
 </span></span></code></pre><p>A high-priority event gets a reaction at once, unasked. A <code>last-wins</code> aggregate keeps only the newest<br />
-event of its kind, and <code>session</code> retention keeps an event as context across answers. A question<br />
-asked from the page is always answered.</p>
+event of its kind, and <code>session</code> retention keeps the latest event of its kind through compaction. A<br />
+question asked from the page is always answered. The context panel below shows all of it.</p>
 <p>To watch events drive it, turn the switch on and walk Gate → Market → Clocktower → Old Archive, then<br />
 click the Archive to search it. The torn ledger page is high priority, so the game master narrates<br />
 without being asked. Then ask it what the page says.</p>
@@ -288,6 +289,37 @@ Bob&rsquo;s tab is his own map. Alice&rsquo;s agent cannot drive it unless Bob a
 &ldquo;Another player&rsquo;s agent code&rdquo; box.</p>
 <p>The bearer token <code>player:&lt;name&gt;</code> acts for <code>&lt;name&gt;</code>. That is the demo&rsquo;s whole auth, so it is for<br />
 localhost only.</p>
+<h2 id="who-decides-what">Who decides what <a class="anchor" href="#who-decides-what">¶</a></h2>
+<p>Three layers, and only one of them is the model:</p>
+<ul>
+<li><strong>The page</strong> is ordinary JavaScript. It draws the map, owns the twelve places and their<br />
+descriptions, walks the player between neighbours, finds an item when the player searches where<br />
+one is hidden, and decides when to emit an event. Each tool&rsquo;s handler says what that tool does to<br />
+the screen.</li>
+<li><strong>Claude</strong> decides everything the game master does: whether to call a tool at all, which one,<br />
+and with what. Every orange line in the story, every italic detail on a tile, and every item<br />
+hidden after the start come from it.</li>
+<li><strong>The harness</strong> (<code>web/src/agent/gm.ts</code>, or Claude Code) decides what reaches Claude and when.<br />
+The LangGraph one follows each event type&rsquo;s context hint: a high-priority event starts a turn,<br />
+the rest wait in the conversation. Claude Code hands every event to Claude as a channel message.</li>
+</ul>
+<h2 id="watching-the-game-masters-context">Watching the game master&rsquo;s context <a class="anchor" href="#watching-the-game-masters-context">¶</a></h2>
+<p>The LangGraph game master keeps one conversation for the whole game, and serves it on<br />
+<code>http://localhost:8091/context</code>. The page&rsquo;s <strong>Game master&rsquo;s context</strong> panel shows exactly what the<br />
+model is sent, oldest first: each <code>[event …]</code> and <code>[question]</code> from the page, what the model said,<br />
+each tool call and its result, an estimate of the tokens against the budget, and the system prompt.</p>
+<ul>
+<li>A low-priority hover replaces an older hover the model has not seen yet (<code>last-wins</code>). The model<br />
+never sees history it was already shown change.</li>
+<li>A high-priority event, such as a found item, starts a turn at once.</li>
+<li>When the conversation passes its budget (2500 estimated tokens, <code>LANTERNFALL_CONTEXT_BUDGET</code>),<br />
+the game master asks the model to summarize it and carries on from the summary. The panel shows<br />
+how many messages were folded. The latest <code>player.moved</code> survives the summary because its hint<br />
+says <code>retention: session</code>, so the model still knows where the player is.</li>
+</ul>
+<p>A second game master for another player serves on another port: <code>--context-port 8092</code>, and open<br />
+that player&rsquo;s page with <code>?gm=8092</code>. Claude Code keeps its own context, so with it the panel stays<br />
+empty.</p>
 <h2 id="what-the-page-shows-you">What the page shows you <a class="anchor" href="#what-the-page-shows-you">¶</a></h2>
 <p>The <strong>Activity</strong> panel under the map lists everything that crosses between the page and agents:</p>
 <ul>
