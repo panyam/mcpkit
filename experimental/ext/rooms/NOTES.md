@@ -196,9 +196,11 @@ implements it. `massrelay.NewLocal` exists because the tests for the handler nee
 trusts the signer, which is the same thing a web app needs. Agni wrote it by hand before
 (`internal/viewerrooms`).
 
-The signing belongs in massrelay, beside `RelayAuthenticator`, which reads the claims. massrelay#78
-tracks moving it there. Until that releases, `Signer` mints the claims itself, and
-`TestSigner_ClaimsAreWhatTheRelayReads` checks them against the relay's own validator.
+The signing belongs in massrelay, beside `RelayAuthenticator`, which reads the claims. massrelay
+v0.3.7 added `RelaySigner` for that (massrelay#78), and `Signer` wraps it with the one-room rule and
+mcpkit's defaults (a 10-minute TTL rather than massrelay's hour, and an issuer). The test relay in
+`internal/relaytest` mints through `RelaySigner` too. `TestSigner_ClaimsAreWhatTheRelayReads` still
+checks the claims against the relay's own validator.
 
 The page refreshes through massrelay's `CollabClient.getToken`, which sends `ReAuth` on the open
 socket. The relay ends a connection at its token's exp otherwise, and the page cannot rejoin under

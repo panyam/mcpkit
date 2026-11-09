@@ -95,7 +95,7 @@ func main() {
 	agents := tokens{}
 	info := Info{Relay: relaySrv.URL, Join: relaySrv.URL + "/join", PageTokens: map[string]string{}, AgentTokens: map[string]string{}}
 	for _, subject := range []string{"alice", "bob"} {
-		tok, err := relaytest.Token(subject, nil)
+		tok, err := relaytest.Token(subject)
 		if err != nil {
 			panic(err)
 		}

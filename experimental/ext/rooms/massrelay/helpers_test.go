@@ -40,9 +40,9 @@ func newRelay(t *testing.T) *relay {
 	return &relay{svc: r.Service, url: r.URL}
 }
 
-func token(t *testing.T, subject string, extra map[string]any) string {
+func token(t *testing.T, subject string, rooms ...string) string {
 	t.Helper()
-	s, err := relaytest.Token(subject, extra)
+	s, err := relaytest.Token(subject, rooms...)
 	require.NoError(t, err)
 	return s
 }
@@ -52,7 +52,7 @@ func (r *relay) embedded(subject string) rooms.RoomTransport {
 }
 
 func (r *relay) dial(t *testing.T, subject string) rooms.RoomTransport {
-	return massrelay.Dial(r.url, token(t, subject, nil))
+	return massrelay.Dial(r.url, token(t, subject))
 }
 
 // transportKinds runs a contract test once per way of reaching the relay.
