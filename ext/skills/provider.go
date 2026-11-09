@@ -99,7 +99,7 @@ func NewProvider(opts ...ProviderOption) (*Provider, error) {
 		if cfg.hostRoot == "" {
 			return nil, ErrFSWatcherMissingHostRoot
 		}
-		w, err := newFSWatcher(cfg.hostRoot, cfg.fsWatcherIgnore, cfg.fsWatcherErrHandler)
+		w, err := newFSWatcher(cfg.hostRoot, cfg.fsWatcherIgnore, !cfg.includeHidden, cfg.fsWatcherErrHandler)
 		if err != nil {
 			return nil, err
 		}
@@ -116,6 +116,9 @@ func (p *Provider) walk() error {
 	var skillDirs []string
 	walkErr := fs.WalkDir(p.cfg.fsys, p.cfg.root, func(walkPath string, d fs.DirEntry, err error) error {
 		if err != nil {
+			return err
+		}
+		if skip, err := p.cfg.skipHidden(walkPath, p.cfg.root, d); skip {
 			return err
 		}
 		if d.IsDir() {
@@ -205,6 +208,9 @@ func (p *Provider) registerSkill(dirPath string, owned map[string]bool) error {
 	return fs.WalkDir(p.cfg.fsys, dirPath, func(walkPath string, d fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return walkErr
+		}
+		if skip, err := p.cfg.skipHidden(walkPath, dirPath, d); skip {
+			return err
 		}
 		if d.IsDir() {
 			return nil
@@ -676,7 +682,7 @@ func (p *Provider) defFor(r *resourceEntry) core.ResourceDef {
 func (p *Provider) makeHandler(r *resourceEntry) core.ResourceHandler {
 	return func(ctx core.ResourceContext, req core.ResourceRequest) (core.ResourceResult, error) {
 		if r.isArchive {
-			data, err := PackSkill(p.cfg.fsys, r.fsPath, p.cfg.archiveMode)
+			data, err := packSkill(p.cfg.fsys, r.fsPath, p.cfg.archiveMode, &p.cfg)
 			if err != nil {
 				return core.ResourceResult{}, fmt.Errorf("skills: pack %s: %w", r.fsPath, err)
 			}

@@ -120,6 +120,11 @@ func (p *Provider) resolveDirectoryURI(uri string) (*skillEntry, string, error) 
 		if s == ".." || s == "." || strings.ContainsAny(s, `/\`) {
 			return nil, "", fmt.Errorf("skills: %q contains an invalid path segment %q", uri, s)
 		}
+		// A hidden directory is not part of the skill unless WithHiddenFiles
+		// is set, so it reads as absent rather than as a refusal.
+		if !p.cfg.includeHidden && isHiddenName(s) {
+			return nil, "", fmt.Errorf("skills: %q does not exist", uri)
+		}
 	}
 
 	relPath := strings.Join(relSegs, "/")
@@ -174,6 +179,9 @@ func (p *Provider) enumerateDirectory(skill *skillEntry, relPath, parentURI stri
 
 	out := make([]core.ResourceDef, 0, len(entries))
 	for _, e := range entries {
+		if !p.cfg.includeHidden && isHiddenName(e.Name()) {
+			continue
+		}
 		childURI := parent + "/" + e.Name()
 		if e.IsDir() {
 			out = append(out, core.ResourceDef{

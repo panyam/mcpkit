@@ -187,6 +187,26 @@ func TestProvider_FSWatcher_RespectsIgnoreList(t *testing.T) {
 	_ = p
 }
 
+// TestProvider_FSWatcher_IgnoresHiddenFiles covers a dotfile that is not in
+// the default ignore list. The Provider does not serve it, so a write to it
+// must not broadcast a change.
+func TestProvider_FSWatcher_IgnoresHiddenFiles(t *testing.T) {
+	dir := stageSkillsDir(t)
+	c, _ := bootFSWatcherTest(t, dir, skills.WithCoalesceWindow(100*time.Millisecond))
+
+	got := atomic.Int32{}
+	c.RegisterNotificationOnList(func() { got.Add(1) }, t)
+
+	if err := os.WriteFile(filepath.Join(dir, "git-workflow", ".env"), []byte("TOKEN=x\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(400 * time.Millisecond)
+
+	if n := got.Load(); n != 0 {
+		t.Errorf("a write to a hidden file triggered %d broadcasts, want 0", n)
+	}
+}
+
 func TestProvider_Shutdown_DrainsBufferedEvents(t *testing.T) {
 	dir := stageSkillsDir(t)
 	c, p := bootFSWatcherTest(t, dir, skills.WithCoalesceWindow(500*time.Millisecond))

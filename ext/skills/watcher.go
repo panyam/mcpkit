@@ -29,10 +29,13 @@ var defaultFSWatcherIgnore = []string{".git", "node_modules", ".DS_Store"}
 // don't fire before a server is bound), Close stops abruptly, and
 // Shutdown drains in-flight events through one final flush.
 type fsWatcher struct {
-	hostRoot   string
-	ignore     []string
-	errHandler func(error)
-	watcher    *fsnotify.Watcher
+	hostRoot string
+	ignore   []string
+	// ignoreHidden drops events under any hidden segment, matching what
+	// the Provider serves. False when WithHiddenFiles is set.
+	ignoreHidden bool
+	errHandler   func(error)
+	watcher      *fsnotify.Watcher
 
 	mu          sync.Mutex
 	watchedDirs map[string]struct{}
@@ -50,7 +53,7 @@ type fsWatcher struct {
 // can't even read hostRoot itself; per-subdir Add failures are routed
 // to errHandler and skipped (one unreadable subdir does not fail
 // construction).
-func newFSWatcher(hostRoot string, ignore []string, errHandler func(error)) (*fsWatcher, error) {
+func newFSWatcher(hostRoot string, ignore []string, ignoreHidden bool, errHandler func(error)) (*fsWatcher, error) {
 	abs, err := filepath.Abs(hostRoot)
 	if err != nil {
 		return nil, fmt.Errorf("%w: resolve hostRoot %q: %v", ErrFSWatcherSetupFailed, hostRoot, err)
@@ -60,13 +63,14 @@ func newFSWatcher(hostRoot string, ignore []string, errHandler func(error)) (*fs
 		return nil, fmt.Errorf("%w: %v", ErrFSWatcherSetupFailed, err)
 	}
 	fw := &fsWatcher{
-		hostRoot:    abs,
-		ignore:      mergeIgnore(ignore),
-		errHandler:  errHandler,
-		watcher:     w,
-		watchedDirs: map[string]struct{}{},
-		done:        make(chan struct{}),
-		exited:      make(chan struct{}),
+		hostRoot:     abs,
+		ignore:       mergeIgnore(ignore),
+		ignoreHidden: ignoreHidden,
+		errHandler:   errHandler,
+		watcher:      w,
+		watchedDirs:  map[string]struct{}{},
+		done:         make(chan struct{}),
+		exited:       make(chan struct{}),
 	}
 	if err := fw.walkAndWatch(abs); err != nil {
 		w.Close()
@@ -136,6 +140,9 @@ func (fw *fsWatcher) isIgnored(p string) bool {
 	}
 	parts := strings.Split(filepath.ToSlash(rel), "/")
 	for _, seg := range parts {
+		if fw.ignoreHidden && isHiddenName(seg) {
+			return true
+		}
 		for _, pat := range fw.ignore {
 			if seg == pat {
 				return true
