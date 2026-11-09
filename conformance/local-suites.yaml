@@ -158,11 +158,13 @@ suites:
       path_var: MCPCONFORMANCE_EVENTS_PATH
       default_path: ../conf-events
     note: >-
-      129 pass / 0 fail / 11 warn across five scenarios, measured 2026-10-20
-      against examples/events/kitchen-sink at 1570 with the fork at 23c7c2d
+      130 pass / 0 fail / 11 warn across five scenarios, measured 2026-11-08
+      against examples/events/kitchen-sink at 1664 with the fork at 76fef32
       (hand-recorded from the runner's own summaries, so re-run before
       trusting it): events-discovery 14/14, events-poll 33/33, events-push
-      28/28, events-webhook 30/30, events-webhook-delivery 24/24. The three
+      28/28, events-webhook 30/30, events-webhook-delivery 25/25. The
+      webhook-id-per-message row came in with the re-pin to b08e4f9d and was
+      red until 1664, which stopped sending the eventId as webhook-id. The three
       Mcp-Name rows (missing, mismatch, list exempt) came in with the re-pin
       to 2ec39b9c and were red until 1570. Since 1529
       the cross-tenant row unsubscribes by key, the 410 row also grades that
@@ -183,7 +185,7 @@ suites:
       Proposed upstream as a draft in modelcontextprotocol/conformance 521 and
       tracked on the fork branch until it lands. Check IDs are sep-3415-*:
       MCP Events is SEP-3415, a draft in modelcontextprotocol/modelcontextprotocol.
-      Every row quotes SEP-3415 at 2ec39b9c with a per-row section url (1502, 1567).
+      Every row quotes SEP-3415 at b08e4f9d with a per-row section url (1502, 1567, 1664).
       INFO because the SEP is still a draft and its text can move. Every graded
       row is green since 1570; subscribe-auth-required and
       subscribe-refresh-replaces-secret, which no harness can grade over the
@@ -213,8 +215,11 @@ suites:
       grades what the client sends. The driver only calls what the SDK offers,
       so a red row is an SDK gap. Proposed upstream as a draft in
       modelcontextprotocol/conformance 541, stacked on 521. Re-measured
-      2026-10-14 after the rows were re-quoted against SEP-3415 (1502), with
-      the same results. INFO for the same reason as testconf-events: the SEP
+      2026-10-14 after the rows were re-quoted against SEP-3415 (1502), and
+      2026-11-08 with the fork at c8625de after the re-pin to b08e4f9d (1664),
+      both with the same results. The receiver's per-subscription eventId
+      dedup that b08e4f9d adds is excluded, since what reaches the application
+      is not observable over the wire. INFO for the same reason as testconf-events: the SEP
       is still a draft. `make conf-events-setup`
       creates this checkout as a worktree of the server one.
     tracking: "mcpkit 1500"

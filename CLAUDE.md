@@ -386,9 +386,10 @@ branch.
 against a second implementation (`metronome-mcp.fly.dev`, via `make conf-events-remote`). MCP Events is **SEP-3415**
 (`modelcontextprotocol/modelcontextprotocol` PR 3415, draft), so check ids carry `sep-3415-`. They
 carried a `sep-9999-` placeholder until #1502, because SEP numbers are PR numbers and no PR existed.
-Every row quotes SEP-3415 at `2ec39b9c` with a per-row section url; they quoted the design sketch
-until #1502, and `c47fd245` until 2026-10-20, when the SEP added `Mcp-Name` on `events/*` (#1567).
-No quoted row changed in that move, so check the SEP diff before assuming a re-extraction is needed. `testconf-events` drives
+Every row quotes SEP-3415 at `b08e4f9d` with a per-row section url; they quoted the design sketch
+until #1502, `c47fd245` until 2026-10-20, when the SEP added `Mcp-Name` on `events/*` (#1567),
+and `2ec39b9c` until 2026-11-08, when `webhook-id` became a per-message id (#1664). Each move
+changed few or no quoted rows, so check the SEP diff before assuming a re-extraction is needed. `testconf-events` drives
 all five of the suite's scenarios; take the counts from its note in `conformance/local-suites.yaml`.
 The fixture is spawned with `--conformance-events`, which registers the diagnostic controls the
 scenarios drive; see `examples/CONVENTIONS.md` § Conformance fixtures. `events-webhook-delivery`

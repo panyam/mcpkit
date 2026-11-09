@@ -737,8 +737,8 @@ _ = res2`),
 		Run(func(_ demokit.StepContext) (result *demokit.StepResult) {
 			// Receiver returns 500 on event deliveries (forces failures);
 			// returns 200 on control-envelope POSTs (and captures them).
-			// Discriminator: webhook-id prefix `evt_` = event,
-			// `msg_terminated_` = control. Per webhook.go control.go.
+			// Discriminator: webhook-id prefix `msg_terminated_` or
+			// `msg_verification_` = control; anything else is an event.
 			var gotControl atomic.Bool
 			var controlBody []byte
 			deadReceiver := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
