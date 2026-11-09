@@ -357,6 +357,10 @@ func (t *streamableTransport) handlePost(w http.ResponseWriter, r *http.Request)
 			writeHeaderMismatch(w, errResp)
 			return
 		}
+		if errResp := validateParamHeaders(&req, r.Header, dispatcher.Reg); errResp != nil {
+			writeHeaderMismatch(w, errResp)
+			return
+		}
 	}
 
 	// Validate MCP-Protocol-Version if present.

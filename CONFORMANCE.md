@@ -527,6 +527,6 @@ _None._
 
 | SEP | Check ID | Tracking |
 |---|---|---|
-| SEP-2243 | `sep-2243-server-not-expect-null` | MCP-Name fail-closed semantics on tasks/* — covered locally by server/middleware test |
-| SEP-2243 | `sep-2243-server-reject-missing-required` | MCP-Name fail-closed semantics on tasks/* — covered locally by server/middleware test |
+| SEP-2243 | `sep-2243-server-not-expect-null` | https://github.com/panyam/mcpkit/issues/1111 — Untested upstream until conformance PR 325 merges. Covered locally by the TestWireParity 1111 row (optional omitted / optional null). |
+| SEP-2243 | `sep-2243-server-reject-missing-required` | https://github.com/panyam/mcpkit/issues/1111 — Untested upstream until conformance PR 325 merges. Covered locally by the TestWireParity 1111 row (required omitted → 400 + -32020). |
 <!-- end:generated -->
