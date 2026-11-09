@@ -1,0 +1,39 @@
+{"note": "A page before any bridge has spoken: nothing goes on the wire until a bridge greets it."}
+{"page": "register_tool", "tool": {"name": "show_sheet", "description": "Open a sheet", "inputSchema": {"type": "object", "properties": {"sheet": {"type": "string"}}}, "readOnly": false}}
+{"page": "declare_event", "decl": {"name": "item.found", "description": "The player found an item.", "payloadSchema": {"type": "object", "properties": {"item": {"type": "string"}}}, "contextHint": {"priority": "high"}}}
+{"page": "set_label", "label": "board"}
+{"page": "set_agents_allowed", "allowed": true}
+{"page_sends_nothing": true}
+{"note": "Listing: the page greets the bridge with its state, then answers."}
+{"bridge": {"jsonrpc": "2.0", "id": "b1", "method": "tools/list"}}
+{"page_sends": {"jsonrpc": "2.0", "method": "notifications/rooms/page_state", "params": {"label": "board"}}}
+{"page_sends": {"jsonrpc": "2.0", "method": "notifications/rooms/agents_allowed", "params": {"allowed": true}}}
+{"page_sends": {"jsonrpc": "2.0", "id": "b1", "result": {"tools": [{"name": "show_sheet", "description": "Open a sheet", "inputSchema": {"type": "object", "properties": {"sheet": {"type": "string"}}}, "annotations": {"readOnlyHint": false}}]}}}
+{"bridge": {"jsonrpc": "2.0", "id": "b2", "method": "events/list"}}
+{"page_sends": {"jsonrpc": "2.0", "id": "b2", "result": {"events": [{"name": "item.found", "description": "The player found an item.", "payloadSchema": {"type": "object", "properties": {"item": {"type": "string"}}}, "_meta": {"io.github.panyam.mcpkit/context-hint": {"priority": "high"}}}]}}}
+{"note": "A call, carrying the caller the bridge validated."}
+{"bridge": {"jsonrpc": "2.0", "id": "b3", "method": "tools/call", "params": {"name": "show_sheet", "arguments": {"sheet": "s-power"}, "_meta": {"io.mcpkit/rooms/caller": {"subject": "alice", "client": "agent-1"}}}}}
+{"page_sends": {"jsonrpc": "2.0", "id": "b3", "result": {"content": [{"type": "text", "text": "showing s-power"}]}}}
+{"bridge": {"jsonrpc": "2.0", "id": "b4", "method": "tools/call", "params": {"name": "nope", "arguments": {}}}}
+{"page_sends": {"jsonrpc": "2.0", "id": "b4", "error": {"code": -32602, "message": "unknown tool: nope"}}}
+{"bridge": {"jsonrpc": "2.0", "id": "b5", "method": "resources/list"}}
+{"page_sends": {"jsonrpc": "2.0", "id": "b5", "error": {"code": -32601}}}
+{"note": "Refusals are notifications: the page answers nothing."}
+{"bridge": {"jsonrpc": "2.0", "method": "notifications/rooms/tool_refused", "params": {"name": "show_sheet", "reason": "the schema differs from the bridge's declaration"}}}
+{"bridge": {"jsonrpc": "2.0", "method": "notifications/rooms/event_refused", "params": {"name": "item.found", "reason": "the data does not match the declared payload schema"}}}
+{"page_sends_nothing": true}
+{"note": "Page events, and a change to the page's state after the greeting."}
+{"page": "emit", "name": "item.found", "data": {"item": "brass key"}}
+{"page_sends": {"jsonrpc": "2.0", "method": "notifications/rooms/event", "params": {"name": "item.found", "data": {"item": "brass key"}}}}
+{"page": "set_agents_allowed", "allowed": false}
+{"page_sends": {"jsonrpc": "2.0", "method": "notifications/rooms/agents_allowed", "params": {"allowed": false}}}
+{"page": "register_tool", "tool": {"name": "list_items", "description": "List items", "inputSchema": {"type": "object"}, "readOnly": true}}
+{"page_sends": {"jsonrpc": "2.0", "method": "notifications/tools/list_changed"}}
+{"note": "Pairing by an agent's code: the page accepts it, the bridge names the agent, the page grants it."}
+{"page": "accept_pairing", "code": "abcd2345"}
+{"page_sends": {"jsonrpc": "2.0", "method": "notifications/rooms/accept_pairing", "params": {"code": "ABCD2345"}}}
+{"bridge": {"jsonrpc": "2.0", "method": "notifications/rooms/paired_by_code", "params": {"subject": "bob", "client": "agent-2", "sameSubject": false, "code": "ABCD2345"}}}
+{"page_sends": {"jsonrpc": "2.0", "method": "notifications/rooms/grants", "params": {"grants": [{"subject": "bob", "client": "agent-2"}]}}}
+{"note": "A paired_by_code for a code the page never accepted grants nothing."}
+{"bridge": {"jsonrpc": "2.0", "method": "notifications/rooms/paired_by_code", "params": {"subject": "mallory", "code": "ZZZZ9999"}}}
+{"page_sends_nothing": true}

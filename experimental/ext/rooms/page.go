@@ -382,20 +382,20 @@ func (p *Page) greet(from PeerID) {
 	if known {
 		return
 	}
+	// The order WIRE.md gives, the same as the TypeScript page's.
 	if !focusedAt.IsZero() {
 		p.send(from, rpcMessage{Method: MethodPageState, Params: mustJSON(map[string]any{"label": label, "focused": true, "focusedAt": focusedAt.Format(time.RFC3339Nano)})})
+	} else if label != "" {
+		p.send(from, rpcMessage{Method: MethodPageState, Params: mustJSON(map[string]any{"label": label})})
+	}
+	if allowed {
+		p.send(from, rpcMessage{Method: MethodAgentsAllowed, Params: mustJSON(map[string]any{"allowed": true})})
 	}
 	if len(grants) > 0 {
 		p.send(from, rpcMessage{Method: MethodGrants, Params: mustJSON(map[string]any{"grants": grants})})
 	}
 	if left := time.Until(offer.expires); offer.code != "" && left > 0 {
 		p.send(from, rpcMessage{Method: MethodPairingOffer, Params: mustJSON(map[string]any{"code": offer.code, "ttlMs": left.Milliseconds()})})
-	}
-	if label != "" {
-		p.send(from, rpcMessage{Method: MethodPageState, Params: mustJSON(map[string]any{"label": label})})
-	}
-	if allowed {
-		p.send(from, rpcMessage{Method: MethodAgentsAllowed, Params: mustJSON(map[string]any{"allowed": true})})
 	}
 }
 

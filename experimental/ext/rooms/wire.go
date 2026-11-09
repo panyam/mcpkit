@@ -8,7 +8,9 @@ import (
 
 // Methods a page and the bridge exchange beyond MCP's own tools/list,
 // tools/call, notifications/tools/list_changed, notifications/cancelled and
-// notifications/progress. All are notifications.
+// notifications/progress, and SEP-3415's events/list and
+// notifications/events/list_changed. All are notifications. WIRE.md is the
+// full wire, and testdata/wire/page.jsonl replays it.
 const (
 	// MethodPageState: page to bridge, {label, focused, focusedAt}. The
 	// label is what list_pages shows; focused true stamps the page's

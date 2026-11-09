@@ -11,6 +11,9 @@ page in it, and serves them to the agents attached to that room. Each call goes 
 agent (MCP client) --MCP--> rooms.Bridge (MCP server) --relay room--> page (tools)
 ```
 
+The messages a page and the bridge exchange are in [WIRE.md](WIRE.md), for anyone writing a page
+client or a bridge in another language.
+
 ## Serving the bridge
 
 ```go
