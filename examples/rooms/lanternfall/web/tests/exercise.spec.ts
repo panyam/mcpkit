@@ -54,6 +54,8 @@ test("an agent plays game master on a player's own page", async ({ browser }) =>
     await expect(alice.getByTestId("tile-well")).toContainText("crescent");
     await agent.callTool({ name: "narrate", arguments: { resource, text: "The willow leans closer, listening." } });
     await expect(alice.getByTestId("log")).toContainText("The willow leans closer");
+    await expect(alice.getByTestId("feed")).toContainText('move_player({"place":"well"})');
+    await expect(alice.getByTestId("feed-in").first()).toContainText("narrate");
   });
 
   await test.step("the player finds what the game master hid, and the agent hears item.found", async () => {
@@ -64,6 +66,8 @@ test("an agent plays game master on a player's own page", async ({ browser }) =>
     const { event } = await nextEvent(agent, resource, "item.found", from);
     expect(event.data).toMatchObject({ item: "a brass key", place: "well" });
     expect(event.user).toBe("alice");
+    const sent = alice.getByTestId("feed-out").filter({ hasText: "item.found" });
+    await expect(sent).toContainText("high");
   });
 
   await test.step("resting the pointer on a place sends place.examined", async () => {

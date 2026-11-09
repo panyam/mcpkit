@@ -15,7 +15,13 @@
   <p id="status" data-testid="status">Joining the room…</p>
   <div id="hint" data-testid="hint" hidden></div>
   <main>
-    <section id="map" data-testid="map" aria-label="Map"></section>
+    <div class="left">
+      <section id="map" data-testid="map" aria-label="Map"></section>
+      <section class="activity" aria-label="Activity">
+        <h2>Activity <span class="sub">what this page tells agents, and what they do to it</span></h2>
+        <ol id="feed" data-testid="feed"></ol>
+      </section>
+    </div>
     <aside>
       <h2>Story</h2>
       <ol id="log" data-testid="log"></ol>

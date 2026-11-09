@@ -39,3 +39,17 @@ footer button { background: var(--glow); color: #2a1a00; border: 0; border-radiu
 details { width: 100%; color: var(--dim); font-size: 13px; }
 code { color: var(--ink); }
 @media (max-width: 760px) { main { grid-template-columns: 1fr; } #map { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.left { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.activity { background: #00000033; border: 1px solid #4a3f30; border-radius: 10px; padding: 10px 12px; }
+.activity .sub { text-transform: none; letter-spacing: 0; font-size: 12px; margin-left: 6px; }
+#feed { list-style: none; margin: 0; padding: 0; max-height: 190px; overflow-y: auto; font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; }
+#feed li { padding: 2px 0; border-bottom: 1px dotted #3a3125; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#feed .t { color: #7d6f57; }
+#feed li.out .arrow { color: #7fd1c7; }
+#feed li.in .arrow { color: var(--glow); }
+#feed li.info { color: var(--dim); }
+#feed .tag { display: inline-block; padding: 0 6px; border-radius: 999px; font-size: 11px; border: 1px solid #5a4d3a; color: var(--dim); }
+#feed .tag.high { border-color: #e0664b; color: #ff9d85; }
+#feed .tag.medium { border-color: #c9a24a; color: #ffd27a; }
+#feed .tag.low { border-color: #5a6d5a; color: #a9c2a9; }
+#feed .tag.acting { border-color: var(--glow); color: var(--glow); }

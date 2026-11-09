@@ -23,6 +23,49 @@ const state = {
 
 const $ = <T extends HTMLElement>(sel: string) => document.querySelector(sel) as T;
 
+const FEED_MAX = 60;
+
+/** The priority catalog.json gives an event type, for the activity feed. */
+function priorityOf(name: string): string {
+  const e = catalog.events.find((x) => x.name === name);
+  return (e?.contextHint as { priority?: string } | undefined)?.priority ?? "built in";
+}
+
+function short(v: unknown): string {
+  const s = JSON.stringify(v ?? {});
+  return s.length > 90 ? s.slice(0, 87) + "…" : s;
+}
+
+/**
+ * One line of the activity feed: what the page sends to agents (out), what
+ * agents do to the page (in), and changes in who is around (info).
+ */
+function feed(dir: "out" | "in" | "info", text: string, tag = ""): void {
+  const list = $("#feed");
+  const li = document.createElement("li");
+  li.className = dir;
+  li.dataset.testid = `feed-${dir}`;
+  const time = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+  const arrow = dir === "out" ? "→ event" : dir === "in" ? "← tool call" : "•";
+  li.innerHTML = `<span class="t"></span> <span class="arrow"></span>${tag ? ' <span class="tag"></span>' : ""} <span class="what"></span>`;
+  li.querySelector(".t")!.textContent = time;
+  li.querySelector(".arrow")!.textContent = arrow;
+  li.querySelector(".what")!.textContent = text;
+  if (tag) {
+    const t = li.querySelector(".tag")!;
+    t.textContent = tag;
+    t.classList.add(tag.replace(/\s+/g, "-"));
+  }
+  list.prepend(li);
+  while (list.children.length > FEED_MAX) list.lastElementChild!.remove();
+}
+
+/** Emits a page event to the room and shows it in the feed with its declared priority. */
+function emitEvent(name: string, data: Record<string, unknown>): void {
+  room?.emit(name, data);
+  feed("out", `${name} ${short(data)}`, priorityOf(name));
+}
+
 function say(who: LogEntry["who"], text: string): void {
   state.log.push({ who, text });
   const li = document.createElement("li");
@@ -127,7 +170,7 @@ function onDwellStart(p: Place): void {
     const now = Date.now();
     if (lastExamined.place === p.id && now - lastExamined.at < SAME_PLACE_QUIET_MS) return;
     lastExamined = { place: p.id, at: now };
-    room?.emit("place.examined", { place: p.id, name: p.name });
+    emitEvent("place.examined", { place: p.id, name: p.name });
   }, DWELL_MS);
 }
 
@@ -147,7 +190,7 @@ function onTileClick(p: Place): void {
     state.found.push(item);
     say("you", `You search ${p.name} and find ${item}.`);
     render();
-    room?.emit("item.found", { item, place: p.id, name: p.name });
+    emitEvent("item.found", { item, place: p.id, name: p.name });
     return;
   }
   if (!neighbours(state.at).includes(p.id)) {
@@ -157,12 +200,20 @@ function onTileClick(p: Place): void {
   state.at = p.id;
   say("you", `You walk to ${p.name}.`);
   render();
-  room?.emit("player.moved", { place: p.id, name: p.name });
+  emitEvent("player.moved", { place: p.id, name: p.name });
 }
 
 let gamemasters: Presence[] = [];
 
 function showPresence(agents: Presence[]): void {
+  const key = (a: Presence) => `${a.client || "an agent"} for ${a.subject}`;
+  const before = new Map(gamemasters.map((a) => [key(a), a]));
+  for (const a of agents) {
+    const was = before.get(key(a));
+    if (!was) feed("info", `${key(a)} attached to this game`);
+    else if (a.acting && !was.acting) feed("info", `${key(a)} started acting on this map`);
+  }
+  for (const k of before.keys()) if (!agents.some((a) => key(a) === k)) feed("info", `${k} left`);
   gamemasters = agents;
   $("#presence").textContent = agents.length
     ? agents.map((a) => `${a.client || "an agent"} for ${a.subject}${a.acting ? ", acting" : ", listening"}`).join(" · ")
@@ -211,14 +262,26 @@ async function start(): Promise<void> {
       description: t.description,
       inputSchema: t.inputSchema,
       annotations: { readOnlyHint: t.readOnly },
-      execute: handlers[t.name],
+      execute: async (args, ctx) => {
+        const who = ctx?.caller ? ` for ${ctx.caller.subject}` : "";
+        // resource, room and page route the call to this tab; they are the bridge's, not the tool's.
+        const own = Object.fromEntries(Object.entries(args).filter(([k]) => !["resource", "room", "page"].includes(k)));
+        feed("in", `${t.name}(${short(own)})${who}`, t.readOnly ? "read-only" : "acting");
+        try {
+          return await handlers[t.name](args, ctx);
+        } catch (err) {
+          feed("info", `${t.name} failed: ${(err as Error).message}`);
+          throw err;
+        }
+      },
     });
   }
   for (const e of catalog.events) room.registerEvent(e);
   room.setLabel(`${who.player}'s map`);
+  feed("info", `joined room lanternfall:${game} as ${who.player}; offering ${catalog.tools.length} tools, declaring ${catalog.events.length} events`);
   room.onPresence(showPresence);
-  room.onToolRefused((r) => say("world", `(the bridge refused tool ${r.name}: ${r.reason})`));
-  room.onEventRefused((r) => say("world", `(the bridge refused event ${r.name}: ${r.reason})`));
+  room.onToolRefused((r) => feed("info", `the bridge refused tool ${r.name}: ${r.reason}`));
+  room.onEventRefused((r) => feed("info", `the bridge refused event ${r.name}: ${r.reason}`));
   room.onPairingRequest((req) => {
     $("#status").textContent = req.sameSubject
       ? `Your agent ${req.client ?? ""} wants to be game master. Turn on the switch.`
@@ -233,6 +296,7 @@ async function start(): Promise<void> {
   sw.disabled = false;
   sw.addEventListener("change", () => {
     room?.setAgentsAllowed(sw.checked);
+    feed("info", sw.checked ? "switch on: your agents may see events and call tools" : "switch off: your agents can no longer see or act");
     $("#status").textContent = sw.checked
       ? "Your game master may drive this tab. Walk around, search, and ask it anything below."
       : "Your game master can no longer drive this tab.";
@@ -244,6 +308,7 @@ async function start(): Promise<void> {
     const text = input.value.trim();
     if (!text) return;
     room?.ask(text);
+    feed("out", `room.ask ${short({ text })}`, "built in");
     say("you", `You ask: ${text}`);
     input.value = "";
     if (!gamemasters.length) {

@@ -53,9 +53,25 @@ in Claude Code as a `room.ask` message, and the answer appears on your map.
 make gm                                    # PLAYER=alice GAME=demo by default
 ```
 
-It defaults to `claude-opus-5-5` and reads `LANTERNFALL_MODEL` to use another. It waits for the
-player's events with `next_request`, keeps the quiet ones as context, and answers each question with
-the page's tools.
+It defaults to `claude-opus-5-5` and reads `LANTERNFALL_MODEL` to use another. It reads each event
+type's context hint from `events/list` and follows it, printing what it decided:
+
+```text
+[gm] context hints: item.found=high, place.examined=low, player.moved=medium
+[gm] player.moved is medium priority: kept as context
+[gm] item.found is high priority: reacting now
+[gm] answered with lanternfall_look, lanternfall_reveal, lanternfall_narrate
+[gm] place.examined is low priority: kept as context, keeping only the latest
+[gm] alice asks: What does the ledger page say?
+```
+
+A high-priority event gets a reaction at once, unasked. A `last-wins` aggregate keeps only the newest
+event of its kind, and `session` retention keeps an event as context across answers. A question
+asked from the page is always answered.
+
+To watch events drive it, turn the switch on and walk Gate → Market → Clocktower → Old Archive, then
+click the Archive to search it. The torn ledger page is high priority, so the game master narrates
+without being asked. Then ask it what the page says.
 
 **A second player.** Open <http://localhost:8080/signin?as=bob&game=demo> in another browser profile.
 Bob's tab is his own map. Alice's agent cannot drive it unless Bob accepts that agent's code in the
@@ -63,6 +79,19 @@ Bob's tab is his own map. Alice's agent cannot drive it unless Bob accepts that 
 
 The bearer token `player:<name>` acts for `<name>`. That is the demo's whole auth, so it is for
 localhost only.
+
+## What the page shows you
+
+The **Activity** panel under the map lists everything that crosses between the page and agents:
+
+- `→ event`: what the page sent, with its declared priority (`high`, `medium`, `low`, or `built in`
+  for `room.ask`)
+- `← tool call`: what an agent did to the page, with its arguments, whether it was read-only, and
+  whom it acts for
+- `•`: joining, the switch, and agents attaching or starting to act
+
+With no game master connected, a banner says how to start one, and a question asked with nobody
+listening says so in the story log.
 
 ## What the page offers
 

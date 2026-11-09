@@ -4,8 +4,11 @@
 //
 //   ANTHROPIC_API_KEY=... pnpm gm --player alice --game demo
 //
-// It waits for things the player does (next_request), keeps the quiet ones as
-// context, and answers each question the player asks from the page.
+// It waits for things the player does (next_request) and follows each event
+// type's context hint from events/list: a high-priority event gets a reaction
+// at once, a last-wins aggregate keeps only the newest of its kind, and
+// session retention keeps an event as context across answers. Questions the
+// player asks from the page (room.ask) are always answered.
 import { ChatAnthropic } from "@langchain/anthropic";
 import { createReactAgent } from "@langchain/langgraph/prebuilt";
 import { MCPAdapter } from "@langchain/mcp-adapters";
@@ -18,7 +21,7 @@ export interface GameMasterOptions {
   game: string;
   /** Default claude-opus-5-5, or LANTERNFALL_MODEL. */
   model?: string;
-  /** Stop after answering this many questions. Default: run until aborted. */
+  /** Stop after this many turns (answers and reactions). Default: run until aborted. */
   answers?: number;
   signal?: AbortSignal;
   log?: (line: string) => void;
@@ -57,9 +60,32 @@ export async function runGameMaster(opts: GameMasterOptions): Promise<void> {
   });
   const agent = createReactAgent({ llm, tools, prompt: SYSTEM(resource, opts.player) });
 
-  const recent: string[] = [];
+  // The context hints the server declares for each event type.
+  const listed: any = await events.request({ method: "events/list", params: {} } as any, anyResult);
+  const hints = new Map<string, Hint>();
+  for (const e of listed.events ?? []) {
+    const h = e._meta?.["io.github.panyam.mcpkit/context-hint"];
+    if (h) hints.set(e.name, h);
+  }
+  log(`[gm] context hints: ${[...hints].map(([n, h]) => `${n}=${h.priority ?? "medium"}`).join(", ") || "none"}`);
+
+  // Context the agent gets with its next turn, by event, oldest first.
+  let context: { name: string; line: string; session: boolean }[] = [];
   let cursor: string | undefined;
   let answered = 0;
+  const turn = async (prompt: string) => {
+    const lines = context.map((c) => c.line);
+    const extra = lines.length ? `\n\nWhat the player did recently, oldest first:\n${lines.join("\n")}` : "";
+    const result = await agent.invoke(
+      { messages: [{ role: "user", content: prompt + extra }] },
+      { signal: opts.signal, recursionLimit: 24 },
+    );
+    const calls = result.messages.flatMap((m: any) => (m.tool_calls ?? []).map((c: any) => c.name));
+    log(`[gm] answered with ${calls.join(", ") || "no tools"}`);
+    // Turn retention ends here; session retention carries over.
+    context = context.filter((c) => c.session);
+    answered++;
+  };
   try {
     while (!opts.signal?.aborted && (opts.answers === undefined || answered < opts.answers)) {
       const res: any = await events.callTool({
@@ -70,29 +96,43 @@ export async function runGameMaster(opts: GameMasterOptions): Promise<void> {
       cursor = out.cursor ?? cursor;
       const ev = out.event;
       if (!ev) continue;
-      if (ev.name !== "room.ask") {
-        recent.push(`${ev.name} ${JSON.stringify(ev.data)}`);
-        if (recent.length > 8) recent.shift();
-        log(`[gm] noted ${ev.name}`);
+      if (ev.name === "room.ask") {
+        const question = String(ev.data?.text ?? "");
+        log(`[gm] ${opts.player} asks: ${question}`);
+        await turn(`The player asked from page ${ev.page}: ${question}`);
         continue;
       }
-      const question = String(ev.data?.text ?? "");
-      log(`[gm] ${opts.player} asks: ${question}`);
-      const context = recent.length ? `\n\nWhat the player did recently, oldest first:\n${recent.join("\n")}` : "";
-      const result = await agent.invoke(
-        { messages: [{ role: "user", content: `The player asked from page ${ev.page}: ${question}${context}` }] },
-        { signal: opts.signal, recursionLimit: 24 },
-      );
-      const calls = result.messages.flatMap((m: any) => (m.tool_calls ?? []).map((c: any) => c.name));
-      log(`[gm] answered with ${calls.join(", ") || "no tools"}`);
-      recent.length = 0;
-      answered++;
+      const hint = hints.get(ev.name) ?? {};
+      const line = `${ev.name} ${JSON.stringify(ev.data)}`;
+      if (hint.aggregate?.strategy === "last-wins") context = context.filter((c) => c.name !== ev.name);
+      context.push({ name: ev.name, line, session: hint.retention === "session" });
+      if (context.length > 12) context.shift();
+      if (hint.priority === "high" || hint.priority === "critical") {
+        log(`[gm] ${ev.name} is ${hint.priority} priority: reacting now`);
+        await turn(
+          `Something important just happened on page ${ev.page}: ${line}. React to it as the game master, without being asked: a short narration, and change the map if the story calls for it.`,
+        );
+      } else {
+        const how = hint.aggregate?.strategy === "last-wins" ? ", keeping only the latest" : "";
+        log(`[gm] ${ev.name} is ${hint.priority ?? "medium"} priority: kept as context${how}`);
+      }
     }
   } finally {
     await events.close();
     await mcp.close();
   }
 }
+
+interface Hint {
+  priority?: string;
+  aggregate?: { windowMs?: number; strategy?: string };
+  retention?: string;
+}
+
+/** A pass-through Standard Schema, for a request the MCP client has no type for. */
+const anyResult = {
+  "~standard": { version: 1 as const, vendor: "lanternfall", validate: (value: unknown) => ({ value }) },
+};
 
 function arg(name: string, fallback: string): string {
   const i = process.argv.indexOf(`--${name}`);
