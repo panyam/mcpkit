@@ -41,6 +41,21 @@ room.setLabel("board.kicad_sch");
 room.setAgentsAllowed(true); // "let my agents drive this tab", off by default
 ```
 
+When the host serves a join endpoint (Go: `rooms.JoinHandler`, see the bridge's README), the page
+asks it instead of minting anything:
+
+```ts
+import { joinToolRoomFrom } from "@panyam/mcpkit-rooms";
+
+const room = await joinToolRoomFrom("/rooms/join?doc=42");
+```
+
+It POSTs to the endpoint with the page's cookies, joins the room the endpoint names with its token,
+and trusts only the bridges it names. Before the token expires it calls the endpoint again and gives
+the relay the new token over the open connection, so the page keeps its id. `init` adds a body or
+headers to each call. The other `joinToolRoom` options pass through. With `joinToolRoom` itself,
+`getToken` does the same refresh.
+
 The tool shape is WebMCP's `registerTool` descriptor, so a tool written for WebMCP registers here
 unchanged. `execute` may return a full MCP `CallToolResult`, a string, or any JSON value, and a
 thrown error becomes an `isError` result. Its second argument carries:
