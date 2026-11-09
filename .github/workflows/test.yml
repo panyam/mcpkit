@@ -468,7 +468,7 @@ jobs:
   # LangGraph game master needs a model key, so CI runs the scripted check and
   # skips it.
 
-  rooms-ai-inside-ui:
+  rooms-aipage:
     runs-on: ubuntu-latest
     defaults:
       run:
