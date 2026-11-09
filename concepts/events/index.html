@@ -720,7 +720,7 @@ The three modes are not mutually exclusive per event source. The same <code>Even
 <pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#a61717;background-color:#e3d2d2">POST /recv HTTP/1.1                                  ← server → callback URL
 </span></span></span><span style="display:flex;"><span><span style="color:#a61717;background-color:#e3d2d2">Host: hook.example
 </span></span></span><span style="display:flex;"><span><span style="color:#a61717;background-color:#e3d2d2">Content-Type: application/json
-</span></span></span><span style="display:flex;"><span><span style="color:#a61717;background-color:#e3d2d2">webhook-id: evt_138                                  ← stable across retries; receiver dedups on this
+</span></span></span><span style="display:flex;"><span><span style="color:#a61717;background-color:#e3d2d2">webhook-id: msg_2KWPBgLlAfxdpx2AI54pPJ               ← one per message, kept across retries; never the eventId
 </span></span></span><span style="display:flex;"><span><span style="color:#a61717;background-color:#e3d2d2">webhook-timestamp: 1714814520
 </span></span></span><span style="display:flex;"><span><span style="color:#a61717;background-color:#e3d2d2">webhook-signature: v1,5HxN...base64...               ← HMAC-SHA256(secret, id + &#34;.&#34; + ts + &#34;.&#34; + body)
 </span></span></span><span style="display:flex;"><span><span style="color:#a61717;background-color:#e3d2d2">X-MCP-Subscription-Id: sub_xR9vK...                  ← MCP-specific; lets receiver pick the right secret
