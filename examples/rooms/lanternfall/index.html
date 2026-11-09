@@ -257,7 +257,7 @@ a tool call. Here the user opened the page themselves, and the agent comes to it
 <pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span>go run .                                   <span style="color:#998;font-style:italic"># or: make run</span>
 </span></span></code></pre><p>Open <a href="http://localhost:8080/signin?as=alice&amp;game=demo">http://localhost:8080/signin?as=alice&amp;game=demo</a>. Walk to a neighbouring place by clicking it.<br />
 Click where you stand to search it. Rest the pointer on a place to wonder about it. Then turn on<br />
-<strong>Let my game master drive this tab</strong> and bring in an agent.</p>
+<strong>Let my AI game master see and change this map</strong> and bring in an agent.</p>
 <p><strong>Claude Code</strong>, through the <code>rooms-channel</code> front end, which turns the player&rsquo;s events into channel<br />
 messages. Install it from this tree, so it subscribes to the page&rsquo;s declared events:</p>
 <pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#000;font-weight:bold">(</span><span style="color:#0086b3">cd</span> ../../../experimental/integrations/roomsevents <span style="color:#000;font-weight:bold">&amp;&amp;</span> go install ./cmd/rooms-channel<span style="color:#000;font-weight:bold">)</span>
