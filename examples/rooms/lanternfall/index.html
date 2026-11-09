@@ -1,0 +1,490 @@
+<!DOCTYPE html>
+
+
+
+
+
+
+
+
+
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    
+    <script>
+      try {
+        const t = localStorage.getItem('theme');
+        if (t === 'dark' || t === 'light') document.documentElement.dataset.theme = t;
+      } catch {}
+    </script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="An AI game master inside your own web app: an agent drives a page the user opened, through the room bridge. Experimental.">
+    <title>Rooms — Lanternfall · mcpkit</title>
+
+    <link rel="stylesheet" href="/mcpkit/static/css/main.css">
+</head>
+<body>
+    
+<header class="site-header">
+    <div class="site-header-inner">
+        
+        <a class="brand" href="/mcpkit/">
+            <span class="brand-name">mcpkit</span>
+        </a>
+        <nav class="top-nav">
+            
+            
+            <a class="top-nav-link" href="/mcpkit/get-started/">Get Started</a>
+            
+            <a class="top-nav-link" href="/mcpkit/guides/transports/">Guides</a>
+            
+            <a class="top-nav-link" href="/mcpkit/examples/">Examples</a>
+            
+            <a class="top-nav-link" href="/mcpkit/concepts/">Concepts</a>
+            
+            <a class="top-nav-link" href="/mcpkit/conformance/">Conformance</a>
+            
+            <a class="top-nav-link" href="/mcpkit/packages/core/">Packages</a>
+            
+            <a class="top-nav-link" href="/mcpkit/design/apps/">Reference</a>
+            
+            <a class="top-nav-link external" href="https://github.com/panyam/mcpkit">GitHub</a>
+            <button type="button" class="theme-toggle" aria-label="Toggle dark mode" title="Toggle dark mode">
+                <span class="theme-toggle-light">☀</span>
+                <span class="theme-toggle-dark">☾</span>
+            </button>
+        </nav>
+    </div>
+</header>
+
+
+    <div class="page">
+        
+<aside class="sidebar">
+    
+    
+    <nav class="sidebar-nav">
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/get-started/">Get Started</a>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/guides/transports/">Guides</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/guides/transports/">Transports</a></li>
+                
+                <li><a href="/mcpkit/guides/auth/">Auth</a></li>
+                
+                <li><a href="/mcpkit/guides/tasks/">Long-running tasks</a></li>
+                
+                <li><a href="/mcpkit/guides/apps/">MCP Apps</a></li>
+                
+                <li><a href="/mcpkit/guides/prompts/">Prompts</a></li>
+                
+                <li><a href="/mcpkit/guides/elicitation/">Elicitation</a></li>
+                
+                <li><a href="/mcpkit/guides/completions/">Argument completion</a></li>
+                
+                <li><a href="/mcpkit/guides/observability/">Observability</a></li>
+                
+                <li><a href="/mcpkit/guides/mrtr/">MRTR input-gathering</a></li>
+                
+                <li><a href="/mcpkit/guides/deployment/">Deployment</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/examples/">Examples</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/examples/">All examples</a></li>
+                
+                <li><a href="/mcpkit/examples/auth/">Auth</a></li>
+                
+                <li><a href="/mcpkit/examples/tasks-v2/">Tasks v2</a></li>
+                
+                <li><a href="/mcpkit/examples/mrtr/">MRTR</a></li>
+                
+                <li><a href="/mcpkit/examples/apps/">MCP Apps</a></li>
+                
+                <li><a href="/mcpkit/examples/events/discord/">Events</a></li>
+                
+                <li><a href="/mcpkit/examples/skills-core/">Skills</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/concepts/">Concepts</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/concepts/">Overview</a></li>
+                
+                <li><a href="/mcpkit/concepts/bringup/">Bring-up</a></li>
+                
+                <li><a href="/mcpkit/concepts/transport-mechanics/">Transport mechanics</a></li>
+                
+                <li><a href="/mcpkit/concepts/notifications/">Notifications</a></li>
+                
+                <li><a href="/mcpkit/concepts/request-anatomy/">Anatomy of a request</a></li>
+                
+                <li><a href="/mcpkit/concepts/extension-mechanisms/">Extension mechanisms</a></li>
+                
+                <li><a href="/mcpkit/concepts/reverse-call/">Reverse calls</a></li>
+                
+                <li><a href="/mcpkit/concepts/mrtr/">MRTR internals</a></li>
+                
+                <li><a href="/mcpkit/concepts/tracing/">Tracing</a></li>
+                
+                <li><a href="/mcpkit/concepts/events/">Events</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/conformance/">Conformance</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/conformance/">Coverage matrix</a></li>
+                
+                <li><a href="/mcpkit/conformance/upstream-audit/">Upstream audit</a></li>
+                
+                <li><a href="/mcpkit/conformance/fixture-audit/">Fixture audit</a></li>
+                
+                <li><a href="/mcpkit/conformance/external-checker/">External checker</a></li>
+                
+                <li><a href="/mcpkit/conformance/apps/compat/">Apps compat</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/packages/core/">Packages</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/packages/core/">core</a></li>
+                
+                <li><a href="/mcpkit/packages/server/">server</a></li>
+                
+                <li><a href="/mcpkit/packages/client/">client</a></li>
+                
+                <li><a href="/mcpkit/packages/ext-auth/">ext/auth</a></li>
+                
+                <li><a href="/mcpkit/packages/ext-tasks/">ext/tasks</a></li>
+                
+                <li><a href="/mcpkit/packages/ext-ui/">ext/ui</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/design/apps/">Reference</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/design/apps/">MCP Apps — design</a></li>
+                
+                <li><a href="/mcpkit/design/apps-host/">MCP Apps — host model</a></li>
+                
+                <li><a href="/mcpkit/design/apps-onboarding/">MCP Apps — onboarding</a></li>
+                
+                <li><a href="/mcpkit/design/tasks-v2-migration/">Tasks v2 migration</a></li>
+                
+                <li><a href="/mcpkit/design/sep-2567-handles/">SEP-2567 handles</a></li>
+                
+                <li><a href="/mcpkit/design/sep-2577-deprecations/">SEP-2577 deprecations</a></li>
+                
+                <li><a href="/mcpkit/design/list-ttl-migration/">List TTL migration</a></li>
+                
+            </ul>
+            
+        </div>
+        
+    </nav>
+</aside>
+
+        <main class="main">
+            
+<article class="content">
+    
+    <header class="content-header">
+        <h1>Rooms — Lanternfall</h1>
+        
+        <p class="lead">An AI game master inside your own web app: an agent drives a page the user opened, through the room bridge. Experimental.</p>
+        
+        
+        <p class="source-link">
+            Source: <a href="https://github.com/panyam/mcpkit/blob/main/examples/rooms/lanternfall/README.md"><code>examples/rooms/lanternfall/README.md</code></a>
+        </p>
+        
+    </header>
+    
+
+    <div class="content-body">
+        
+<h1 id="lanternfall-an-ai-game-master-inside-your-own-web-app">Lanternfall: an AI game master inside your own web app <a class="anchor" href="#lanternfall-an-ai-game-master-inside-your-own-web-app">¶</a></h1>
+<p>A player opens a small map game in their own browser tab. They ask a question in a box on the page.<br />
+An AI agent hears the question, looks at the player&rsquo;s map, writes new details onto it, hides an item<br />
+for them to find, and answers in the page&rsquo;s story log. The page is an ordinary web app. No chat host<br />
+renders it, and the agent can be any MCP client:</p>
+<ul>
+<li>Claude Code, whose system prompt stays as it is. It learns the game from the server&rsquo;s instructions<br />
+and the page&rsquo;s tool descriptions.</li>
+<li>A custom agent on an agent SDK. <a href="https://github.com/panyam/mcpkit/blob/main/examples/rooms/lanternfall/web/src/agent/gm.ts"><code>web/src/agent/gm.ts</code></a> is one on LangGraph.js,<br />
+with a game master&rsquo;s system prompt of its own.</li>
+</ul>
+<p><img src="https://raw.githubusercontent.com/panyam/mcpkit/main/examples/rooms/lanternfall/screenshots/lanternfall.png" alt="Lanternfall: the map, the story log, and the game master&rsquo;s narration" /></p>
+<p>The page offers the agent its tools, and tells it what the player does through declared events. A<br />
+room bridge connects the two: the page joins a relay room for its game, and the agent reaches the<br />
+page through MCP. MCP Apps covers a different case, where a host renders an app inside a chat after<br />
+a tool call. Here the user opened the page themselves, and the agent comes to it.</p>
+<h2 id="try-it">Try it <a class="anchor" href="#try-it">¶</a></h2>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span>go run .                                   <span style="color:#998;font-style:italic"># or: make run</span>
+</span></span></code></pre><p>Open <a href="http://localhost:8080/signin?as=alice&amp;game=demo">http://localhost:8080/signin?as=alice&amp;game=demo</a>. Walk to a neighbouring place by clicking it.<br />
+Click where you stand to search it. Rest the pointer on a place to wonder about it. Then turn on<br />
+<strong>Let my game master drive this tab</strong> and bring in an agent.</p>
+<p><strong>Claude Code</strong>, through the <code>rooms-channel</code> front end, which turns the player&rsquo;s events into channel<br />
+messages. Install it from this tree, so it subscribes to the page&rsquo;s declared events:</p>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#000;font-weight:bold">(</span><span style="color:#0086b3">cd</span> ../../../experimental/integrations/roomsevents <span style="color:#000;font-weight:bold">&amp;&amp;</span> go install ./cmd/rooms-channel<span style="color:#000;font-weight:bold">)</span>
+</span></span></code></pre><pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span>{<span style="color:#000080">&#34;mcpServers&#34;</span>: {<span style="color:#000080">&#34;rooms&#34;</span>: {<span style="color:#000080">&#34;command&#34;</span>: <span style="color:#d14">&#34;rooms-channel&#34;</span>,
+</span></span><span style="display:flex;"><span>  <span style="color:#000080">&#34;args&#34;</span>: [<span style="color:#d14">&#34;-bridge&#34;</span>, <span style="color:#d14">&#34;http://localhost:8080/mcp&#34;</span>],
+</span></span><span style="display:flex;"><span>  <span style="color:#000080">&#34;env&#34;</span>: {<span style="color:#000080">&#34;ROOMS_BRIDGE_TOKEN&#34;</span>: <span style="color:#d14">&#34;player:alice&#34;</span>}}}}
+</span></span></code></pre><pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span>claude --dangerously-load-development-channels server:rooms
+</span></span></code></pre><p>Tell it &ldquo;Be the game master of lanternfall:demo&rdquo;, then ask something in the page&rsquo;s box. It arrives<br />
+in Claude Code as a <code>room.ask</code> message, and the answer appears on your map.</p>
+<p><strong>A LangGraph.js agent</strong>, with <code>ANTHROPIC_API_KEY</code> set:</p>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span>make gm                                    <span style="color:#998;font-style:italic"># PLAYER=alice GAME=demo by default</span>
+</span></span></code></pre><p>It defaults to <code>claude-opus-5-5</code> and reads <code>LANTERNFALL_MODEL</code> to use another. It waits for the<br />
+player&rsquo;s events with <code>next_request</code>, keeps the quiet ones as context, and answers each question with<br />
+the page&rsquo;s tools.</p>
+<p><strong>A second player.</strong> Open <a href="http://localhost:8080/signin?as=bob&amp;game=demo">http://localhost:8080/signin?as=bob&amp;game=demo</a> in another browser profile.<br />
+Bob&rsquo;s tab is his own map. Alice&rsquo;s agent cannot drive it unless Bob accepts that agent&rsquo;s code in the<br />
+&ldquo;Another player&rsquo;s agent code&rdquo; box.</p>
+<p>The bearer token <code>player:&lt;name&gt;</code> acts for <code>&lt;name&gt;</code>. That is the demo&rsquo;s whole auth, so it is for<br />
+localhost only.</p>
+<h2 id="what-the-page-offers">What the page offers <a class="anchor" href="#what-the-page-offers">¶</a></h2>
+<p><code>catalog.json</code> declares both lists. The Go server passes them to the bridge as fixed catalogs<br />
+(<code>rooms.WithPageTools</code>, <code>rooms.WithPageEventCatalog</code>), and the page imports the same file, so the<br />
+two cannot drift apart.</p>
+<table>
+<thead>
+<tr>
+<th>Tool</th>
+<th>Read-only</th>
+<th>What it does on the page</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>look</code></td>
+<td>yes</td>
+<td>A place&rsquo;s description, what was revealed there, and where the player is</td>
+</tr>
+<tr>
+<td><code>move_player</code></td>
+<td></td>
+<td>Moves the player&rsquo;s token</td>
+</tr>
+<tr>
+<td><code>reveal</code></td>
+<td></td>
+<td>Writes a new detail onto a place</td>
+</tr>
+<tr>
+<td><code>place_item</code></td>
+<td></td>
+<td>Hides an item for the player to find by searching</td>
+</tr>
+<tr>
+<td><code>narrate</code></td>
+<td></td>
+<td>Adds a line from the game master to the story log</td>
+</tr>
+</tbody>
+</table>
+<table>
+<thead>
+<tr>
+<th>Event</th>
+<th>When</th>
+<th>Context hint</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>place.examined</code></td>
+<td>The pointer rests on a place for 0.6 s</td>
+<td>low priority, last one per 1.5 s, <code>{{user}} is looking at {{name}}</code></td>
+</tr>
+<tr>
+<td><code>player.moved</code></td>
+<td>The player walks somewhere</td>
+<td>medium priority, kept for the session</td>
+</tr>
+<tr>
+<td><code>item.found</code></td>
+<td>The player finds an item</td>
+<td>high priority, <code>{{user}} found {{item}} at {{name}}</code></td>
+</tr>
+<tr>
+<td><code>room.ask</code></td>
+<td>The player asks the game master something</td>
+<td>built in</td>
+</tr>
+</tbody>
+</table>
+<p>A host that injects events into a model&rsquo;s context reads the hints from <code>events/list</code>, under<br />
+<code>_meta[&quot;io.github.panyam.mcpkit/context-hint&quot;]</code>, so hovering stays a quiet aside and a found item<br />
+interrupts.</p>
+<h2 id="how-it-fits-together">How it fits together <a class="anchor" href="#how-it-fits-together">¶</a></h2>
+<pre><code class="language-mermaid">sequenceDiagram
+  participant P as Player's tab (joinToolRoomFrom)
+  participant S as Go server: /rooms/join, relay, bridge
+  participant A as Agent (Claude Code or LangGraph)
+  P-&gt;&gt;S: POST /rooms/join?game=demo (cookie)
+  S--&gt;&gt;P: room, relay URL, token, bridge subject
+  P-&gt;&gt;S: join lanternfall:demo, offer tools, declare events
+  A-&gt;&gt;S: MCP attach lanternfall:demo
+  P-&gt;&gt;S: room.ask &quot;what's behind the door?&quot;
+  S--&gt;&gt;A: room.ask event (channel message or next_request)
+  A-&gt;&gt;S: tools/call look, reveal, narrate
+  S-&gt;&gt;P: tools/call, through the relay room
+  P--&gt;&gt;S: result, and the page changes
+</code></pre>
+<h2 id="where-to-look-in-the-code">Where to look in the code <a class="anchor" href="#where-to-look-in-the-code">¶</a></h2>
+<ul>
+<li><a href="https://github.com/panyam/mcpkit/blob/main/examples/rooms/lanternfall/main.go"><code>main.go</code></a> mounts everything: <code>massrelay.NewLocal</code> for the relay, the bridge with the<br />
+fixed catalogs and <code>rooms.Instructions</code>, roomsevents for MCP Events, and the join endpoint.</li>
+<li><a href="https://github.com/panyam/mcpkit/blob/main/examples/rooms/lanternfall/web/src/main.ts"><code>web/src/main.ts</code></a> is the page: <code>joinToolRoomFrom</code>, the tool handlers, and<br />
+the events it emits.</li>
+<li><a href="https://github.com/panyam/mcpkit/blob/main/examples/rooms/lanternfall/web/src/agent/gm.ts"><code>web/src/agent/gm.ts</code></a> is the LangGraph game master.</li>
+<li><a href="https://github.com/panyam/mcpkit/blob/main/examples/rooms/lanternfall/web/tests/exercise.spec.ts"><code>web/tests/exercise.spec.ts</code></a> is the scripted check of mission #1683,<br />
+which <code>make exercise-aipage</code> at the repo root runs.</li>
+<li><a href="https://github.com/panyam/mcpkit/blob/main/experimental/ext/rooms/WIRE.md"><code>experimental/ext/rooms/WIRE.md</code></a> is the protocol between the page and the bridge.</li>
+</ul>
+<h2 id="make-targets">Make targets <a class="anchor" href="#make-targets">¶</a></h2>
+<table>
+<thead>
+<tr>
+<th>Target</th>
+<th>What it does</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>run</code></td>
+<td>Starts the game on :8080</td>
+</tr>
+<tr>
+<td><code>test</code></td>
+<td>Go tests</td>
+</tr>
+<tr>
+<td><code>build-web</code></td>
+<td>Rebuilds <code>static/app.js</code> from <code>web/</code>. Commit the result</td>
+</tr>
+<tr>
+<td><code>check-web</code></td>
+<td>Typechecks <code>web/</code> and fails if <code>static/app.js</code> is stale</td>
+</tr>
+<tr>
+<td><code>test-e2e</code></td>
+<td>Drives a player&rsquo;s page in Chromium, and runs the LangGraph game master when <code>ANTHROPIC_API_KEY</code> is set</td>
+</tr>
+<tr>
+<td><code>gm</code></td>
+<td>Runs the LangGraph game master</td>
+</tr>
+</tbody>
+</table>
+
+
+    </div>
+</article>
+
+        </main>
+    </div>
+
+    
+<footer class="site-footer">
+    <div class="site-footer-inner">
+        <p>
+            <a href="https://github.com/panyam/mcpkit">https://github.com/panyam/mcpkit</a> ·
+            Licensed under Apache-2.0 ·
+            Source rendered by <a href="https://github.com/panyam/s3gen">s3gen</a>.
+        </p>
+    </div>
+</footer>
+
+
+    
+    <script type="module">
+      const blocks = document.querySelectorAll('pre > code.language-mermaid');
+      if (blocks.length) {
+        const { default: mermaid } = await import('https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs');
+        blocks.forEach((code) => {
+          const pre = document.createElement('pre');
+          pre.className = 'mermaid';
+          pre.textContent = code.textContent;
+          code.parentElement.replaceWith(pre);
+        });
+        mermaid.initialize({ startOnLoad: false, securityLevel: 'strict' });
+        await mermaid.run();
+      }
+    </script>
+
+    
+    <script>
+      document.querySelectorAll('pre > code:not(.language-mermaid)').forEach((code) => {
+        const pre = code.parentElement;
+        pre.classList.add('has-copy');
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'copy-btn';
+        btn.textContent = 'Copy';
+        btn.setAttribute('aria-label', 'Copy code to clipboard');
+        btn.addEventListener('click', async () => {
+          try {
+            await navigator.clipboard.writeText(code.textContent);
+            btn.textContent = 'Copied';
+          } catch {
+            btn.textContent = 'Failed';
+          }
+          setTimeout(() => { btn.textContent = 'Copy'; }, 1500);
+        });
+        pre.appendChild(btn);
+      });
+    </script>
+
+    
+    <script>
+      (function () {
+        const btn = document.querySelector('.theme-toggle');
+        if (!btn) return;
+        btn.addEventListener('click', () => {
+          const root = document.documentElement;
+          const current = root.dataset.theme ||
+            (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+          const next = current === 'dark' ? 'light' : 'dark';
+          root.dataset.theme = next;
+          try { localStorage.setItem('theme', next); } catch {}
+        });
+      })();
+    </script>
+</body>
+</html>
