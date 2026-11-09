@@ -163,7 +163,10 @@ func newHandler(logger *log.Logger) (http.Handler, func(), error) {
 		if !namePattern.MatchString(game) {
 			game = "demo"
 		}
-		http.SetCookie(w, &http.Cookie{Name: playerCookie, Value: name, Path: "/", HttpOnly: true, SameSite: http.SameSiteStrictMode})
+		// Secure whenever the page came over https. The demo also runs over plain
+		// http on localhost, where some browsers drop a Secure cookie.
+		secure := r.TLS != nil || r.Header.Get("X-Forwarded-Proto") == "https"
+		http.SetCookie(w, &http.Cookie{Name: playerCookie, Value: name, Path: "/", HttpOnly: true, Secure: secure, SameSite: http.SameSiteStrictMode})
 		http.Redirect(w, r, "/?game="+url.QueryEscape(game), http.StatusSeeOther)
 	})
 	mux.HandleFunc("GET /whoami", func(w http.ResponseWriter, r *http.Request) {
