@@ -206,16 +206,22 @@ func (i *Indexer) isFresh() bool {
 // out of scope here.
 func (i *Indexer) skillMtime(skill *skillEntry) (time.Time, error) {
 	if i.provider.cfg.archiveMode != ArchiveFormatUnknown {
-		return subtreeMaxMtime(i.provider.cfg.fsys, skill.dirPath)
+		return subtreeMaxMtime(&i.provider.cfg, skill.dirPath)
 	}
 	return mtimeOf(i.provider.cfg.fsys, manifestPath(skill.dirPath))
 }
 
-func subtreeMaxMtime(fsys fs.FS, root string) (time.Time, error) {
+// subtreeMaxMtime skips hidden entries like every other walk, so an edit to
+// a file the archive leaves out does not rebuild the archive.
+func subtreeMaxMtime(cfg *providerConfig, root string) (time.Time, error) {
+	fsys := cfg.fsys
 	var latest time.Time
 	err := fs.WalkDir(fsys, root, func(p string, d fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return walkErr
+		}
+		if skip, err := cfg.skipHidden(p, root, d); skip {
+			return err
 		}
 		if d.IsDir() {
 			return nil

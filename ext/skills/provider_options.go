@@ -27,6 +27,7 @@ type providerConfig struct {
 	supportingDigests     SupportingDigestMode
 	skillsListPageSize    int
 	directoryReadPageSize int
+	includeHidden         bool // set by WithHiddenFiles
 
 	// directoryReadTTLMs and directoryReadCacheScope are the SEP-2549
 	// attributes on resources/directory/read results. Zero ttl means

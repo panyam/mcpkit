@@ -291,6 +291,31 @@ untouched and still emits `skill://`, which is the SHOULD.
 Found by reading the MCP Inspector's SEP-2640 writeup, which reaches the same reading
 independently.
 
+## Hidden files are skipped by default
+
+A skill directory checked out from git holds `.git/`, and one under active use often holds `.env`.
+Until this change the Provider walked every file, so both went out in `resources/list`, the
+`skills/list` manifest and `resources/directory/read`, and a client could read the token in
+`.env`. Neither SEP-2640 nor the Agent Skills spec says anything about hidden files.
+
+The WG thread settled the default on 2026-11-01 (Discord `1566319050571780149`). vijaydeep proposed
+excluding hidden files and directories in the Python provider, and Peter Alexander agreed. The
+TypeScript SDK already skips both. So mcpkit skips any entry below the root whose name starts with
+a dot, and `WithHiddenFiles()` turns that off.
+
+The filter has to sit in every walk, because each walk feeds a different surface. `skipHidden` in
+`hidden.go` is the first step of discovery and registration (`provider.go`), the manifest builder
+(`methods.go`), the archive mtime walk (`indexer.go`) and archive packing (`archive.go`).
+`resources/directory/read` filters children and treats a hidden directory URI as absent. The watcher
+drops events under a hidden segment, so editing `.env` does not broadcast. If a walk missed the
+filter, the manifest and `resources/list` would disagree, and a host verifying against the manifest
+would reject a file the server offers. `TestProvider_SkipsHiddenByDefault` checks the surfaces
+together for that reason.
+
+The root itself may be hidden, as `~/.claude/skills` is. Only entries below it are filtered.
+
+`PackSkill` skips hidden entries too, so `mcpskills pack` no longer ships a skill's `.git/`.
+
 ## Client-side obligations we do not implement yet
 
 - **Duplicate names.** The SEP makes it a host MUST: names are not guaranteed unique, and on a

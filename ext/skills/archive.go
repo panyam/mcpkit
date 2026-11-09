@@ -175,7 +175,9 @@ func DetectArchiveFormat(name string, peek []byte) ArchiveFormat {
 // PackSkill packs everything under skillDir in fsys into the chosen
 // archive format. SKILL.md MUST be present at skillDir; the resulting
 // archive carries it at the archive root and contains no entries
-// outside the skill directory.
+// outside the skill directory. Hidden files and directories (.env, .git/)
+// are left out, as a Provider leaves them out unless WithHiddenFiles is
+// set.
 //
 // Entries are written in lexically sorted order so two packs of the
 // same source produce byte-identical archives. This is load-bearing
@@ -190,7 +192,13 @@ func PackSkill(fsys fs.FS, skillDir string, format ArchiveFormat) ([]byte, error
 	if format == ArchiveFormatUnknown {
 		return nil, fmt.Errorf("%w: missing format", ErrArchiveUnknownFormat)
 	}
-	files, err := collectSkillFiles(fsys, skillDir)
+	return packSkill(fsys, skillDir, format, &providerConfig{})
+}
+
+// packSkill is PackSkill with the Provider's hidden-file setting, so a
+// Provider with WithHiddenFiles packs what it would otherwise serve.
+func packSkill(fsys fs.FS, skillDir string, format ArchiveFormat, cfg *providerConfig) ([]byte, error) {
+	files, err := collectSkillFiles(fsys, skillDir, cfg)
 	if err != nil {
 		return nil, err
 	}
@@ -216,11 +224,15 @@ func PackSkill(fsys fs.FS, skillDir string, format ArchiveFormat) ([]byte, error
 // collectSkillFiles walks the skill subtree and returns relative paths
 // (skill-root-relative) in lexical order. Validates that no path
 // component contains ".." segments after path.Clean. Skips directory
-// entries so the archive carries files only.
-func collectSkillFiles(fsys fs.FS, skillDir string) ([]string, error) {
+// entries so the archive carries files only, and skips hidden entries
+// unless cfg includes them.
+func collectSkillFiles(fsys fs.FS, skillDir string, cfg *providerConfig) ([]string, error) {
 	var paths []string
 	walkErr := fs.WalkDir(fsys, skillDir, func(fullPath string, d fs.DirEntry, err error) error {
 		if err != nil {
+			return err
+		}
+		if skip, err := cfg.skipHidden(fullPath, skillDir, d); skip {
 			return err
 		}
 		if d.IsDir() {

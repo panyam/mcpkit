@@ -38,6 +38,9 @@ func (i *Indexer) buildResources(skill *skillEntry) (SkillResources, error) {
 		if walkErr != nil {
 			return walkErr
 		}
+		if skip, err := i.provider.cfg.skipHidden(p, skillDir, d); skip {
+			return err
+		}
 		if d.IsDir() || !d.Type().IsRegular() {
 			return nil
 		}
