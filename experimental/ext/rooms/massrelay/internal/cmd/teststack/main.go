@@ -1,7 +1,8 @@
 // Command teststack runs the room bridge on a real massrelay relay for the
-// TypeScript page client's tests: a relay requiring JWTs, the bridge joined
-// embedded, and an MCP endpoint for agents. It prints one JSON line with the
-// URLs and tokens, then serves until its standard input closes.
+// TypeScript page client's tests: a Local relay requiring JWTs, the bridge
+// joined embedded, the join endpoint, and an MCP endpoint for agents. It
+// prints one JSON line with the URLs and tokens, then serves until its
+// standard input closes.
 package main
 
 import (
@@ -15,8 +16,6 @@ import (
 	"strings"
 	"sync"
 	"time"
-
-	"github.com/panyam/massrelay/services"
 
 	"github.com/panyam/mcpkit/core"
 	"github.com/panyam/mcpkit/experimental/ext/rooms"
@@ -42,6 +41,7 @@ func (v tokens) Claims(r *http.Request) *core.Claims {
 // Info is what the stack prints for the tests.
 type Info struct {
 	Relay       string            `json:"relay"`
+	Join        string            `json:"join"`
 	MCP         string            `json:"mcp"`
 	PageTokens  map[string]string `json:"pageTokens"`
 	AgentTokens map[string]string `json:"agentTokens"`
@@ -49,14 +49,34 @@ type Info struct {
 
 func main() {
 	callTimeout := flag.Duration("call-timeout", 30*time.Second, "the bridge's per-call deadline")
+	tokenTTL := flag.Duration("token-ttl", massrelay.DefaultTokenTTL, "how long a token from /join lasts")
 	flag.Parse()
 	log.SetOutput(io.Discard) // the relay logs every frame; stdout carries Info
 
-	relay, err := relaytest.Start()
+	// A Local relay whose signer uses relaytest's key, so the fixed page
+	// tokens below and the ones /join mints are both accepted.
+	signer, err := massrelay.NewSigner(massrelay.SignerOptions{
+		ClientID: relaytest.ClientID, Issuer: relaytest.Issuer, Key: relaytest.Key(), TTL: *tokenTTL,
+	})
 	if err != nil {
 		panic(err)
 	}
-	defer relay.Close()
+	local, err := massrelay.NewLocal(massrelay.LocalOptions{Signer: signer, BridgeSubject: "bridge"})
+	if err != nil {
+		panic(err)
+	}
+	defer local.Close()
+	relayMux := http.NewServeMux()
+	relayMux.Handle("/", local.Relay())
+	// The join endpoint, with the user and room in the query since the stack
+	// has no auth of its own.
+	relayMux.Handle("/join", local.JoinHandler(rooms.JoinOptions{
+		Subject:  func(r *http.Request) (string, error) { return r.URL.Query().Get("user"), nil },
+		RoomOf:   func(r *http.Request) (string, error) { return r.URL.Query().Get("room"), nil },
+		RelayURL: "/",
+	}))
+	relaySrv := httptest.NewServer(relayMux)
+	defer relaySrv.Close()
 
 	// Page events the bridge hands its hook, for the TypeScript tests to read
 	// back through the teststack_page_events tool.
@@ -68,12 +88,12 @@ func main() {
 		eventsMu.Unlock()
 	}
 
-	bridge := rooms.New(massrelay.Embedded(relay.Service, &services.Principal{Subject: "bridge", ClientID: relaytest.ClientID}),
+	bridge := rooms.New(local.Transport(),
 		rooms.WithCallTimeout(*callTimeout), rooms.WithPageEvents(recordEvent), rooms.WithEventFallbacks(0))
 	defer bridge.Close()
 	scopes := []string{rooms.ScopeRoomsAttach, rooms.ScopePagesRead, rooms.ScopePagesAct}
 	agents := tokens{}
-	info := Info{Relay: relay.URL, PageTokens: map[string]string{}, AgentTokens: map[string]string{}}
+	info := Info{Relay: relaySrv.URL, Join: relaySrv.URL + "/join", PageTokens: map[string]string{}, AgentTokens: map[string]string{}}
 	for _, subject := range []string{"alice", "bob"} {
 		tok, err := relaytest.Token(subject, nil)
 		if err != nil {

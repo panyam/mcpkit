@@ -61,6 +61,13 @@ func (r *Relay) Close() {
 // ClientID is the client_id relay tokens carry, for embedded Principals.
 const ClientID = clientID
 
+// Issuer is the iss relay tokens carry. With ClientID and Key it builds a
+// massrelay.Signer that a relay trusting this package's tokens also trusts.
+const Issuer = issuer
+
+// Key is the HS256 key relay tokens are signed with.
+func Key() []byte { return []byte(secret) }
+
 // Token mints a relay token for subject, as an app would after
 // authenticating its user. extra adds claims such as "rooms".
 func Token(subject string, extra map[string]any) (string, error) {
