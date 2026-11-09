@@ -41,6 +41,7 @@ These don't have a CLI demo. Point an MCP host at the running server.
 |---------|--------------|-------------|
 | [apps/](apps/) | MCP Apps - server-defined HTML/JS UIs in an iframe (vanilla, todolist, react, interactive, dashboard) | [MCPJam](https://mcpjam.com) (browser-based, supports the Apps extension) |
 | [protogen/bookservice/](protogen/bookservice/) | Proto annotations to MCP tools, resources, prompts | Any MCP host (Claude Code, VS Code, MCPJam, Claude Desktop) |
+| [rooms/lanternfall/](rooms/lanternfall/) ⚠ experimental | An agent drives a page the user opened in their own tab, through the room bridge: a map game whose game master is the agent. Page tools, declared events with context hints, questions asked from inside the page | A browser, plus Claude Code (via `rooms-channel`) or the bundled LangGraph.js agent (`make gm`) |
 
 ```bash
 cd examples/apps/todolist

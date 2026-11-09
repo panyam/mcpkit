@@ -196,10 +196,33 @@ implements it. `massrelay.NewLocal` exists because the tests for the handler nee
 trusts the signer, which is the same thing a web app needs. Agni wrote it by hand before
 (`internal/viewerrooms`).
 
-The signing belongs in massrelay, beside `RelayAuthenticator`, which reads the claims. massrelay#78
-tracks moving it there. Until that releases, `Signer` mints the claims itself, and
-`TestSigner_ClaimsAreWhatTheRelayReads` checks them against the relay's own validator.
+The signing belongs in massrelay, beside `RelayAuthenticator`, which reads the claims. massrelay
+v0.3.7 added `RelaySigner` for that (massrelay#78), and `Signer` wraps it with the one-room rule and
+mcpkit's defaults (a 10-minute TTL rather than massrelay's hour, and an issuer). The test relay in
+`internal/relaytest` mints through `RelaySigner` too. `TestSigner_ClaimsAreWhatTheRelayReads` still
+checks the claims against the relay's own validator.
 
 The page refreshes through massrelay's `CollabClient.getToken`, which sends `ReAuth` on the open
 socket. The relay ends a connection at its token's exp otherwise, and the page cannot rejoin under
 the same id, since a pairing names the id.
+
+## Declared events reuse SEP-3415's names, and list after tools (#1678)
+
+The bridge asks a page for `events/list` and the page announces `notifications/events/list_changed`,
+the same names an MCP Events server uses, as tools reuse `tools/list`. A page that predates
+declarations answers "method not found" and declares nothing, so nothing on the wire changes for it.
+Only `notifications/rooms/event_refused` is new.
+
+The bridge asks after it has listed the page, in its own goroutine, never before. The first version
+asked first, and every test peer that ignores unknown requests sat out of the roster until the call
+timed out. The cost is a short window after joining in which a declared name still counts as
+undeclared. A page declares before emitting, and with a fixed catalog the bridge checks against the
+catalog anyway.
+
+Declared data is an object whose fields roomsevents puts at the top level of the payload. A nested
+`data` field would have kept the payload shape uniform, but a context hint's template substitutes
+top-level fields only (`{{item}}`), so nesting would make every template useless. The price is that a
+declaration may not use the five origin field names, which the bridge checks when it admits it.
+
+roomsevents adds and removes event sources outside its own lock. Removing a source can end its
+subscriptions, which runs `onUnsubscribe`, which takes that lock.

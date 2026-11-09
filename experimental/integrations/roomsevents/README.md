@@ -40,12 +40,29 @@ Who hears what follows the bridge's rules:
 With no auth on the server (the bridge's local mode), set `events.Config.UnsafeAnonymousPrincipal`
 to the local subject, since `events/stream` refuses an unauthenticated caller.
 
+### Declared event types
+
+A type a page declares (`rooms.PageEventDecl`, or the TypeScript client's `registerEvent`) becomes an
+event type of its own in `events/list`, beside the three above. It has the page's payload schema with
+the origin fields added, its description, and the page's context hint under
+`_meta["io.github.panyam.mcpkit/context-hint"]`, which chakra's host reads. Its payload puts the page's
+fields at the top level, so a hint's `{{item}}` template finds them:
+
+```json
+{"item": "brass key", "resource": "lanternfall:demo", "page": "peer-3", "user": "alice", "at": "2026-11-09T08:00:00Z"}
+```
+
+Subscribing works the same as for the built-in types, with `{resource}`. With
+`rooms.WithPageEventCatalog` the declared types are fixed when `Register` runs. Without it they come
+and go with the pages that declare them, and each change announces `notifications/events/list_changed`.
+
 ## Using it from Claude Code
 
 `rooms-channel` is a [channel](https://code.claude.com/docs/en/channels-reference): an MCP server
 Claude Code starts over stdio that pushes events into the session. It offers the bridge's tools as
 its own (`attach`, `list_pages`, and the tools of the pages in attached rooms). After an `attach` it
-subscribes to that room's three event types, and each event arrives as
+subscribes to every room event type the bridge lists: the three built-in ones and each type a page
+declared. A type declared after the attach is picked up at the next one. Each event arrives as
 
 ```text
 <channel source="rooms" event="room.ask" resource="design:demo/board.kicad_sch" page="..." user="alice" event_id="...">

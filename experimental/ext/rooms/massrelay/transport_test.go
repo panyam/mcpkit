@@ -119,12 +119,12 @@ func TestDial_RefusesABadToken(t *testing.T) {
 // A token whose rooms claim does not cover the room cannot join it.
 func TestDial_RoomsClaimLimitsTheJoin(t *testing.T) {
 	r := newRelay(t)
-	tok := token(t, "alice", map[string]any{"rooms": []string{"review:*"}})
+	tok := token(t, "alice", "review:*")
 	_, err := massrelay.Dial(r.url, tok).Join(t.Context(), room)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "ROOM_FORBIDDEN")
 
-	tok = token(t, "alice", map[string]any{"rooms": []string{"design:*"}})
+	tok = token(t, "alice", "design:*")
 	ok, err := massrelay.Dial(r.url, tok).Join(t.Context(), room)
 	require.NoError(t, err)
 	_ = ok.Leave()
@@ -142,7 +142,7 @@ func TestTransport_DialledBurstArrivesWhole(t *testing.T) {
 
 func dialledBurst(t *testing.T, within time.Duration, opts ...massrelay.DialOption) {
 	r := newRelay(t)
-	alice := join(t, massrelay.Dial(r.url, token(t, "alice", nil), opts...), room)
+	alice := join(t, massrelay.Dial(r.url, token(t, "alice"), opts...), room)
 	bob := join(t, r.transport(t, "embedded", "bob"), room)
 	require.Eventually(t, func() bool { return len(alice.Roster()) == 1 }, 3e9, 1e7)
 

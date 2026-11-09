@@ -159,6 +159,10 @@ conf-events-setup:
 exercise-wire:
     @bash scripts/exercise-wire.sh
 
+# Mission #1683 exercise: an agent drives a player's page in examples/rooms/lanternfall
+exercise-aipage:
+    @bash scripts/exercise-aipage.sh
+
 # Mission #1508 exercise: events server + Go client against the SEP-3415 suites, one table
 exercise-events:
     @bash scripts/exercise-events.sh

@@ -3,15 +3,12 @@
 package relaytest
 
 import (
-	"context"
 	"net/http/httptest"
 	"time"
 
-	"github.com/golang-jwt/jwt/v5"
 	"github.com/panyam/massrelay/services"
 	relaymw "github.com/panyam/massrelay/web/middleware"
 	relayserver "github.com/panyam/massrelay/web/server"
-	"github.com/panyam/oneauth/keys"
 )
 
 const (
@@ -33,15 +30,7 @@ type Relay struct {
 // the per-IP connection rate limit off, since test peers all dial from
 // loopback.
 func Start() (*Relay, error) {
-	ks := keys.NewInMemoryKeyStore()
-	if _, err := ks.PutKey(context.Background(), &keys.PutKeyRequest{Record: &keys.KeyRecord{
-		ClientID: clientID, Key: []byte(secret), Algorithm: "HS256",
-	}}); err != nil {
-		return nil, err
-	}
-	auth := relaymw.NewRelayAuthenticator(relaymw.RelayAuthConfig{
-		KeyStore: ks, Required: true, Issuer: issuer, TokenQueryParam: "token",
-	})
+	auth := newSigner().Authenticator(relaymw.RelayAuthConfig{Required: true, TokenQueryParam: "token"})
 	app := relayserver.NewRelayApp()
 	app.Guard = relaymw.NewGuard(nil, nil, auth, nil, nil)
 	if err := app.Init(); err != nil {
@@ -69,15 +58,20 @@ const Issuer = issuer
 func Key() []byte { return []byte(secret) }
 
 // Token mints a relay token for subject, as an app would after
-// authenticating its user. extra adds claims such as "rooms".
-func Token(subject string, extra map[string]any) (string, error) {
-	now := time.Now()
-	claims := jwt.MapClaims{
-		"sub": subject, "client_id": clientID, "type": "access", "iss": issuer,
-		"iat": now.Unix(), "exp": now.Add(time.Hour).Unix(),
+// authenticating its user. With no rooms the token may join any room.
+func Token(subject string, rooms ...string) (string, error) {
+	tok, _, err := newSigner().Mint(subject, rooms)
+	return tok, err
+}
+
+// newSigner is the signer behind every token the test relay accepts. The key
+// is fixed, so each call returns an equivalent signer.
+func newSigner() *relaymw.RelaySigner {
+	s, err := relaymw.NewRelaySigner(relaymw.RelaySignerConfig{
+		ClientID: clientID, Issuer: issuer, Key: []byte(secret), TTL: time.Hour,
+	})
+	if err != nil {
+		panic(err)
 	}
-	for k, v := range extra {
-		claims[k] = v
-	}
-	return jwt.NewWithClaims(jwt.SigningMethodHS256, claims).SignedString([]byte(secret))
+	return s
 }

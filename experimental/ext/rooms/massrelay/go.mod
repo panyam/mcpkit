@@ -8,12 +8,10 @@ replace (
 )
 
 require (
-	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/gorilla/websocket v1.5.3
-	github.com/panyam/massrelay v0.3.6
+	github.com/panyam/massrelay v0.3.7
 	github.com/panyam/mcpkit v0.8.17
 	github.com/panyam/mcpkit/experimental/ext/rooms v0.8.17
-	github.com/panyam/oneauth v0.3.2
 	github.com/panyam/servicekit v0.2.2
 	github.com/stretchr/testify v1.12.1
 	golang.org/x/time v0.16.0
@@ -30,12 +28,14 @@ require (
 	github.com/fernet/fernet-go v0.0.0-20240119011108-303da6aec611 // indirect
 	github.com/go-logr/logr v1.4.4 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
+	github.com/golang-jwt/jwt/v5 v5.3.1 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.30.0 // indirect
 	github.com/invopop/jsonschema v0.14.0 // indirect
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
 	github.com/panyam/gocurrent v0.1.2 // indirect
 	github.com/panyam/goutils v0.1.13 // indirect
+	github.com/panyam/oneauth v0.3.2 // indirect
 	github.com/pb33f/ordered-map/v2 v2.3.1 // indirect
 	github.com/prometheus/client_golang v1.24.1 // indirect
 	github.com/prometheus/client_model v0.6.3 // indirect

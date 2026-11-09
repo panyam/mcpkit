@@ -28,6 +28,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"slices"
 	"sync"
 	"time"
 
@@ -95,6 +96,21 @@ type Events struct {
 	ask       func(context.Context, AskPayload) error
 	selection func(context.Context, SelectionPayload) error
 	page      func(context.Context, PagePayload) error
+
+	// declared are the sources for the bridge's declared page event types,
+	// by name, and reg is where Register put them, so the catalog's changes
+	// can add and remove them.
+	declared map[string]declaredSource
+	reg      *events.Registry
+	syncMu   sync.Mutex
+}
+
+// declaredSource is one declared page event type's source, the declaration
+// it was built from, and its yield.
+type declaredSource struct {
+	decl  rooms.PageEventDecl
+	src   events.EventSource
+	yield func(context.Context, json.RawMessage) error
 }
 
 var resourceArgs = map[string]any{
@@ -107,7 +123,7 @@ var resourceArgs = map[string]any{
 // New builds the three event sources. They deliver nothing until Register
 // binds them to a bridge.
 func New() *Events {
-	e := &Events{streams: map[string]string{}}
+	e := &Events{streams: map[string]string{}, declared: map[string]declaredSource{}}
 	def := func(name, desc string) events.EventDef {
 		return events.EventDef{
 			Name:          name,
@@ -147,18 +163,153 @@ func (e *Events) Bind(b *rooms.Bridge) {
 // as given; this package's types offer no webhook delivery either way. With
 // no auth on srv (the bridge's local mode), set cfg.UnsafeAnonymousPrincipal,
 // since events/stream refuses an unauthenticated caller.
+//
+// Each event type a page declared (rooms.PageEventDecl) becomes an event type
+// of its own, with the page's payload schema and context hint. A fixed
+// catalog (rooms.WithPageEventCatalog) is registered here and never changes.
+// Otherwise types come and go with the pages that declare them, and each
+// change announces notifications/events/list_changed.
 func (e *Events) Register(srv *server.Server, b *rooms.Bridge, cfg events.Config) *events.Registry {
 	e.Bind(b)
 	cfg.Server = srv
 	cfg.Sources = append(append([]events.EventSource(nil), cfg.Sources...), e.sources...)
-	return events.Register(cfg)
+	e.mu.Lock()
+	for _, d := range b.EventCatalog() {
+		ds := e.newDeclaredSource(d)
+		e.declared[d.Name] = ds
+		cfg.Sources = append(cfg.Sources, ds.src)
+	}
+	e.mu.Unlock()
+	reg := events.Register(cfg)
+	e.mu.Lock()
+	e.reg = reg
+	e.mu.Unlock()
+	b.OnEventCatalogChange(e.syncCatalog)
+	e.syncCatalog()
+	return reg
+}
+
+// newDeclaredSource builds the event type for a page's declaration. Its
+// payload is the page's data object with the origin fields beside it, so the
+// schema it advertises is the page's with those fields added.
+func (e *Events) newDeclaredSource(d rooms.PageEventDecl) declaredSource {
+	def := events.EventDef{
+		Name:          d.Name,
+		Description:   d.Description,
+		Delivery:      []string{"push", "poll"},
+		InputSchema:   resourceArgs,
+		PayloadSchema: withOrigin(d.PayloadSchema),
+		OnSubscribe:   e.onSubscribe,
+		OnUnsubscribe: e.onUnsubscribe,
+		Match:         e.match,
+	}
+	if d.ContextHint != nil {
+		def.Meta = map[string]any{rooms.MetaContextHint: d.ContextHint}
+	}
+	src, yield := events.NewYieldingSource[json.RawMessage](def)
+	return declaredSource{decl: d, src: src, yield: yield}
+}
+
+// syncCatalog adds a source for each type the bridge's catalog gained and
+// removes those it lost. A type whose declaration changed is replaced. The
+// registry calls run outside e.mu, since removing a source can end its
+// subscriptions and run onUnsubscribe; syncMu keeps two syncs from
+// interleaving.
+func (e *Events) syncCatalog() {
+	e.syncMu.Lock()
+	defer e.syncMu.Unlock()
+	e.mu.Lock()
+	reg, b := e.reg, e.bridge
+	have := make(map[string]declaredSource, len(e.declared))
+	for k, v := range e.declared {
+		have[k] = v
+	}
+	e.mu.Unlock()
+	if reg == nil || b == nil {
+		return
+	}
+	want := map[string]rooms.PageEventDecl{}
+	for _, d := range b.EventCatalog() {
+		want[d.Name] = d
+	}
+	for _, name := range sortedNames(have) {
+		if d, ok := want[name]; !ok || !sameDecl(d, have[name].decl) {
+			_ = reg.RemoveSource(name)
+			delete(have, name)
+		}
+	}
+	for _, name := range sortedNames(want) {
+		if _, ok := have[name]; ok {
+			continue
+		}
+		ds := e.newDeclaredSource(want[name])
+		if reg.AddSource(ds.src) == nil {
+			have[name] = ds
+		}
+	}
+	e.mu.Lock()
+	e.declared = have
+	e.mu.Unlock()
+}
+
+func sortedNames[V any](m map[string]V) []string {
+	out := make([]string, 0, len(m))
+	for k := range m {
+		out = append(out, k)
+	}
+	slices.Sort(out)
+	return out
+}
+
+func sameDecl(a, b rooms.PageEventDecl) bool {
+	ja, _ := json.Marshal(a)
+	jb, _ := json.Marshal(b)
+	return string(ja) == string(jb)
+}
+
+// withOrigin is a declared payload schema with the origin fields every event
+// carries added to its properties.
+func withOrigin(schema map[string]any) map[string]any {
+	out := map[string]any{"type": "object"}
+	for k, v := range schema {
+		out[k] = v
+	}
+	props := map[string]any{}
+	if p, ok := out["properties"].(map[string]any); ok {
+		for k, v := range p {
+			props[k] = v
+		}
+	}
+	for k, v := range originProps {
+		props[k] = v
+	}
+	out["properties"] = props
+	return out
+}
+
+var originProps = map[string]any{
+	"resource": map[string]any{"type": "string", "description": "The resource the page shows."},
+	"page":     map[string]any{"type": "string", "description": "The page's peer id."},
+	"user":     map[string]any{"type": "string", "description": "The page's user, from its relay token."},
+	"label":    map[string]any{"type": "string", "description": "What the page calls itself. The page sets it, so do not trust it."},
+	"at":       map[string]any{"type": "string", "format": "date-time"},
 }
 
 // Publish turns one page event into the matching event type. Give it to
-// rooms.WithPageEvents. An ask with no text string is dropped.
+// rooms.WithPageEvents. An ask with no text string is dropped, and so is a
+// declared event whose data is not a JSON object.
 func (e *Events) Publish(pe rooms.PageEvent) {
 	origin := Origin{Resource: pe.Resource, Page: string(pe.Page), User: pe.Subject, Label: pe.Label, At: pe.At}
 	ctx := context.Background()
+	e.mu.Lock()
+	ds, declared := e.declared[pe.Name]
+	e.mu.Unlock()
+	if declared {
+		if payload, ok := mergeOrigin(origin, pe.Data); ok {
+			_ = ds.yield(ctx, payload)
+		}
+		return
+	}
 	switch pe.Name {
 	case rooms.EventAsk:
 		var d struct {
@@ -235,4 +386,27 @@ func (e *Events) match(hc events.HookContext, ev events.Event, params map[string
 	e.mu.Unlock()
 	sid := e.sessionOf(hc)
 	return b != nil && sid != "" && b.HearsPage(sid, o.Resource, rooms.PeerID(o.Page))
+}
+
+// mergeOrigin puts the origin fields beside a declared event's own. The
+// bridge has already refused data that claims an origin field.
+func mergeOrigin(o Origin, data json.RawMessage) (json.RawMessage, bool) {
+	fields := map[string]json.RawMessage{}
+	if string(data) != "null" && json.Unmarshal(data, &fields) != nil {
+		return nil, false
+	}
+	var origin map[string]json.RawMessage
+	_ = json.Unmarshal(mustMarshal(o), &origin)
+	for k, v := range origin {
+		fields[k] = v
+	}
+	return mustMarshal(fields), true
+}
+
+func mustMarshal(v any) json.RawMessage {
+	b, err := json.Marshal(v)
+	if err != nil {
+		panic(err)
+	}
+	return b
 }

@@ -128,6 +128,26 @@ An event goes only to bridges that have already listed the page, so one emitted 
 bridge's `next_request` tool or its `rooms://events/{resource}` resource, when the bridge enables
 them (`rooms.WithEventFallbacks`).
 
+### Declaring event types
+
+```ts
+room.registerEvent({
+  name: "item.found",
+  description: "The player found an item.",
+  payloadSchema: { type: "object", properties: { item: { type: "string" } }, required: ["item"] },
+  contextHint: { priority: "high", template: "found {{item}}" },
+});
+room.onEventRefused(({ name, reason }) => console.warn(name, reason));
+room.emit("item.found", { item: "brass key" });
+```
+
+A declared type shows up in the bridge's `events/list` with its payload schema and its context hint,
+under `META_CONTEXT_HINT`. The bridge checks each event emitted under the name against the schema, and
+`onEventRefused` hears about one it dropped, or a declaration it did not accept. Declared data is an
+object, and its schema may not use `resource`, `page`, `user`, `label` or `at`, which every event
+already carries. Declare before emitting. A bridge treats a name it has no declaration for as
+undeclared. The bridge's README has the rules.
+
 ## The same tool in an MCP Apps frame
 
 `registerOnApp(app, tool)` registers a tool with an MCP Apps bridge, such as mcpkit's

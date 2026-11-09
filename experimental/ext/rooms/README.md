@@ -11,6 +11,9 @@ page in it, and serves them to the agents attached to that room. Each call goes 
 agent (MCP client) --MCP--> rooms.Bridge (MCP server) --relay room--> page (tools)
 ```
 
+The messages a page and the bridge exchange are in [WIRE.md](WIRE.md), for anyone writing a page
+client or a bridge in another language.
+
 ## Serving the bridge
 
 ```go
@@ -260,6 +263,39 @@ Events (SEP-3415), with the bridge's agreement deciding who hears which page, us
 [`experimental/integrations/roomsevents`](../../integrations/roomsevents), which also has the Claude
 Code channel front end. `Attached(session, resource)` and `PageAgreed(session, resource, page)` are
 the two questions it asks.
+
+### Declaring event types
+
+A page can declare the events it emits, the way it registers tools, so an agent sees them in
+`events/list` before any happens:
+
+```go
+page.DeclareEvent(rooms.PageEventDecl{
+    Name:          "item.found",
+    Description:   "The player found an item.",
+    PayloadSchema: map[string]any{"type": "object", "properties": map[string]any{"item": map[string]any{"type": "string"}}},
+    ContextHint:   map[string]any{"priority": "high", "template": "found {{item}}"},
+})
+page.OnEventRefused(func(name, reason string) { log.Printf("%s refused: %s", name, reason) })
+```
+
+After listing a page's tools, the bridge asks it for `events/list` and accepts each declaration whose
+schema matches what it already offers. The first page to declare a name fixes its schema, as with
+tools. Each event the page then emits under that name is checked against the schema. One that doesn't
+match is dropped, and the page hears `notifications/rooms/event_refused` with the reason. Declared
+data is a JSON object. Its schema may not declare `resource`, `page`, `user`, `label` or `at`, since
+roomsevents puts those beside the page's own fields. The context hint goes to agents under
+`_meta["io.github.panyam.mcpkit/context-hint"]` (`rooms.MetaContextHint`), and the bridge never reads
+it.
+
+`WithPageEventCatalog(decls)` fixes the declared types up front, as `WithPageTools` does for tools.
+`events/list` is then the same for every caller and never changes. A page declaring anything else has
+the declaration refused, and an event it emits under an undeclared name is refused, apart from
+`room.ask` and `page.selection_changed`. Without a catalog an undeclared name still reaches the hook,
+and roomsevents publishes it as `page.event`.
+
+`EventCatalog()` lists the declared types now, and `OnEventCatalogChange(fn)` hears each change.
+roomsevents uses both.
 
 ## Agents whose host speaks no events
 

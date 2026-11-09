@@ -270,7 +270,7 @@ func (f *FrontEnd) watch(resource string) {
 	f.mu.Unlock()
 
 	var calls []*eventsclient.StreamCall
-	for _, name := range roomsevents.EventNames {
+	for _, name := range f.roomEventTypes() {
 		call, err := eventsclient.Stream(f.ctx, f.bridge, eventsclient.StreamOptions{
 			EventName: name,
 			Arguments: map[string]any{"resource": resource},
@@ -294,6 +294,39 @@ func (f *FrontEnd) watch(resource string) {
 	f.mu.Lock()
 	f.watching[resource] = calls
 	f.mu.Unlock()
+}
+
+// roomEventTypes is every event type the bridge offers whose subscription
+// names a resource: the built-in three, and each type a page declared. It
+// falls back to the built-in three when the bridge does not list them. Types
+// declared after attach are not picked up until the next attach.
+func (f *FrontEnd) roomEventTypes() []string {
+	res, err := f.bridge.Call(f.ctx, "events/list", map[string]any{})
+	if err != nil {
+		return roomsevents.EventNames
+	}
+	var list struct {
+		Events []struct {
+			Name        string `json:"name"`
+			InputSchema struct {
+				Properties map[string]any `json:"properties"`
+			} `json:"inputSchema"`
+		} `json:"events"`
+	}
+	if json.Unmarshal(res.Raw, &list) != nil {
+		return roomsevents.EventNames
+	}
+	var names []string
+	for _, e := range list.Events {
+		if _, ok := e.InputSchema.Properties["resource"]; ok {
+			names = append(names, e.Name)
+		}
+	}
+	if len(names) == 0 {
+		return roomsevents.EventNames
+	}
+	slices.Sort(names)
+	return names
 }
 
 func (f *FrontEnd) unwatch(resource string) {

@@ -8,8 +8,9 @@ export {
   MAX_EVENT_DATA_BYTES,
   DEFAULT_PAIRING_CODE_TTL_MS,
   DEFAULT_PRESENCE_TTL_MS,
+  META_CONTEXT_HINT,
 } from "./room.js";
-export type { JoinToolRoomOptions, ToolRoom, PairingRequest, PairedByCode, Principal, Presence, ModelContextLike, ToolRefusal } from "./room.js";
+export type { JoinToolRoomOptions, ToolRoom, PageEventDecl, EventRefusal, PairingRequest, PairedByCode, Principal, Presence, ModelContextLike, ToolRefusal } from "./room.js";
 export { joinToolRoomFrom, fetchJoin } from "./join.js";
 export type { JoinResponse, JoinToolRoomFromOptions } from "./join.js";
 export { DEFAULT_SEND_RATE } from "./sender.js";

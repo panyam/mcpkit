@@ -1,0 +1,37 @@
+:root { --ink: #f3e9d2; --dim: #b9a98a; --bg: #1b1712; --tile: #2a241c; --glow: #ffb347; --near: #3a3125; }
+* { box-sizing: border-box; }
+body { margin: 0; padding: 16px; background: radial-gradient(circle at 30% 0%, #2d2418, var(--bg)); color: var(--ink); font: 15px/1.45 Georgia, "Iowan Old Style", serif; min-height: 100vh; }
+header { display: flex; flex-wrap: wrap; align-items: baseline; gap: 12px 24px; }
+h1 { margin: 0; font-size: 26px; letter-spacing: .02em; }
+h2 { margin: 0 0 8px; font-size: 16px; color: var(--dim); font-weight: normal; text-transform: uppercase; letter-spacing: .12em; }
+.who { color: var(--dim); }
+.switch { margin-left: auto; cursor: pointer; }
+#status { color: var(--glow); min-height: 1.4em; margin: 8px 0 12px; }
+main { display: grid; grid-template-columns: minmax(0, 3fr) minmax(220px, 2fr); gap: 16px; }
+#map { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; align-content: start; }
+.tile { position: relative; min-height: 120px; padding: 10px; border: 1px solid #4a3f30; border-radius: 10px; background: var(--tile); color: var(--ink); font: inherit; text-align: left; cursor: pointer; transition: transform .12s, box-shadow .12s; display: flex; flex-direction: column; gap: 4px; }
+.tile:hover { transform: translateY(-2px); box-shadow: 0 6px 18px #0008; }
+.tile.near { background: var(--near); }
+.tile.here { border-color: var(--glow); box-shadow: 0 0 0 2px #ffb34755, 0 0 24px #ffb34733; }
+.icon { font-size: 28px; }
+.name { font-weight: bold; }
+.token { position: absolute; top: 8px; right: 10px; font-size: 12px; color: var(--glow); }
+.reveals { margin: 2px 0 0; padding-left: 16px; font-size: 12px; color: #ffd9a0; font-style: italic; }
+aside { background: #00000033; border: 1px solid #4a3f30; border-radius: 10px; padding: 12px; display: flex; flex-direction: column; max-height: 70vh; }
+#log { list-style: none; margin: 0; padding: 0; overflow-y: auto; flex: 1; }
+#log li { padding: 6px 0; border-bottom: 1px dashed #4a3f30; }
+#log li.gm { color: var(--glow); }
+#log li.gm::before { content: "🕯️ "; }
+#log li.you { color: var(--ink); }
+#log li.world { color: var(--dim); font-style: italic; }
+.carry, .presence { margin: 8px 0 0; color: var(--dim); font-size: 13px; }
+footer { margin-top: 16px; display: flex; flex-wrap: wrap; gap: 12px; align-items: start; }
+footer form { display: flex; gap: 6px; }
+#ask-form { flex: 1; min-width: 260px; }
+#ask-form input { flex: 1; }
+input { background: #120f0b; color: var(--ink); border: 1px solid #4a3f30; border-radius: 6px; padding: 8px 10px; font: inherit; }
+button { font: inherit; }
+footer button { background: var(--glow); color: #2a1a00; border: 0; border-radius: 6px; padding: 8px 14px; cursor: pointer; }
+details { width: 100%; color: var(--dim); font-size: 13px; }
+code { color: var(--ink); }
+@media (max-width: 760px) { main { grid-template-columns: 1fr; } #map { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
