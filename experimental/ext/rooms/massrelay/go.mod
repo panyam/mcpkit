@@ -2,11 +2,6 @@ module github.com/panyam/mcpkit/experimental/ext/rooms/massrelay
 
 go 1.26.9
 
-replace (
-	github.com/panyam/mcpkit => ../../../..
-	github.com/panyam/mcpkit/experimental/ext/rooms => ..
-)
-
 require (
 	github.com/gorilla/websocket v1.5.3
 	github.com/panyam/massrelay v0.3.7
