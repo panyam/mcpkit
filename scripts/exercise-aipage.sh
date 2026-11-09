@@ -44,7 +44,7 @@ cat <<STEPS
        "env": {"ROOMS_BRIDGE_TOKEN": "player:alice"}}}}
 5. Start Claude Code:            claude --dangerously-load-development-channels server:rooms
    Tell it: "Be the game master of lanternfall:demo."
-6. On the page, turn on "Let my game master drive this tab", walk around, then ask something in the box.
+6. On the page, turn on "Let my AI game master see and change this map", walk around, then ask something in the box.
    Claude Code gets your question as a room.ask channel message and answers on the map.
 Or a custom agent instead of Claude Code:  (cd examples/rooms/lanternfall && make gm)
 STEPS

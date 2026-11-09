@@ -25,7 +25,7 @@ go run .                                   # or: make run
 
 Open <http://localhost:8080/signin?as=alice&game=demo>. Walk to a neighbouring place by clicking it.
 Click where you stand to search it. Rest the pointer on a place to wonder about it. Then turn on
-**Let my game master drive this tab** and bring in an agent.
+**Let my AI game master see and change this map** and bring in an agent.
 
 **Claude Code**, through the `rooms-channel` front end, which turns the player's events into channel
 messages. Install it from this tree, so it subscribes to the page's declared events:

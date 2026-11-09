@@ -183,7 +183,7 @@ function updateHint(): void {
   } else if (!allowed) {
     hint.hidden = false;
     hint.innerHTML =
-      "<strong>Your game master is here.</strong> Turn on <em>Let my game master drive this tab</em> so it can hear you and change your map.";
+      "<strong>Your game master is here.</strong> Turn on <em>Let my AI game master see and change this map</em> so it can hear you and act on your map.";
   } else {
     hint.hidden = true;
   }
