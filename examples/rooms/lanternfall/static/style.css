@@ -53,3 +53,26 @@ code { color: var(--ink); }
 #feed .tag.medium { border-color: #c9a24a; color: #ffd27a; }
 #feed .tag.low { border-color: #5a6d5a; color: #a9c2a9; }
 #feed .tag.acting { border-color: var(--glow); color: var(--glow); }
+.context { margin-top: 16px; background: #00000033; border: 1px solid #4a3f30; border-radius: 10px; padding: 10px 12px; }
+.context .sub { text-transform: none; letter-spacing: 0; font-size: 12px; margin-left: 6px; }
+.ctx-status { margin: 0 0 6px; color: var(--glow); font-size: 13px; }
+.ctx-bar { height: 8px; background: #120f0b; border: 1px solid #4a3f30; border-radius: 999px; overflow: hidden; }
+#ctx-fill { height: 100%; width: 0; background: linear-gradient(90deg, #7fd1c7, var(--glow)); transition: width .3s; }
+#ctx-fill.over { background: #e0664b; }
+.ctx-meta { margin: 6px 0; color: var(--dim); font-size: 12px; }
+#ctx-system { color: var(--dim); font-size: 12px; margin-bottom: 6px; }
+#ctx-system pre { white-space: pre-wrap; font: 12px/1.5 ui-monospace, Menlo, monospace; color: var(--ink); background: #120f0b; padding: 8px; border-radius: 6px; }
+#ctx { list-style: none; margin: 0; padding: 0; max-height: 320px; overflow-y: auto; font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; }
+#ctx li { display: grid; grid-template-columns: 92px 1fr 44px; gap: 8px; padding: 3px 0; border-bottom: 1px dotted #3a3125; }
+#ctx .kind { font-size: 11px; text-align: center; border-radius: 999px; border: 1px solid #5a4d3a; align-self: start; }
+#ctx .txt { white-space: pre-wrap; word-break: break-word; max-height: 4.5em; overflow: hidden; }
+#ctx .tok { color: #7d6f57; text-align: right; }
+#ctx li.question .kind { border-color: #c9a24a; color: #ffd27a; }
+#ctx li.event .kind { border-color: #7fd1c7; color: #7fd1c7; }
+#ctx li.model .kind { border-color: var(--glow); color: var(--glow); }
+#ctx li.tool_call .kind, #ctx li.tool_result .kind { color: var(--dim); }
+#ctx li.summary { background: #ffb34714; }
+#ctx li.summary .kind { border-color: #e0664b; color: #ff9d85; }
+#ctx li.compaction { display: block; text-align: center; color: #ff9d85; font-style: italic; border-bottom: 1px dashed #e0664b; }
+#ctx li { cursor: pointer; }
+#ctx li.open .txt { max-height: none; }

@@ -331,6 +331,83 @@ async function start(): Promise<void> {
   (window as any).lanternfall = { room, state };
 }
 
+interface CtxEntry {
+  kind: string;
+  text: string;
+  tokens: number;
+}
+
+const KIND_LABEL: Record<string, string> = {
+  question: "question",
+  event: "event",
+  summary: "summary",
+  model: "model says",
+  tool_call: "tool call",
+  tool_result: "tool result",
+};
+
+/**
+ * Follows the game master's context stream, which the LangGraph game master
+ * (make gm) serves on localhost. Claude Code keeps its context to itself, so
+ * with it the panel only says so.
+ */
+function followContext(): void {
+  const port = new URLSearchParams(location.search).get("gm") || "8091";
+  const url = `http://${location.hostname}:${port}/context`;
+  const status = $("#ctx-status");
+  const noStream = () => {
+    status.textContent =
+      `No context stream at ${url}. It appears when the LangGraph game master runs (make gm). ` +
+      "Claude Code keeps its own context, so with Claude Code this panel stays empty.";
+  };
+  noStream();
+  let seen = false;
+  const es = new EventSource(url);
+  es.onerror = () => {
+    if (!seen) return noStream();
+    status.textContent = "The game master's stream ended. Below is the last context it sent; it reconnects when the game master runs again.";
+  };
+  es.onmessage = (msg) => {
+    seen = true;
+    const s = JSON.parse(msg.data);
+    status.textContent = `${s.model} for ${s.player}: ${s.status}. ${s.turns} turn${s.turns === 1 ? "" : "s"} so far.`;
+    const pct = Math.min(100, Math.round((s.tokens / s.budget) * 100));
+    const fill = $("#ctx-fill");
+    fill.style.width = `${pct}%`;
+    fill.classList.toggle("over", s.tokens > s.budget);
+    const last = s.compactions[s.compactions.length - 1];
+    $("#ctx-meta").textContent =
+      `≈${s.tokens} of ${s.budget} tokens in ${s.entries.length} rows, plus a ${s.systemTokens}-token system prompt. ` +
+      (last
+        ? `Compacted ${s.compactions.length} time${s.compactions.length === 1 ? "" : "s"}; the last folded ${last.folded} messages (≈${last.tokensBefore} tokens) into the summary at the top.`
+        : "Not compacted yet: it compacts when the conversation passes the budget.");
+    $("#ctx-system-text").textContent = s.system;
+    const list = $("#ctx");
+    list.replaceChildren();
+    if (s.compactions.length) {
+      const li = document.createElement("li");
+      li.className = "compaction";
+      li.textContent = `⤓ ${last.folded} earlier messages were compacted into this summary`;
+      list.append(li);
+    }
+    for (const e of s.entries as CtxEntry[]) {
+      const li = document.createElement("li");
+      li.className = e.kind;
+      li.dataset.testid = `ctx-${e.kind}`;
+      li.innerHTML = '<span class="kind"></span><span class="txt"></span><span class="tok"></span>';
+      li.querySelector(".kind")!.textContent = KIND_LABEL[e.kind] ?? e.kind;
+      li.querySelector(".txt")!.textContent = e.text;
+      li.querySelector(".tok")!.textContent = `≈${e.tokens}`;
+      li.title = "Click to show all of it";
+      li.addEventListener("click", () => li.classList.toggle("open"));
+      list.append(li);
+    }
+    list.scrollTop = list.scrollHeight;
+  };
+}
+
+followContext();
+
 start().catch((err) => {
   $("#status").textContent = `Could not join: ${err.message}`;
 });

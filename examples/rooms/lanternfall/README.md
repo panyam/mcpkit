@@ -58,16 +58,17 @@ type's context hint from `events/list` and follows it, printing what it decided:
 
 ```text
 [gm] context hints: item.found=high, place.examined=low, player.moved=medium
-[gm] player.moved is medium priority: kept as context
+[gm] player.moved is medium priority: added to the context
 [gm] item.found is high priority: reacting now
 [gm] answered with lanternfall_look, lanternfall_reveal, lanternfall_narrate
-[gm] place.examined is low priority: kept as context, keeping only the latest
+[gm] compacted 13 messages (~644 tokens) into a summary
+[gm] place.examined is low priority: added to the context, replacing an unseen older one
 [gm] alice asks: What does the ledger page say?
 ```
 
 A high-priority event gets a reaction at once, unasked. A `last-wins` aggregate keeps only the newest
-event of its kind, and `session` retention keeps an event as context across answers. A question
-asked from the page is always answered.
+event of its kind, and `session` retention keeps the latest event of its kind through compaction. A
+question asked from the page is always answered. The context panel below shows all of it.
 
 To watch events drive it, turn the switch on and walk Gate → Market → Clocktower → Old Archive, then
 click the Archive to search it. The torn ledger page is high priority, so the game master narrates
@@ -79,6 +80,40 @@ Bob's tab is his own map. Alice's agent cannot drive it unless Bob accepts that 
 
 The bearer token `player:<name>` acts for `<name>`. That is the demo's whole auth, so it is for
 localhost only.
+
+## Who decides what
+
+Three layers, and only one of them is the model:
+
+- **The page** is ordinary JavaScript. It draws the map, owns the twelve places and their
+  descriptions, walks the player between neighbours, finds an item when the player searches where
+  one is hidden, and decides when to emit an event. Each tool's handler says what that tool does to
+  the screen.
+- **Claude** decides everything the game master does: whether to call a tool at all, which one,
+  and with what. Every orange line in the story, every italic detail on a tile, and every item
+  hidden after the start come from it.
+- **The harness** (`web/src/agent/gm.ts`, or Claude Code) decides what reaches Claude and when.
+  The LangGraph one follows each event type's context hint: a high-priority event starts a turn,
+  the rest wait in the conversation. Claude Code hands every event to Claude as a channel message.
+
+## Watching the game master's context
+
+The LangGraph game master keeps one conversation for the whole game, and serves it on
+`http://localhost:8091/context`. The page's **Game master's context** panel shows exactly what the
+model is sent, oldest first: each `[event …]` and `[question]` from the page, what the model said,
+each tool call and its result, an estimate of the tokens against the budget, and the system prompt.
+
+- A low-priority hover replaces an older hover the model has not seen yet (`last-wins`). The model
+  never sees history it was already shown change.
+- A high-priority event, such as a found item, starts a turn at once.
+- When the conversation passes its budget (2500 estimated tokens, `LANTERNFALL_CONTEXT_BUDGET`),
+  the game master asks the model to summarize it and carries on from the summary. The panel shows
+  how many messages were folded. The latest `player.moved` survives the summary because its hint
+  says `retention: session`, so the model still knows where the player is.
+
+A second game master for another player serves on another port: `--context-port 8092`, and open
+that player's page with `?gm=8092`. Claude Code keeps its own context, so with it the panel stays
+empty.
 
 ## What the page shows you
 

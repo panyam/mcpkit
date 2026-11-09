@@ -29,6 +29,14 @@
       <p class="presence">Game master: <span id="presence" data-testid="presence">none connected yet</span></p>
     </aside>
   </main>
+  <section id="context" class="context" data-testid="context" aria-label="Game master's context">
+    <h2>Game master's context <span class="sub">exactly what the model is sent each turn, oldest first</span></h2>
+    <p id="ctx-status" class="ctx-status" data-testid="ctx-status">Looking for a game master's context stream…</p>
+    <div class="ctx-bar" title="Estimated tokens in the conversation, against the budget that triggers compaction"><div id="ctx-fill"></div></div>
+    <p id="ctx-meta" class="ctx-meta" data-testid="ctx-meta"></p>
+    <details id="ctx-system"><summary>System prompt (sent before every turn, not counted against the budget)</summary><pre id="ctx-system-text"></pre></details>
+    <ol id="ctx" data-testid="ctx"></ol>
+  </section>
   <footer>
     <form id="ask-form"><input id="ask" data-testid="ask" placeholder="Ask the game master… (what's behind the clocktower door?)" autocomplete="off"><button>Ask</button></form>
     <form id="code-form"><input id="code" data-testid="code" placeholder="Another player's agent code" autocomplete="off" size="14"><button>Accept</button></form>

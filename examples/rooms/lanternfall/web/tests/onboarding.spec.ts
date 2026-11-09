@@ -14,6 +14,7 @@ test("a player with no game master is told how to start one", async ({ browser }
   await expect(hint).toContainText("make gm");
   await expect(alice.getByTestId("tile-gate")).toContainText("click to search");
   await expect(alice.getByTestId("tile-market")).toContainText("click to walk here");
+  await expect(alice.getByTestId("ctx-status")).toContainText("No context stream");
 
   await alice.getByTestId("ask").fill("Anyone there?");
   await alice.getByTestId("ask").press("Enter");
