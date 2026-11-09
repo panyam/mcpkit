@@ -5,7 +5,7 @@ go 1.26.9
 require (
 	github.com/panyam/mcpkit v0.8.16
 	github.com/panyam/mcpkit/ext/auth v0.0.0
-	github.com/panyam/oneauth v0.3.0
+	github.com/panyam/oneauth v0.3.2
 	github.com/stretchr/testify v1.12.1
 )
 
