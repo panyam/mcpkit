@@ -3,9 +3,9 @@ module github.com/panyam/mcpkit/cmd/mcpskills
 go 1.26.9
 
 require (
-	github.com/panyam/mcpkit v0.8.19
-	github.com/panyam/mcpkit/cmd/common v0.8.19
-	github.com/panyam/mcpkit/ext/skills v0.8.19
+	github.com/panyam/mcpkit v0.8.20
+	github.com/panyam/mcpkit/cmd/common v0.8.20
+	github.com/panyam/mcpkit/ext/skills v0.8.20
 	github.com/spf13/cobra v1.10.2
 )
 

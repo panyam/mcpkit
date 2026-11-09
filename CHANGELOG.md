@@ -9,6 +9,15 @@ Releases before 0.3.0 were tag-only and are not back-filled here.
 
 ## [Unreleased]
 
+## [0.8.20] - 2026-11-09
+
+Full write-up: [`docs/releases/v0.8.20.md`](docs/releases/v0.8.20.md).
+
+### Changed
+- **CI jobs read the repository only**: `test.yml` grants `contents: read` at the top level
+  (PR 1689).
+- **Lanternfall's sign-in cookie sets `Secure` over https** (PR 1689).
+
 ## [0.8.19] - 2026-11-09
 
 Full write-up: [`docs/releases/v0.8.19.md`](docs/releases/v0.8.19.md).
