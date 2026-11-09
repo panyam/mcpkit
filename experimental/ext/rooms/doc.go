@@ -21,7 +21,8 @@
 // Subjects on both sides come from validated tokens, the relay's for pages and
 // the MCP server's auth for agents.
 //
-// RoomTransport is the relay. memroom implements it in memory; a massrelay
-// adapter is planned as its own module, so this one never depends on
-// massrelay.
+// RoomTransport is the relay. memroom implements it in memory, and the
+// massrelay module implements it over a real relay, so this one never depends
+// on massrelay. JoinHandler is the endpoint a page asks for its room and
+// relay token, and the relay's module mints the token.
 package rooms

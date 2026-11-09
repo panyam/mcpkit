@@ -7,6 +7,8 @@ import { Client, StreamableHTTPClientTransport } from "@modelcontextprotocol/cli
 /** What the Go teststack prints: a relay, the bridge's MCP endpoint, tokens. */
 export interface StackInfo {
   relay: string;
+  /** The join endpoint; it reads `user` and `room` from the query. */
+  join: string;
   mcp: string;
   pageTokens: Record<string, string>;
   agentTokens: Record<string, string>;

@@ -111,6 +111,14 @@ export interface JoinToolRoomOptions {
    * headers.
    */
   token?: string;
+  /**
+   * Returns a fresh relay token. When the relay reports when the page's token
+   * expires, the page calls this ahead of each expiry and hands the relay the
+   * new token over the open connection, so it stays in the room with the same
+   * id. Without it the relay ends the connection at expiry and `closed`
+   * resolves. `joinToolRoomFrom` sets it.
+   */
+  getToken?: () => string | Promise<string>;
   /** The name other peers see. Pairing never reads it. */
   username?: string;
   /**
@@ -331,6 +339,7 @@ class Page implements ToolRoom {
       const WebSocketImpl = this.opts.WebSocket;
       this.client = new CollabClient({
         token: this.opts.token,
+        getToken: this.opts.getToken,
         // A reconnect would rejoin under a new peer id, which no pairing
         // knows, so a dropped or evicted page ends and `closed` resolves
         // instead.

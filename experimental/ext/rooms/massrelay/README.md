@@ -10,6 +10,26 @@ later, which address replies the same way.
 go get github.com/panyam/mcpkit/experimental/ext/rooms/massrelay
 ```
 
+## Local: a relay, its signer and the join endpoint in one
+
+A web app whose pages agents drive usually wants the relay in its own process, with tokens it mints
+itself. `NewLocal` builds that relay, requiring a token on every connection and accepting only its
+`Signer`'s:
+
+```go
+local, err := massrelay.NewLocal(massrelay.LocalOptions{Origins: []string{"app.example.com"}})
+bridge := rooms.New(local.Transport())
+mux.Handle("/relay/", http.StripPrefix("/relay", local.Relay()))
+mux.Handle("POST /rooms/join", local.JoinHandler(rooms.JoinOptions{Subject: userOf, RoomOf: roomOf, RelayURL: "/relay"}))
+```
+
+`Signer` mints HS256 tokens whose `rooms` claim names one room, and `Signer.Authenticator` is the
+relay authenticator that accepts them, also for a page's in-session `ReAuth`. With no key it
+generates one per process, so every page joins again after a restart. Pass `SignerOptions.Key` to
+keep tokens valid across restarts or replicas. `NewLocal` ignores the `RELAY_*` auth, admin and
+origin variables a standalone relay reads, and sets no connection rate limits. Put one in front when
+it faces the internet. The join endpoint is described in the bridge's README.
+
 ## Embedded: the relay runs in your process
 
 When one server hosts the relay and the bridge, join through the `CollabService` directly:
