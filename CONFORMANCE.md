@@ -30,7 +30,7 @@ Needs Node.js 22+ and a clone of `modelcontextprotocol/conformance` at `../conf-
 ---
 
 <!-- begin:generated -->
-<!-- generated against upstream-conformance@7169291ec0b68eb370fddcd9947313ab0d5e4156 · protocol 2025-11-25 · regenerate via scripts/refresh-conformance.sh -->
+<!-- generated against upstream-conformance@c37eec888e1c6ff140af79987a40008548b7cc5f · protocol 2025-11-25 · regenerate via scripts/refresh-conformance.sh -->
 
 ## Conformance Summary
 
@@ -73,7 +73,7 @@ _Scenarios authored by this project, typically in the `panyam/mcpconformance` fo
 <sup>3</sup> 36 pass / 0 fail / 1 warn across all 14 upstream input-required-result-* scenarios, against cmd/testserver at upstream a983ba9. The fixture is cmd/testserver, not examples/mrtr: the scenarios call test_input_required_result_* tools that only cmd/testserver/conformance_input_required.go registers. Same dead-env-var history as testconf-tasks-v2 (MRTR_SERVER_URL / MRTR_SERVER_CMD were read by nothing upstream). Upstream's negative-mrtr suite still runs after the gate; it spawns its own broken fixture and grades the harness, not mcpkit.
 <sup>4</sup> Same scenario set tier-check's --client-cmd runs. Expected failures (extension + draft + backcompat categories, none tier-scored) live in conformance/baseline.yml.
 <sup>5</sup> 30/30 as of upstream 0.2.0-alpha.9 (#376 fixed the former array-vs-object requiredCapabilities test).
-<sup>6</sup> 45 pass / 0 fail / 0 warn across the three upstream server scenarios (enumeration 32, manifest 6, directory 7), against examples/skills at upstream 7169291. Retargeted from the panyam/mcpconformance fork branch chore/sep-2640-yaml once PR 330 merged to upstream main; the scenario names did not change, so the move was a path swap. Gating since the retarget — it was INFO only because the fork branch was mid-WG-iteration. Upstream also registers five client-side skills scenarios (sep-2640-client-no-prefetch, sep-2640-client-verify-{digest,size,frontmatter}) that this target does not run.
+<sup>6</sup> 45 pass / 0 fail / 0 warn across the three upstream server scenarios (enumeration 32, manifest 6, directory 7), against examples/skills at upstream c37eec8 (rerun 2026-11-10). Retargeted from the panyam/mcpconformance fork branch chore/sep-2640-yaml once PR 330 merged to upstream main; the scenario names did not change, so the move was a path swap. Gating since the retarget — it was INFO only because the fork branch was mid-WG-iteration. Upstream also registers four client-side skills scenarios (sep-2640-client-no-prefetch, sep-2640-client-verify-{digest,size,frontmatter}) that this target does not run.
 <sup>7</sup> 130 pass / 0 fail / 11 warn across five scenarios, measured 2026-11-08 against examples/events/kitchen-sink at 1664 with the fork at 76fef32 (hand-recorded from the runner's own summaries, so re-run before trusting it): events-discovery 14/14, events-poll 33/33, events-push 28/28, events-webhook 30/30, events-webhook-delivery 25/25. The webhook-id-per-message row came in with the re-pin to b08e4f9d and was red until 1664, which stopped sending the eventId as webhook-id. The three Mcp-Name rows (missing, mismatch, list exempt) came in with the re-pin to 2ec39b9c and were red until 1570. Since 1529 the cross-tenant row unsubscribes by key, the 410 row also grades that the subscription survives, and lastError is graded off a refresh after the 413 probe; since 1505 discovery grades list-changed-notification over subscriptions/listen, driving the catalog control; since 1417 push grades stream-mode-unsupported on digest.ready, a poll-only type; since 1465 push grades the four removal and schema-change rows through the catalog control's remove, retype and extend. kitchen-sink passes all of them. The fixture is spawned with --conformance-events, which registers thirteen diagnostic controls the scenarios drive, including a restart that rebuilds the server over the same subscription store and one that permits the harness's loopback receiver past the callback guards after the SSRF rows are graded; without them rows describe conditions a harness cannot provoke and report untestable, which upstream's policy renders red. See examples/CONVENTIONS.md § Conformance fixtures. Proposed upstream as a draft in modelcontextprotocol/conformance 521 and tracked on the fork branch until it lands. Check IDs are sep-3415-*: MCP Events is SEP-3415, a draft in modelcontextprotocol/modelcontextprotocol. Every row quotes SEP-3415 at b08e4f9d with a per-row section url (1502, 1567, 1664). INFO because the SEP is still a draft and its text can move. Every graded row is green since 1570; subscribe-auth-required and subscribe-refresh-replaces-secret, which no harness can grade over the wire, are excluded upstream. Thirteen divergences found in total, all closed (1379, 1381, 1416, 1432, 1433, 1434, and endpoint verification in 1444). Set tracked in 1425.
 <sup>8</sup> Four client scenarios graded against the Go events client SDK through experimental/ext/events/clients/go/cmd/conformance-client, measured 2026-10-20 at 1570 with the fork at 095a156, on both lifecycles: events-client-poll 10/10 on 2026-07-28 (list_changed over subscriptions/listen since 1505, Mcp-Name set and Base64-encoded since 1570) and 7/7 on 2025-11-25 (the listen opt-in and Mcp-Name rows do not apply there), events-client-push 3/3 (dead-stream reconnect since 1503), events-client-webhook 3/3, events-client-no-extension 1/1. The harness plays the events server and grades what the client sends. The driver only calls what the SDK offers, so a red row is an SDK gap. Proposed upstream as a draft in modelcontextprotocol/conformance 541, stacked on 521. Re-measured 2026-10-14 after the rows were re-quoted against SEP-3415 (1502), and 2026-11-08 with the fork at c8625de after the re-pin to b08e4f9d (1664), both with the same results. The receiver's per-subscription eventId dedup that b08e4f9d adds is excluded, since what reaches the application is not observable over the wire. INFO for the same reason as testconf-events: the SEP is still a draft. `make conf-events-setup` creates this checkout as a worktree of the server one.
 <sup>9</sup> Two scenarios, measured 2026-11-08 against examples/agents/discovery --conformance-agents: sep-9998-agents-discovery 28/28 and sep-9998-agents-list-changed 4/4. Rows quote agents-wg#22 at its merge commit 137d88bd, checked by script. The text is identical to head 9b16840e, which the rows quoted until 1673. The yaml declares 49 rows, 31 graded and 18 excluded (host obligations, rules needing two authorization contexts, and step-up, a MAY needing a credential the harness can raise). Breaking the fixture turns the matching rows red: a visible hidden agent fails two discovery rows, an unsent list_changed fails one list-changed row, a wrong agent_not_found reason fails one, and an omitted ttlMs fails two, since the draft CacheableResult requires it. The fixture flag serves anonymously, pages one agent at a time, adds an agent naming a missing tool, and registers agents_conformance_fixture and agents_conformance_add_agent (see examples/CONVENTIONS.md § Conformance fixtures). Check IDs carry the sep-9998 placeholder because the proposal lives in the Agents IG repository and has no spec PR number yet. INFO for that reason. Runs with --force, since the extension is not on the spec timeline. Proposed upstream as modelcontextprotocol/conformance 556. The -32021 refusal of an undeclared client (1673) has no row yet, because the proposal text does not state it.
@@ -127,7 +127,7 @@ Per-SEP breakdown of upstream traceability — what is exercised, what is intent
 
 **Tested (1)**
 
-- [`sep-837-application-type-present`](https://github.com/modelcontextprotocol/conformance/blob/7169291ec0b68eb370fddcd9947313ab0d5e4156/src/seps/sep-837.yaml)
+- [`sep-837-application-type-present`](https://github.com/modelcontextprotocol/conformance/blob/c37eec888e1c6ff140af79987a40008548b7cc5f/src/seps/sep-837.yaml)
 
 <a id="sep-837-excluded"></a>
 
@@ -152,7 +152,7 @@ _None._
 
 **Tested (1)**
 
-- [`sep-2106-no-network-ref-deref`](https://github.com/modelcontextprotocol/conformance/blob/7169291ec0b68eb370fddcd9947313ab0d5e4156/src/seps/sep-2106.yaml)
+- [`sep-2106-no-network-ref-deref`](https://github.com/modelcontextprotocol/conformance/blob/c37eec888e1c6ff140af79987a40008548b7cc5f/src/seps/sep-2106.yaml)
 
 <a id="sep-2106-excluded"></a>
 
@@ -177,8 +177,8 @@ _None._
 
 **Tested (2)**
 
-- [`sep-2164-no-empty-contents`](https://github.com/modelcontextprotocol/conformance/blob/7169291ec0b68eb370fddcd9947313ab0d5e4156/src/seps/sep-2164.yaml)
-- [`sep-2164-error-code`](https://github.com/modelcontextprotocol/conformance/blob/7169291ec0b68eb370fddcd9947313ab0d5e4156/src/seps/sep-2164.yaml)
+- [`sep-2164-no-empty-contents`](https://github.com/modelcontextprotocol/conformance/blob/c37eec888e1c6ff140af79987a40008548b7cc5f/src/seps/sep-2164.yaml)
+- [`sep-2164-error-code`](https://github.com/modelcontextprotocol/conformance/blob/c37eec888e1c6ff140af79987a40008548b7cc5f/src/seps/sep-2164.yaml)
 
 <a id="sep-2164-excluded"></a>
 
@@ -200,7 +200,7 @@ _None._
 
 **Tested (1)**
 
-- [`sep-2207-client-metadata-grant-types`](https://github.com/modelcontextprotocol/conformance/blob/7169291ec0b68eb370fddcd9947313ab0d5e4156/src/seps/sep-2207.yaml)
+- [`sep-2207-client-metadata-grant-types`](https://github.com/modelcontextprotocol/conformance/blob/c37eec888e1c6ff140af79987a40008548b7cc5f/src/seps/sep-2207.yaml)
 
 <a id="sep-2207-excluded"></a>
 
@@ -224,24 +224,24 @@ _None._
 
 **Tested (18)**
 
-- [`sep-2243-client-includes-standard-headers`](https://github.com/modelcontextprotocol/conformance/blob/7169291ec0b68eb370fddcd9947313ab0d5e4156/src/seps/sep-2243.yaml)
-- [`sep-2243-header-name-case-insensitive`](https://github.com/modelcontextprotocol/conformance/blob/7169291ec0b68eb370fddcd9947313ab0d5e4156/src/seps/sep-2243.yaml)
-- [`sep-2243-server-reject-invalid-headers`](https://github.com/modelcontextprotocol/conformance/blob/7169291ec0b68eb370fddcd9947313ab0d5e4156/src/seps/sep-2243.yaml)
-- [`sep-2243-server-reject-error-code`](https://github.com/modelcontextprotocol/conformance/blob/7169291ec0b68eb370fddcd9947313ab0d5e4156/src/seps/sep-2243.yaml)
-- [`sep-2243-client-supports-custom-headers`](https://github.com/modelcontextprotocol/conformance/blob/7169291ec0b68eb370fddcd9947313ab0d5e4156/src/seps/sep-2243.yaml)
-- [`sep-2243-client-mirrors-designated-params`](https://github.com/modelcontextprotocol/conformance/blob/7169291ec0b68eb370fddcd9947313ab0d5e4156/src/seps/sep-2243.yaml)
-- [`sep-2243-x-mcp-header-not-empty`](https://github.com/modelcontextprotocol/conformance/blob/7169291ec0b68eb370fddcd9947313ab0d5e4156/src/seps/sep-2243.yaml)
-- [`sep-2243-x-mcp-header-charset`](https://github.com/modelcontextprotocol/conformance/blob/7169291ec0b68eb370fddcd9947313ab0d5e4156/src/seps/sep-2243.yaml)
-- [`sep-2243-x-mcp-header-unique`](https://github.com/modelcontextprotocol/conformance/blob/7169291ec0b68eb370fddcd9947313ab0d5e4156/src/seps/sep-2243.yaml)
-- [`sep-2243-x-mcp-header-primitive-only`](https://github.com/modelcontextprotocol/conformance/blob/7169291ec0b68eb370fddcd9947313ab0d5e4156/src/seps/sep-2243.yaml)
-- [`sep-2243-client-reject-invalid-tool`](https://github.com/modelcontextprotocol/conformance/blob/7169291ec0b68eb370fddcd9947313ab0d5e4156/src/seps/sep-2243.yaml)
-- [`sep-2243-client-encode-values`](https://github.com/modelcontextprotocol/conformance/blob/7169291ec0b68eb370fddcd9947313ab0d5e4156/src/seps/sep-2243.yaml)
-- [`sep-2243-client-base64-unsafe`](https://github.com/modelcontextprotocol/conformance/blob/7169291ec0b68eb370fddcd9947313ab0d5e4156/src/seps/sep-2243.yaml)
-- [`sep-2243-server-decode-base64`](https://github.com/modelcontextprotocol/conformance/blob/7169291ec0b68eb370fddcd9947313ab0d5e4156/src/seps/sep-2243.yaml)
-- [`sep-2243-client-omit-null`](https://github.com/modelcontextprotocol/conformance/blob/7169291ec0b68eb370fddcd9947313ab0d5e4156/src/seps/sep-2243.yaml)
-- [`sep-2243-server-reject-invalid-param-chars`](https://github.com/modelcontextprotocol/conformance/blob/7169291ec0b68eb370fddcd9947313ab0d5e4156/src/seps/sep-2243.yaml)
-- [`sep-2243-server-validate-param-match`](https://github.com/modelcontextprotocol/conformance/blob/7169291ec0b68eb370fddcd9947313ab0d5e4156/src/seps/sep-2243.yaml)
-- [`sep-2243-server-reject-param-mismatch`](https://github.com/modelcontextprotocol/conformance/blob/7169291ec0b68eb370fddcd9947313ab0d5e4156/src/seps/sep-2243.yaml)
+- [`sep-2243-client-includes-standard-headers`](https://github.com/modelcontextprotocol/conformance/blob/c37eec888e1c6ff140af79987a40008548b7cc5f/src/seps/sep-2243.yaml)
+- [`sep-2243-header-name-case-insensitive`](https://github.com/modelcontextprotocol/conformance/blob/c37eec888e1c6ff140af79987a40008548b7cc5f/src/seps/sep-2243.yaml)
+- [`sep-2243-server-reject-invalid-headers`](https://github.com/modelcontextprotocol/conformance/blob/c37eec888e1c6ff140af79987a40008548b7cc5f/src/seps/sep-2243.yaml)
+- [`sep-2243-server-reject-error-code`](https://github.com/modelcontextprotocol/conformance/blob/c37eec888e1c6ff140af79987a40008548b7cc5f/src/seps/sep-2243.yaml)
+- [`sep-2243-client-supports-custom-headers`](https://github.com/modelcontextprotocol/conformance/blob/c37eec888e1c6ff140af79987a40008548b7cc5f/src/seps/sep-2243.yaml)
+- [`sep-2243-client-mirrors-designated-params`](https://github.com/modelcontextprotocol/conformance/blob/c37eec888e1c6ff140af79987a40008548b7cc5f/src/seps/sep-2243.yaml)
+- [`sep-2243-x-mcp-header-not-empty`](https://github.com/modelcontextprotocol/conformance/blob/c37eec888e1c6ff140af79987a40008548b7cc5f/src/seps/sep-2243.yaml)
+- [`sep-2243-x-mcp-header-charset`](https://github.com/modelcontextprotocol/conformance/blob/c37eec888e1c6ff140af79987a40008548b7cc5f/src/seps/sep-2243.yaml)
+- [`sep-2243-x-mcp-header-unique`](https://github.com/modelcontextprotocol/conformance/blob/c37eec888e1c6ff140af79987a40008548b7cc5f/src/seps/sep-2243.yaml)
+- [`sep-2243-x-mcp-header-primitive-only`](https://github.com/modelcontextprotocol/conformance/blob/c37eec888e1c6ff140af79987a40008548b7cc5f/src/seps/sep-2243.yaml)
+- [`sep-2243-client-reject-invalid-tool`](https://github.com/modelcontextprotocol/conformance/blob/c37eec888e1c6ff140af79987a40008548b7cc5f/src/seps/sep-2243.yaml)
+- [`sep-2243-client-encode-values`](https://github.com/modelcontextprotocol/conformance/blob/c37eec888e1c6ff140af79987a40008548b7cc5f/src/seps/sep-2243.yaml)
+- [`sep-2243-client-base64-unsafe`](https://github.com/modelcontextprotocol/conformance/blob/c37eec888e1c6ff140af79987a40008548b7cc5f/src/seps/sep-2243.yaml)
+- [`sep-2243-server-decode-base64`](https://github.com/modelcontextprotocol/conformance/blob/c37eec888e1c6ff140af79987a40008548b7cc5f/src/seps/sep-2243.yaml)
+- [`sep-2243-client-omit-null`](https://github.com/modelcontextprotocol/conformance/blob/c37eec888e1c6ff140af79987a40008548b7cc5f/src/seps/sep-2243.yaml)
+- [`sep-2243-server-reject-invalid-param-chars`](https://github.com/modelcontextprotocol/conformance/blob/c37eec888e1c6ff140af79987a40008548b7cc5f/src/seps/sep-2243.yaml)
+- [`sep-2243-server-validate-param-match`](https://github.com/modelcontextprotocol/conformance/blob/c37eec888e1c6ff140af79987a40008548b7cc5f/src/seps/sep-2243.yaml)
+- [`sep-2243-server-reject-param-mismatch`](https://github.com/modelcontextprotocol/conformance/blob/c37eec888e1c6ff140af79987a40008548b7cc5f/src/seps/sep-2243.yaml)
 
 <a id="sep-2243-excluded"></a>
 
@@ -258,8 +258,8 @@ _None._
 
 **Untested (2)**
 
-- [`sep-2243-server-not-expect-null`](https://github.com/modelcontextprotocol/conformance/blob/7169291ec0b68eb370fddcd9947313ab0d5e4156/src/seps/sep-2243.yaml) — Parameter value is null or omitted: Server MUST NOT expect the header.
-- [`sep-2243-server-reject-missing-required`](https://github.com/modelcontextprotocol/conformance/blob/7169291ec0b68eb370fddcd9947313ab0d5e4156/src/seps/sep-2243.yaml) — Required parameter is omitted: Server MUST reject with JSON-RPC error.
+- [`sep-2243-server-not-expect-null`](https://github.com/modelcontextprotocol/conformance/blob/c37eec888e1c6ff140af79987a40008548b7cc5f/src/seps/sep-2243.yaml) — Parameter value is null or omitted: Server MUST NOT expect the header.
+- [`sep-2243-server-reject-missing-required`](https://github.com/modelcontextprotocol/conformance/blob/c37eec888e1c6ff140af79987a40008548b7cc5f/src/seps/sep-2243.yaml) — Required parameter is omitted: Server MUST reject with JSON-RPC error.
 
 ### SEP-2260
 
@@ -300,23 +300,23 @@ _None._
 
 **Tested (17)**
 
-- [`sep-2322-result-type-included`](https://github.com/modelcontextprotocol/conformance/blob/7169291ec0b68eb370fddcd9947313ab0d5e4156/src/seps/sep-2322.yaml)
-- [`sep-2322-default-result-type-complete`](https://github.com/modelcontextprotocol/conformance/blob/7169291ec0b68eb370fddcd9947313ab0d5e4156/src/seps/sep-2322.yaml)
-- [`sep-2322-not-on-unsupported-requests`](https://github.com/modelcontextprotocol/conformance/blob/7169291ec0b68eb370fddcd9947313ab0d5e4156/src/seps/sep-2322.yaml)
-- [`sep-2322-elicitation-incomplete`](https://github.com/modelcontextprotocol/conformance/blob/7169291ec0b68eb370fddcd9947313ab0d5e4156/src/seps/sep-2322.yaml)
-- [`sep-2322-sampling-incomplete`](https://github.com/modelcontextprotocol/conformance/blob/7169291ec0b68eb370fddcd9947313ab0d5e4156/src/seps/sep-2322.yaml)
-- [`sep-2322-list-roots-incomplete`](https://github.com/modelcontextprotocol/conformance/blob/7169291ec0b68eb370fddcd9947313ab0d5e4156/src/seps/sep-2322.yaml)
-- [`sep-2322-reject-tampered-state`](https://github.com/modelcontextprotocol/conformance/blob/7169291ec0b68eb370fddcd9947313ab0d5e4156/src/seps/sep-2322.yaml)
-- [`sep-2322-request-state-incomplete`](https://github.com/modelcontextprotocol/conformance/blob/7169291ec0b68eb370fddcd9947313ab0d5e4156/src/seps/sep-2322.yaml)
-- [`sep-2322-respect-client-capabilities`](https://github.com/modelcontextprotocol/conformance/blob/7169291ec0b68eb370fddcd9947313ab0d5e4156/src/seps/sep-2322.yaml)
-- [`sep-2322-client-request-state-echoed`](https://github.com/modelcontextprotocol/conformance/blob/7169291ec0b68eb370fddcd9947313ab0d5e4156/src/seps/sep-2322.yaml)
-- [`sep-2322-client-no-state-omitted`](https://github.com/modelcontextprotocol/conformance/blob/7169291ec0b68eb370fddcd9947313ab0d5e4156/src/seps/sep-2322.yaml)
-- [`sep-2322-client-jsonrpc-id-different`](https://github.com/modelcontextprotocol/conformance/blob/7169291ec0b68eb370fddcd9947313ab0d5e4156/src/seps/sep-2322.yaml)
-- [`sep-2322-client-parallel-isolation`](https://github.com/modelcontextprotocol/conformance/blob/7169291ec0b68eb370fddcd9947313ab0d5e4156/src/seps/sep-2322.yaml)
-- [`sep-2322-validate-input-responses`](https://github.com/modelcontextprotocol/conformance/blob/7169291ec0b68eb370fddcd9947313ab0d5e4156/src/seps/sep-2322.yaml)
-- [`sep-2322-error-on-protocol-error`](https://github.com/modelcontextprotocol/conformance/blob/7169291ec0b68eb370fddcd9947313ab0d5e4156/src/seps/sep-2322.yaml)
-- [`sep-2322-ignore-unexpected-params`](https://github.com/modelcontextprotocol/conformance/blob/7169291ec0b68eb370fddcd9947313ab0d5e4156/src/seps/sep-2322.yaml)
-- [`sep-2322-missing-response-rerequests`](https://github.com/modelcontextprotocol/conformance/blob/7169291ec0b68eb370fddcd9947313ab0d5e4156/src/seps/sep-2322.yaml)
+- [`sep-2322-result-type-included`](https://github.com/modelcontextprotocol/conformance/blob/c37eec888e1c6ff140af79987a40008548b7cc5f/src/seps/sep-2322.yaml)
+- [`sep-2322-default-result-type-complete`](https://github.com/modelcontextprotocol/conformance/blob/c37eec888e1c6ff140af79987a40008548b7cc5f/src/seps/sep-2322.yaml)
+- [`sep-2322-not-on-unsupported-requests`](https://github.com/modelcontextprotocol/conformance/blob/c37eec888e1c6ff140af79987a40008548b7cc5f/src/seps/sep-2322.yaml)
+- [`sep-2322-elicitation-incomplete`](https://github.com/modelcontextprotocol/conformance/blob/c37eec888e1c6ff140af79987a40008548b7cc5f/src/seps/sep-2322.yaml)
+- [`sep-2322-sampling-incomplete`](https://github.com/modelcontextprotocol/conformance/blob/c37eec888e1c6ff140af79987a40008548b7cc5f/src/seps/sep-2322.yaml)
+- [`sep-2322-list-roots-incomplete`](https://github.com/modelcontextprotocol/conformance/blob/c37eec888e1c6ff140af79987a40008548b7cc5f/src/seps/sep-2322.yaml)
+- [`sep-2322-reject-tampered-state`](https://github.com/modelcontextprotocol/conformance/blob/c37eec888e1c6ff140af79987a40008548b7cc5f/src/seps/sep-2322.yaml)
+- [`sep-2322-request-state-incomplete`](https://github.com/modelcontextprotocol/conformance/blob/c37eec888e1c6ff140af79987a40008548b7cc5f/src/seps/sep-2322.yaml)
+- [`sep-2322-respect-client-capabilities`](https://github.com/modelcontextprotocol/conformance/blob/c37eec888e1c6ff140af79987a40008548b7cc5f/src/seps/sep-2322.yaml)
+- [`sep-2322-client-request-state-echoed`](https://github.com/modelcontextprotocol/conformance/blob/c37eec888e1c6ff140af79987a40008548b7cc5f/src/seps/sep-2322.yaml)
+- [`sep-2322-client-no-state-omitted`](https://github.com/modelcontextprotocol/conformance/blob/c37eec888e1c6ff140af79987a40008548b7cc5f/src/seps/sep-2322.yaml)
+- [`sep-2322-client-jsonrpc-id-different`](https://github.com/modelcontextprotocol/conformance/blob/c37eec888e1c6ff140af79987a40008548b7cc5f/src/seps/sep-2322.yaml)
+- [`sep-2322-client-parallel-isolation`](https://github.com/modelcontextprotocol/conformance/blob/c37eec888e1c6ff140af79987a40008548b7cc5f/src/seps/sep-2322.yaml)
+- [`sep-2322-validate-input-responses`](https://github.com/modelcontextprotocol/conformance/blob/c37eec888e1c6ff140af79987a40008548b7cc5f/src/seps/sep-2322.yaml)
+- [`sep-2322-error-on-protocol-error`](https://github.com/modelcontextprotocol/conformance/blob/c37eec888e1c6ff140af79987a40008548b7cc5f/src/seps/sep-2322.yaml)
+- [`sep-2322-ignore-unexpected-params`](https://github.com/modelcontextprotocol/conformance/blob/c37eec888e1c6ff140af79987a40008548b7cc5f/src/seps/sep-2322.yaml)
+- [`sep-2322-missing-response-rerequests`](https://github.com/modelcontextprotocol/conformance/blob/c37eec888e1c6ff140af79987a40008548b7cc5f/src/seps/sep-2322.yaml)
 
 <a id="sep-2322-excluded"></a>
 
@@ -353,7 +353,7 @@ _None._
 
 **Tested (1)**
 
-- [`sep-2350-scope-union-on-reauth`](https://github.com/modelcontextprotocol/conformance/blob/7169291ec0b68eb370fddcd9947313ab0d5e4156/src/seps/sep-2350.yaml)
+- [`sep-2350-scope-union-on-reauth`](https://github.com/modelcontextprotocol/conformance/blob/c37eec888e1c6ff140af79987a40008548b7cc5f/src/seps/sep-2350.yaml)
 
 <a id="sep-2350-excluded"></a>
 
@@ -376,9 +376,9 @@ _None._
 
 **Tested (3)**
 
-- [`sep-2352-no-cross-as-credential-reuse`](https://github.com/modelcontextprotocol/conformance/blob/7169291ec0b68eb370fddcd9947313ab0d5e4156/src/seps/sep-2352.yaml)
-- [`sep-2352-no-reuse-on-as-change`](https://github.com/modelcontextprotocol/conformance/blob/7169291ec0b68eb370fddcd9947313ab0d5e4156/src/seps/sep-2352.yaml)
-- [`sep-2352-reregister-on-as-change`](https://github.com/modelcontextprotocol/conformance/blob/7169291ec0b68eb370fddcd9947313ab0d5e4156/src/seps/sep-2352.yaml)
+- [`sep-2352-no-cross-as-credential-reuse`](https://github.com/modelcontextprotocol/conformance/blob/c37eec888e1c6ff140af79987a40008548b7cc5f/src/seps/sep-2352.yaml)
+- [`sep-2352-no-reuse-on-as-change`](https://github.com/modelcontextprotocol/conformance/blob/c37eec888e1c6ff140af79987a40008548b7cc5f/src/seps/sep-2352.yaml)
+- [`sep-2352-reregister-on-as-change`](https://github.com/modelcontextprotocol/conformance/blob/c37eec888e1c6ff140af79987a40008548b7cc5f/src/seps/sep-2352.yaml)
 
 <a id="sep-2352-excluded"></a>
 
@@ -402,12 +402,12 @@ _None._
 
 **Tested (6)**
 
-- [`sep-2468-client-validate-metadata-issuer`](https://github.com/modelcontextprotocol/conformance/blob/7169291ec0b68eb370fddcd9947313ab0d5e4156/src/seps/sep-2468.yaml)
-- [`sep-2468-client-compare-iss-supported`](https://github.com/modelcontextprotocol/conformance/blob/7169291ec0b68eb370fddcd9947313ab0d5e4156/src/seps/sep-2468.yaml)
-- [`sep-2468-client-reject-missing-iss`](https://github.com/modelcontextprotocol/conformance/blob/7169291ec0b68eb370fddcd9947313ab0d5e4156/src/seps/sep-2468.yaml)
-- [`sep-2468-client-compare-iss-unadvertised`](https://github.com/modelcontextprotocol/conformance/blob/7169291ec0b68eb370fddcd9947313ab0d5e4156/src/seps/sep-2468.yaml)
-- [`sep-2468-client-proceed-no-iss`](https://github.com/modelcontextprotocol/conformance/blob/7169291ec0b68eb370fddcd9947313ab0d5e4156/src/seps/sep-2468.yaml)
-- [`sep-2468-client-no-normalization`](https://github.com/modelcontextprotocol/conformance/blob/7169291ec0b68eb370fddcd9947313ab0d5e4156/src/seps/sep-2468.yaml)
+- [`sep-2468-client-validate-metadata-issuer`](https://github.com/modelcontextprotocol/conformance/blob/c37eec888e1c6ff140af79987a40008548b7cc5f/src/seps/sep-2468.yaml)
+- [`sep-2468-client-compare-iss-supported`](https://github.com/modelcontextprotocol/conformance/blob/c37eec888e1c6ff140af79987a40008548b7cc5f/src/seps/sep-2468.yaml)
+- [`sep-2468-client-reject-missing-iss`](https://github.com/modelcontextprotocol/conformance/blob/c37eec888e1c6ff140af79987a40008548b7cc5f/src/seps/sep-2468.yaml)
+- [`sep-2468-client-compare-iss-unadvertised`](https://github.com/modelcontextprotocol/conformance/blob/c37eec888e1c6ff140af79987a40008548b7cc5f/src/seps/sep-2468.yaml)
+- [`sep-2468-client-proceed-no-iss`](https://github.com/modelcontextprotocol/conformance/blob/c37eec888e1c6ff140af79987a40008548b7cc5f/src/seps/sep-2468.yaml)
+- [`sep-2468-client-no-normalization`](https://github.com/modelcontextprotocol/conformance/blob/c37eec888e1c6ff140af79987a40008548b7cc5f/src/seps/sep-2468.yaml)
 
 <a id="sep-2468-excluded"></a>
 
@@ -431,13 +431,13 @@ _None._
 
 **Tested (7)**
 
-- [`sep-2549-tools-list-caching-hints`](https://github.com/modelcontextprotocol/conformance/blob/7169291ec0b68eb370fddcd9947313ab0d5e4156/src/seps/sep-2549.yaml)
-- [`sep-2549-prompts-list-caching-hints`](https://github.com/modelcontextprotocol/conformance/blob/7169291ec0b68eb370fddcd9947313ab0d5e4156/src/seps/sep-2549.yaml)
-- [`sep-2549-resources-list-caching-hints`](https://github.com/modelcontextprotocol/conformance/blob/7169291ec0b68eb370fddcd9947313ab0d5e4156/src/seps/sep-2549.yaml)
-- [`sep-2549-resources-templates-list-caching-hints`](https://github.com/modelcontextprotocol/conformance/blob/7169291ec0b68eb370fddcd9947313ab0d5e4156/src/seps/sep-2549.yaml)
-- [`sep-2549-resources-read-caching-hints`](https://github.com/modelcontextprotocol/conformance/blob/7169291ec0b68eb370fddcd9947313ab0d5e4156/src/seps/sep-2549.yaml)
-- [`sep-2549-ttl-non-negative`](https://github.com/modelcontextprotocol/conformance/blob/7169291ec0b68eb370fddcd9947313ab0d5e4156/src/seps/sep-2549.yaml)
-- [`sep-2549-cache-scope-valid`](https://github.com/modelcontextprotocol/conformance/blob/7169291ec0b68eb370fddcd9947313ab0d5e4156/src/seps/sep-2549.yaml)
+- [`sep-2549-tools-list-caching-hints`](https://github.com/modelcontextprotocol/conformance/blob/c37eec888e1c6ff140af79987a40008548b7cc5f/src/seps/sep-2549.yaml)
+- [`sep-2549-prompts-list-caching-hints`](https://github.com/modelcontextprotocol/conformance/blob/c37eec888e1c6ff140af79987a40008548b7cc5f/src/seps/sep-2549.yaml)
+- [`sep-2549-resources-list-caching-hints`](https://github.com/modelcontextprotocol/conformance/blob/c37eec888e1c6ff140af79987a40008548b7cc5f/src/seps/sep-2549.yaml)
+- [`sep-2549-resources-templates-list-caching-hints`](https://github.com/modelcontextprotocol/conformance/blob/c37eec888e1c6ff140af79987a40008548b7cc5f/src/seps/sep-2549.yaml)
+- [`sep-2549-resources-read-caching-hints`](https://github.com/modelcontextprotocol/conformance/blob/c37eec888e1c6ff140af79987a40008548b7cc5f/src/seps/sep-2549.yaml)
+- [`sep-2549-ttl-non-negative`](https://github.com/modelcontextprotocol/conformance/blob/c37eec888e1c6ff140af79987a40008548b7cc5f/src/seps/sep-2549.yaml)
+- [`sep-2549-cache-scope-valid`](https://github.com/modelcontextprotocol/conformance/blob/c37eec888e1c6ff140af79987a40008548b7cc5f/src/seps/sep-2549.yaml)
 
 <a id="sep-2549-excluded"></a>
 
@@ -471,28 +471,28 @@ _None._
 
 **Tested (22)**
 
-- [`sep-2575-client-populates-meta`](https://github.com/modelcontextprotocol/conformance/blob/7169291ec0b68eb370fddcd9947313ab0d5e4156/src/seps/sep-2575.yaml)
-- [`sep-2575-server-rejects-undeclared-capability`](https://github.com/modelcontextprotocol/conformance/blob/7169291ec0b68eb370fddcd9947313ab0d5e4156/src/seps/sep-2575.yaml)
-- [`sep-2575-missing-capability-http-400`](https://github.com/modelcontextprotocol/conformance/blob/7169291ec0b68eb370fddcd9947313ab0d5e4156/src/seps/sep-2575.yaml)
-- [`sep-2575-server-tags-subscription-id`](https://github.com/modelcontextprotocol/conformance/blob/7169291ec0b68eb370fddcd9947313ab0d5e4156/src/seps/sep-2575.yaml)
-- [`sep-2575-server-unsupported-version-error`](https://github.com/modelcontextprotocol/conformance/blob/7169291ec0b68eb370fddcd9947313ab0d5e4156/src/seps/sep-2575.yaml)
-- [`sep-2575-client-retry-supported-version`](https://github.com/modelcontextprotocol/conformance/blob/7169291ec0b68eb370fddcd9947313ab0d5e4156/src/seps/sep-2575.yaml)
-- [`sep-2575-server-implements-discover`](https://github.com/modelcontextprotocol/conformance/blob/7169291ec0b68eb370fddcd9947313ab0d5e4156/src/seps/sep-2575.yaml)
-- [`sep-2575-http-server-no-independent-requests-on-stream`](https://github.com/modelcontextprotocol/conformance/blob/7169291ec0b68eb370fddcd9947313ab0d5e4156/src/seps/sep-2575.yaml)
-- [`sep-2575-http-client-sends-version-header`](https://github.com/modelcontextprotocol/conformance/blob/7169291ec0b68eb370fddcd9947313ab0d5e4156/src/seps/sep-2575.yaml)
-- [`sep-2575-http-version-header-matches-meta`](https://github.com/modelcontextprotocol/conformance/blob/7169291ec0b68eb370fddcd9947313ab0d5e4156/src/seps/sep-2575.yaml)
-- [`sep-2575-http-server-header-mismatch-400`](https://github.com/modelcontextprotocol/conformance/blob/7169291ec0b68eb370fddcd9947313ab0d5e4156/src/seps/sep-2575.yaml)
-- [`sep-2575-http-server-unsupported-version-400`](https://github.com/modelcontextprotocol/conformance/blob/7169291ec0b68eb370fddcd9947313ab0d5e4156/src/seps/sep-2575.yaml)
-- [`sep-2575-http-server-method-not-found-404`](https://github.com/modelcontextprotocol/conformance/blob/7169291ec0b68eb370fddcd9947313ab0d5e4156/src/seps/sep-2575.yaml)
-- [`sep-2575-server-honors-notification-filter`](https://github.com/modelcontextprotocol/conformance/blob/7169291ec0b68eb370fddcd9947313ab0d5e4156/src/seps/sep-2575.yaml)
-- [`sep-2575-server-sends-subscription-ack`](https://github.com/modelcontextprotocol/conformance/blob/7169291ec0b68eb370fddcd9947313ab0d5e4156/src/seps/sep-2575.yaml)
-- [`sep-2575-client-declares-elicitation-capability`](https://github.com/modelcontextprotocol/conformance/blob/7169291ec0b68eb370fddcd9947313ab0d5e4156/src/seps/sep-2575.yaml)
-- [`sep-2575-client-declares-roots-capability`](https://github.com/modelcontextprotocol/conformance/blob/7169291ec0b68eb370fddcd9947313ab0d5e4156/src/seps/sep-2575.yaml)
-- [`sep-2575-client-declares-sampling-capability`](https://github.com/modelcontextprotocol/conformance/blob/7169291ec0b68eb370fddcd9947313ab0d5e4156/src/seps/sep-2575.yaml)
-- [`sep-2575-server-declares-prompts-in-discover`](https://github.com/modelcontextprotocol/conformance/blob/7169291ec0b68eb370fddcd9947313ab0d5e4156/src/seps/sep-2575.yaml)
-- [`sep-2575-server-sends-prompts-list-changed-on-subscription`](https://github.com/modelcontextprotocol/conformance/blob/7169291ec0b68eb370fddcd9947313ab0d5e4156/src/seps/sep-2575.yaml)
-- [`sep-2575-server-sends-tools-list-changed-on-subscription`](https://github.com/modelcontextprotocol/conformance/blob/7169291ec0b68eb370fddcd9947313ab0d5e4156/src/seps/sep-2575.yaml)
-- [`sep-2575-server-no-log-without-loglevel`](https://github.com/modelcontextprotocol/conformance/blob/7169291ec0b68eb370fddcd9947313ab0d5e4156/src/seps/sep-2575.yaml)
+- [`sep-2575-client-populates-meta`](https://github.com/modelcontextprotocol/conformance/blob/c37eec888e1c6ff140af79987a40008548b7cc5f/src/seps/sep-2575.yaml)
+- [`sep-2575-server-rejects-undeclared-capability`](https://github.com/modelcontextprotocol/conformance/blob/c37eec888e1c6ff140af79987a40008548b7cc5f/src/seps/sep-2575.yaml)
+- [`sep-2575-missing-capability-http-400`](https://github.com/modelcontextprotocol/conformance/blob/c37eec888e1c6ff140af79987a40008548b7cc5f/src/seps/sep-2575.yaml)
+- [`sep-2575-server-tags-subscription-id`](https://github.com/modelcontextprotocol/conformance/blob/c37eec888e1c6ff140af79987a40008548b7cc5f/src/seps/sep-2575.yaml)
+- [`sep-2575-server-unsupported-version-error`](https://github.com/modelcontextprotocol/conformance/blob/c37eec888e1c6ff140af79987a40008548b7cc5f/src/seps/sep-2575.yaml)
+- [`sep-2575-client-retry-supported-version`](https://github.com/modelcontextprotocol/conformance/blob/c37eec888e1c6ff140af79987a40008548b7cc5f/src/seps/sep-2575.yaml)
+- [`sep-2575-server-implements-discover`](https://github.com/modelcontextprotocol/conformance/blob/c37eec888e1c6ff140af79987a40008548b7cc5f/src/seps/sep-2575.yaml)
+- [`sep-2575-http-server-no-independent-requests-on-stream`](https://github.com/modelcontextprotocol/conformance/blob/c37eec888e1c6ff140af79987a40008548b7cc5f/src/seps/sep-2575.yaml)
+- [`sep-2575-http-client-sends-version-header`](https://github.com/modelcontextprotocol/conformance/blob/c37eec888e1c6ff140af79987a40008548b7cc5f/src/seps/sep-2575.yaml)
+- [`sep-2575-http-version-header-matches-meta`](https://github.com/modelcontextprotocol/conformance/blob/c37eec888e1c6ff140af79987a40008548b7cc5f/src/seps/sep-2575.yaml)
+- [`sep-2575-http-server-header-mismatch-400`](https://github.com/modelcontextprotocol/conformance/blob/c37eec888e1c6ff140af79987a40008548b7cc5f/src/seps/sep-2575.yaml)
+- [`sep-2575-http-server-unsupported-version-400`](https://github.com/modelcontextprotocol/conformance/blob/c37eec888e1c6ff140af79987a40008548b7cc5f/src/seps/sep-2575.yaml)
+- [`sep-2575-http-server-method-not-found-404`](https://github.com/modelcontextprotocol/conformance/blob/c37eec888e1c6ff140af79987a40008548b7cc5f/src/seps/sep-2575.yaml)
+- [`sep-2575-server-honors-notification-filter`](https://github.com/modelcontextprotocol/conformance/blob/c37eec888e1c6ff140af79987a40008548b7cc5f/src/seps/sep-2575.yaml)
+- [`sep-2575-server-sends-subscription-ack`](https://github.com/modelcontextprotocol/conformance/blob/c37eec888e1c6ff140af79987a40008548b7cc5f/src/seps/sep-2575.yaml)
+- [`sep-2575-client-declares-elicitation-capability`](https://github.com/modelcontextprotocol/conformance/blob/c37eec888e1c6ff140af79987a40008548b7cc5f/src/seps/sep-2575.yaml)
+- [`sep-2575-client-declares-roots-capability`](https://github.com/modelcontextprotocol/conformance/blob/c37eec888e1c6ff140af79987a40008548b7cc5f/src/seps/sep-2575.yaml)
+- [`sep-2575-client-declares-sampling-capability`](https://github.com/modelcontextprotocol/conformance/blob/c37eec888e1c6ff140af79987a40008548b7cc5f/src/seps/sep-2575.yaml)
+- [`sep-2575-server-declares-prompts-in-discover`](https://github.com/modelcontextprotocol/conformance/blob/c37eec888e1c6ff140af79987a40008548b7cc5f/src/seps/sep-2575.yaml)
+- [`sep-2575-server-sends-prompts-list-changed-on-subscription`](https://github.com/modelcontextprotocol/conformance/blob/c37eec888e1c6ff140af79987a40008548b7cc5f/src/seps/sep-2575.yaml)
+- [`sep-2575-server-sends-tools-list-changed-on-subscription`](https://github.com/modelcontextprotocol/conformance/blob/c37eec888e1c6ff140af79987a40008548b7cc5f/src/seps/sep-2575.yaml)
+- [`sep-2575-server-no-log-without-loglevel`](https://github.com/modelcontextprotocol/conformance/blob/c37eec888e1c6ff140af79987a40008548b7cc5f/src/seps/sep-2575.yaml)
 
 <a id="sep-2575-excluded"></a>
 

@@ -140,11 +140,11 @@ suites:
     note: >-
       45 pass / 0 fail / 0 warn across the three upstream server scenarios
       (enumeration 32, manifest 6, directory 7), against examples/skills at
-      upstream 7169291. Retargeted from the panyam/mcpconformance fork branch
+      upstream c37eec8 (rerun 2026-11-10). Retargeted from the panyam/mcpconformance fork branch
       chore/sep-2640-yaml once PR 330 merged to upstream main; the scenario
       names did not change, so the move was a path swap. Gating since the
       retarget — it was INFO only because the fork branch was mid-WG-iteration.
-      Upstream also registers five client-side skills scenarios
+      Upstream also registers four client-side skills scenarios
       (sep-2640-client-no-prefetch, sep-2640-client-verify-{digest,size,frontmatter})
       that this target does not run.
 
