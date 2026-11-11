@@ -23,8 +23,7 @@ make testall           # Everything (9 stages, 21 sub-stages) + Keycloak + HTML 
 make audit             # govulncheck + gosec + gitleaks + race
 make tidy-all          # Required after touching core/ imports
 make tag-push V=vX.Y.Z # Tag root + all sub-modules and push (RELEASING.md; pre-release is vX.Y.Z-bN)
-make check-release-workflows V=vX.Y.Z  # Confirm the tag actually triggered its workflows
-make check-install V=vX.Y.Z            # go install every tagged command from the proxy (#1488)
+make release-publish V=vX.Y.Z  # Wait for the tag's workflows, check installs, then create the Release (#1414)
 ```
 
 Conformance targets (`testconf`, `testconf-client`, `testconf-tasks-v2`, `testconf-mrtr`,
@@ -244,16 +243,10 @@ These span packages and will bite on a task that never opens a routed doc.
   the upstream repo, where we have no push. So conformance PR 541 bases on `main`, carries all of
   PR 521's commits, and says "review #521 first" with a compare link in its body.
 - **A release that triggers no workflows looks exactly like one whose workflows all passed.**
-  `make tag-push` used to send 20 refs in a single `git push`, and GitHub raises no push event for
-  a tag push that large, so `publish-images.yml` never ran once and `vulncheck.yml` only ever fired
-  on its weekly schedule. Five releases shipped that way, v0.4.0 through v0.6.0, with the repo green
-  throughout: a published tag and nothing red reads identically either way. #1411 split the push and
-  #1413 added `make check-release-workflows V=<tag>`, now a step in `RELEASING.md`. The checker
-  derives its list from `on.push.tags` across `.github/workflows/`, so a third tag-triggered
-  workflow is covered the day it lands. v0.8.0 was the first tag both workflows fired against, and
-  the checker reports them `pending` until `publish-images` finishes (several minutes), so rerun it
-  rather than read the first result as a miss. `DEPENDENCY_POLICY.md` no longer claims the audit runs before every tagged release,
-  because for five releases it did not.
+  v0.4.0 through v0.6.0 shipped with `publish-images.yml` never run (#1412). `make
+  release-publish` waits for every tag-triggered workflow to run green, and for every command to
+  install, before it creates the GitHub Release (#1414). The checker reads its list from
+  `on.push.tags`, so a new tag-triggered workflow is covered the day it lands.
 - **Release tags carry no `replace` directives; `main` does, on purpose** (#1488). Go refuses
   `go install pkg@vX` for a module with any `replace`, so `make tag` commits a tree with the
   in-repo ones stripped, tags it, and restores them in the next commit

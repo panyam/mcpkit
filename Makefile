@@ -465,6 +465,9 @@ check-release-workflows: ## Release step — fail if a tag-triggered workflow ne
 	@$(RELEASE_WF_PY) scripts/check_release_workflows.py --selftest
 	@$(RELEASE_WF_PY) scripts/check_release_workflows.py $(V)
 
+release-publish: ## Release step — wait for the tag's workflows, check every command installs, then create the GitHub Release (usage: make release-publish V=v0.8.21) (#1414)
+	@RELEASE_WF_PY="$(RELEASE_WF_PY)" bash scripts/release-publish.sh $(V)
+
 check-install: ## Release step — go install every command the tagged modules ship, at V, from an empty module (usage: make check-install V=v0.8.8)
 	@bash scripts/check-install.sh $(V)
 
@@ -475,6 +478,7 @@ rehearse-release: ## CI gate — clone, bump, tag (replaces stripped) and go ins
 check-release-workflows-selftest: ## CI gate — exercise the release-workflow checker without touching the network
 	@$(RELEASE_WF_PY) scripts/check_release_workflows.py --selftest
 	@$(RELEASE_WF_PY) scripts/check_release_workflows.py --check-restore
+	@bash scripts/release-publish_selftest.sh
 
 check-conf-fixture-guards: ## CI gate — self-test the conformance fixture guards (held port, dead fixture, stale suite checkout) in conformance/scripts/_common.sh
 	@bash conformance/scripts/_common_selftest.sh
@@ -494,5 +498,5 @@ setup: setup-tools setup-hooks ## Full development setup
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-18s\033[0m %s\n", $$1, $$2}'
 
-.PHONY: build test test-examples test-race test-v cover cover-html cover-func cover-all test-auth test-ui test-skills test-mcpskills build-mcpskills test-mcpskills-walkthrough test-protogen test-e2e test-experimental test-apps-playwright test-apps-playwright-docker test-apps-playwright-all test-apps-playwright-docker-all refresh-visual-gallery release-audit-apps demo-app demo-upstream testkcl testkcl-auto testall test-report smoke smoke-wire verify-dual testconfall testconf testconfauth testconf-client testconf-tasks testconf-tasks-v2 testconf-mrtr testconf-file-inputs testconf-auth-server testconf-elicitation testconf-skills testconf-events testconf-events-client conf-events-setup testconf-agents conf-agents-setup exercise-aipage exercise-events exercise-wire conf-events-remote testconf-stateless testconf-upstream-audit testconf-external-checker refresh-conformance check-conformance-stale check-local-suites-stale check-conf-fixture-guards check-kcl-guards check-rooms-ts-version check-snippets check-examples-build check-example-tests-listed check-dep-consistency check-tagged-modules check-tag-set check-dependabot-dirs update-dep-baseline dep-sweep check-auth-markers refresh-apps-compat-report check-apps-compat-stale vet lint vulncheck seccheck secrets verify-submodule-deps verify-submodule-deps-resolve audit ci ci-full serve serve-streamable serve-both tidy tidy-all bump-root collect-walkthroughs ghbuild ghserve ghdeploy tag tag-push check-install rehearse-release setup-tools setup-hooks setup upkcl downkcl kcllogs build-bridge help
+.PHONY: build test test-examples test-race test-v cover cover-html cover-func cover-all test-auth test-ui test-skills test-mcpskills build-mcpskills test-mcpskills-walkthrough test-protogen test-e2e test-experimental test-apps-playwright test-apps-playwright-docker test-apps-playwright-all test-apps-playwright-docker-all refresh-visual-gallery release-audit-apps demo-app demo-upstream testkcl testkcl-auto testall test-report smoke smoke-wire verify-dual testconfall testconf testconfauth testconf-client testconf-tasks testconf-tasks-v2 testconf-mrtr testconf-file-inputs testconf-auth-server testconf-elicitation testconf-skills testconf-events testconf-events-client conf-events-setup testconf-agents conf-agents-setup exercise-aipage exercise-events exercise-wire conf-events-remote testconf-stateless testconf-upstream-audit testconf-external-checker refresh-conformance check-conformance-stale check-local-suites-stale check-conf-fixture-guards check-kcl-guards check-rooms-ts-version check-snippets check-examples-build check-example-tests-listed check-dep-consistency check-tagged-modules check-tag-set check-dependabot-dirs update-dep-baseline dep-sweep check-auth-markers refresh-apps-compat-report check-apps-compat-stale vet lint vulncheck seccheck secrets verify-submodule-deps verify-submodule-deps-resolve audit ci ci-full serve serve-streamable serve-both tidy tidy-all bump-root collect-walkthroughs ghbuild ghserve ghdeploy tag tag-push check-install release-publish rehearse-release setup-tools setup-hooks setup upkcl downkcl kcllogs build-bridge help
 .DEFAULT_GOAL := help

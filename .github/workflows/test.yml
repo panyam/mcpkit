@@ -71,7 +71,7 @@ jobs:
       # at release time against a real tag. Its self-test needs no network and
       # gates here, because a broken detector reports the same all-clear as a
       # healthy release and that is the failure it exists to catch.
-      - name: Release-workflow checker self-test
+      - name: Release checker and publish self-tests
         run: make check-release-workflows-selftest
 
       # Every conf-*.sh spawns its fixture on a fixed port and waits for *any*
