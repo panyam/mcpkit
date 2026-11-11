@@ -82,7 +82,8 @@ per-package `NOTES.md`, the design docs, and the roadmap.
 ## Sub-Modules
 
 **`SUB_MODS_TO_TAG` in the root `Makefile` is the authoritative list.** Do not maintain a copy
-here, it rots. `make test` does not cover sub-modules; each has its own target.
+here, it rots. `make test` does not cover sub-modules; each has its own target, and
+`make check-tagged-modules` builds and vets all of them against main (#1486).
 
 **That list is parsed, not just expanded.** `scripts/check_dep_consistency.py` reads it out of the
 `Makefile` with a regex, so its *shape* is load-bearing: the backslash-continued form is what the
