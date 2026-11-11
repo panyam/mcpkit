@@ -10,8 +10,8 @@ replace (
 require (
 	github.com/gorilla/websocket v1.5.3
 	github.com/panyam/massrelay v0.3.7
-	github.com/panyam/mcpkit v0.8.20
-	github.com/panyam/mcpkit/experimental/ext/rooms v0.8.20
+	github.com/panyam/mcpkit v0.8.21
+	github.com/panyam/mcpkit/experimental/ext/rooms v0.8.21
 	github.com/panyam/servicekit v0.2.2
 	github.com/stretchr/testify v1.12.1
 	golang.org/x/time v0.16.0

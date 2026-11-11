@@ -14,10 +14,10 @@ replace (
 )
 
 require (
-	github.com/panyam/mcpkit v0.8.20
+	github.com/panyam/mcpkit v0.8.21
 	github.com/panyam/mcpkit/examples/common v0.0.0-00010101000000-000000000000
-	github.com/panyam/mcpkit/experimental/ext/events v0.8.20
-	github.com/panyam/mcpkit/experimental/ext/rooms v0.8.20
+	github.com/panyam/mcpkit/experimental/ext/events v0.8.21
+	github.com/panyam/mcpkit/experimental/ext/rooms v0.8.21
 	github.com/panyam/mcpkit/experimental/ext/rooms/massrelay v0.8.20
 	github.com/panyam/mcpkit/experimental/integrations/roomsevents v0.8.20
 )
