@@ -103,9 +103,15 @@ func (r *remote) Join(ctx context.Context, room string) (rooms.Room, error) {
 		return nil, err
 	}
 
-	// The relay answers a join with RoomJoined or an ErrorEvent; anything
-	// else before it (a ping) is handled in passing.
+	// The relay answers a join with RoomJoined or an ErrorEvent. It can also
+	// write room traffic first: it adds the client to the room and starts
+	// forwarding the room's events before it writes the answer, so a peer
+	// joining or a message addressed to this one can win the race. Those
+	// events happened after the RoomJoined roster was taken, so they are held
+	// and replayed into the member rather than dropped. A ping is answered in
+	// passing.
 	var joined *pb.RoomJoined
+	var early []*pb.CollabEvent
 	deadline, ok := ctx.Deadline()
 	if !ok {
 		deadline = time.Now().Add(30 * time.Second)
@@ -118,6 +124,10 @@ func (r *remote) Join(ctx context.Context, room string) (rooms.Room, error) {
 			return nil, fmt.Errorf("massrelay: join %s: %w", room, err)
 		}
 		if ev == nil {
+			continue
+		}
+		if ev.GetRoomJoined() == nil && ev.GetError() == nil {
+			early = append(early, ev)
 			continue
 		}
 		if joined, err = joinedFrom(room, ev); err != nil {
@@ -155,6 +165,9 @@ func (r *remote) Join(ctx context.Context, room string) (rooms.Room, error) {
 	res := newResender(life, deliver)
 	m.send = res.send
 	m.rateLimited = res.rateLimited
+	for _, ev := range early {
+		m.handle(ev)
+	}
 	go func() {
 		defer end()
 		defer m.close()
