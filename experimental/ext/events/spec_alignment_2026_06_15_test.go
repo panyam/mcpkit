@@ -248,7 +248,7 @@ func TestWebhookDelivery_410GoneIsTerminalWithoutSubscriptionEffect(t *testing.T
 	}))
 	defer receiver.Close()
 
-	r := NewWebhookRegistry(WithWebhookAllowPrivateNetworks(true), WithUnsafeWebhookAllowPlaintextCallbacks())
+	r := NewWebhookRegistry(WithWebhookAllowPrivateNetworks(true), WithUnsafeWebhookAllowPlaintextCallbacks(), withFastRetries())
 	defResolver := func(string) EventDef { return EventDef{} }
 	canonical := canonicalKey("alice", receiver.URL, "fake.event", nil)
 	r.SetDefResolver(defResolver)
@@ -263,9 +263,9 @@ func TestWebhookDelivery_410GoneIsTerminalWithoutSubscriptionEffect(t *testing.T
 	require.Eventually(t, func() bool { return hits.Load() >= 1 },
 		2*time.Second, 20*time.Millisecond, "first delivery should land")
 
-	// Give the retry loop a generous window — if it WERE going to retry,
-	// it would have by now. Backoff is 500ms + 1s + 2s = ~3.5s.
-	time.Sleep(4 * time.Second)
+	// With fast retries all three would land within ~10ms, so 200ms is a
+	// generous window for any retry to show up.
+	time.Sleep(200 * time.Millisecond)
 	assert.Equal(t, int32(1), hits.Load(),
 		"410 MUST be terminal — no retries; got %d posts", hits.Load())
 

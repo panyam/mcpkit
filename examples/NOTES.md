@@ -17,10 +17,22 @@ The `events/discord` and `events/telegram` suites **moved out of `experimental/`
 example apps, not the library. `experimental/Makefile` and `justfile` keep the old target names as
 **aliases delegating here**, so testall's per-suite timing and CI scripts keep working.
 
-**The fragile part**: the CI `test-agent` job hardcodes example test steps in
-`.github/workflows/test.yml` rather than calling `make test-agent`. Moving or adding an example
-needs the workflow updated too. Folding that into the orchestrator is the remaining #688 work,
-along with physically moving the discord/telegram scripts under `examples/scripts/`.
+Two CI jobs cover examples (#1431). Each runs beside the others, because together they outran
+every other job in `test.yml`:
+
+- `examples-build` runs `make check-examples-build`. Every module builds and passes `go vet`. Vet
+  type-checks `_test.go` files too, and `go build` skips them. A stale `buildServer` call site in
+  kitchen-sink's tests passed the build-only check for two merged PRs.
+- `examples-test` runs `make check-example-tests-listed`, then `make test-examples`.
+
+`check-example-tests-listed` fails in three cases. A module has tests and neither the umbrella nor
+a `test.yml` `working-directory` runs them. An umbrella target points at a module with no tests.
+The Makefile and justfile umbrellas name different modules. `tasks-v2` hit the second case: its
+tests left with the agent SDK, and `test-tasks-v2` kept passing on "no test files".
+`apps/any-frontend` and `rooms/lanternfall` run in their own jobs, since those need Chromium.
+
+The discord and telegram scripts still live in `experimental/scripts/`. Moving them under
+`examples/scripts/` is left from #688.
 
 ---
 

@@ -326,13 +326,9 @@ These span packages and will bite on a task that never opens a routed doc.
   needs a free `KC_PORT`, and the protogen stage can delete the generated files under
   `examples/protogen/`, so run `git checkout -- examples/protogen` before staging anything after
   a testall. testall also skips `testconf-stateless` and `testconf-client`; run those by hand.
-- **`make test-examples` runs in no workflow, so a broken example test ships green.** `test.yml`
-  runs `scripts/check-examples-build.sh`, which compiles each module's *packages* and not their
-  `_test.go` files, and mentions `test-examples` only in a comment explaining why it exists.
-  Three merged PRs in one week shipped with example tests red: a stale `buildServer` call site, an
-  `inputSchema` enum invented from a field name rather than read off the fixture that feeds it, and
-  two tests polling event types whose descriptors decline poll. Tracked as #1431. Until it is
-  wired, run the affected example's own `go test` by hand after touching anything it uses.
+- **A new example with tests needs a target in `examples/Makefile`'s `test` umbrella** and its
+  justfile twin, or `make check-example-tests-listed` fails CI (#1431). `examples/NOTES.md`
+  § Test orchestration has the CI jobs.
 - **One session, one worktree of the conformance fork.** `../conf-events` and the other
   `MCPCONFORMANCE_*_PATH` defaults are shared by every session on the machine, and two sessions
   once had uncommitted work in the same one, where either's next `git add` takes both. Check
