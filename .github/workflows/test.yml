@@ -110,6 +110,11 @@ jobs:
       - name: Check dependency consistency
         run: python3 scripts/check_dep_consistency.py
 
+      # A module missing from SUB_MODS_TO_TAG is never tagged, and nothing
+      # else fails. protogen went untagged from June to November 2026 that way (#1319).
+      - name: Check every library module is tagged
+        run: python3 scripts/check_tag_set.py
+
       # Dependabot ignores a configured directory that does not exist, without
       # warning. A frontend dir went unmonitored that way after a refactor
       # moved it.

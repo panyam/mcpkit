@@ -2,6 +2,8 @@
 
 mcpkit follows [semantic versioning](https://semver.org). The root module and the releasable protocol sub-modules are tagged in lock-step at the same version via `make tag-push V=vX.Y.Z` (see `RELEASING.md`), so a single version string identifies a consistent set across modules.
 
+Every Go module outside `examples/` and `docs/` is tagged. `make check-tag-set` fails CI when one is missing from `SUB_MODS_TO_TAG`, unless `scripts/check_tag_set.py` lists it as untagged with a reason.
+
 Everything below applies to the protocol modules. The agent SDK left this repository; see the note at the end.
 
 ## Release types
