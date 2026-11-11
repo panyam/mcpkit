@@ -76,13 +76,7 @@ From a green `main`:
    which is why no command here had installed at any tag before #1488
    (`scripts/release-replaces.sh`). `make rehearse-release` runs the whole
    thing at a fake version in a clone, and CI runs it on every PR.
-4. **Verify the tag's workflows fired.** `make check-release-workflows V=<version>`.
-   A tag that triggers nothing is indistinguishable from a tag whose workflows
-   all passed: green repo, published tag, no red anywhere. That is how v0.4.0
-   through v0.6.0 shipped with `publish-images.yml` never having run and
-   `vulncheck.yml` firing only on its schedule (#1412). Do not skip this on the
-   grounds that #1411 fixed the push; the fix is what this step verifies.
-5. **Verify resolution.** From a scratch module:
+4. **Verify resolution.** From a scratch module:
    ```
    GOPROXY=direct GOFLAGS=-mod=mod go list -m github.com/panyam/mcpkit@<version>
    GOPROXY=direct GOFLAGS=-mod=mod go list -m github.com/panyam/mcpkit/ext/tasks@<version>
@@ -91,14 +85,23 @@ From a green `main`:
    The tag also publishes `@panyam/mcpkit-rooms` to npm through
    `publish-npm-rooms.yml`, which `check-release-workflows` now counts. See
    § npm below for the one-time setup.
-6. **Verify the commands install.** `make check-install V=<version>` runs
-   `go install` for every command in the root and the tagged modules from an
-   empty module, as someone outside the repo would. A "not found" in the first
-   few minutes is usually the proxy catching up, so rerun before reading it as
-   broken.
-7. **GitHub Release.** See the token note below. For a stable release write a
-   release note; for a `-bN` pre-release, publish with **"Set as a pre-release"**
-   checked.
+5. **Publish.** `make release-publish V=<version>` runs three steps and stops
+   at the first failure. The GitHub Release exists only if the first two pass.
+   - `check-release-workflows --wait` polls until every tag-triggered workflow
+     has run green against the tag, for up to 20 minutes
+     (`RELEASE_WAIT_SECONDS`). A tag that triggers nothing looks the same as a
+     tag whose workflows all passed. v0.4.0 through v0.6.0 shipped that way,
+     with `publish-images.yml` never run (#1412).
+   - `check-install` runs `go install` for every command in the root and the
+     tagged modules, from an empty module. A "not found" in the first few
+     minutes is usually the proxy catching up, so rerun before reading it as
+     broken.
+   - `gh release create`, with gh's own login (see the token note below). The
+     notes come from `docs/releases/<version>.md`, and a stable tag without
+     that file stops before any check. A `-bN` tag is marked as a pre-release
+     and may go without a note.
+   Each check also runs on its own, as `make check-release-workflows V=` and
+   `make check-install V=`. Until #1414 they were checklist lines here.
 
 ## npm: `@panyam/mcpkit-rooms`
 
@@ -170,11 +173,14 @@ that one field is readable while the rest return 403.
 A 403 here is not a 404. A status script that treats any non-success as "disabled"
 will report a fully-configured repository as unprotected. Distinguish the two.
 
-Pushing commits and tags is unaffected: that goes over SSH, and per `CLAUDE.md` needs
-the personal key pinned, since the agent offers the EMU key first.
+Pushing commits and tags is unaffected. That goes over SSH, through the agent
+socket. `~/.ssh/id_github` does not exist in the container, so the old
+`ssh -i ~/.ssh/id_github` form fails with "Identity file not accessible" and
+then "Permission denied (publickey)" (#1415). `~/.ssh/agent.sock` holds the
+right key:
 
 ```
-GIT_SSH_COMMAND="ssh -i ~/.ssh/id_github -o IdentitiesOnly=yes" git push origin main
+SSH_AUTH_SOCK=~/.ssh/agent.sock git push origin main
 ```
 
 ## Full-minor checklist (e.g. tagging the final v0.4.0)
@@ -196,9 +202,6 @@ GIT_SSH_COMMAND="ssh -i ~/.ssh/id_github -o IdentitiesOnly=yes" git push origin 
       the default `verify-submodule-deps` only asks whether a pinned version
       *looks* like a real tag, so a sibling pinned at a tag nobody pushed passes
       it and breaks `go get` for every outside consumer. That is what #1291 was.
-- [ ] `make check-release-workflows V=vX.Y.0` green — confirms the tag actually
-      triggered `publish-images` and `vulncheck` rather than silently firing
-      neither (#1412)
-- [ ] `make check-install V=vX.Y.0` green — every command `go install`s from the
-      proxy at the tag (#1488)
-- [ ] GitHub Release published (`env -u GH_TOKEN gh release create`, per the token note)
+- [ ] `make release-publish V=vX.Y.0` green. It waits for the tag's workflows
+      (#1412), checks every command installs (#1488), and only then creates the
+      GitHub Release (#1414)

@@ -22,8 +22,14 @@ serve yet, with no go.sum entries for them. Every such workflow (one that runs
 actions/setup-go) has to call `scripts/release-replaces.sh restore` first.
 publish-npm-rooms.yml didn't, and v0.8.8's npm publish failed on it.
 
+--wait SECONDS keeps polling while any workflow is pending or has not shown
+up yet, so the release path can run it straight after the push and block until
+there is an answer (#1414). A failed workflow ends the wait at once.
+`scripts/release-publish.sh` runs it before it creates the GitHub Release.
+
 Usage:
     scripts/check_release_workflows.py v0.6.0          # check a released tag
+    scripts/check_release_workflows.py --wait 1200 v0.6.0  # poll until every verdict is final
     scripts/check_release_workflows.py --check-restore # CI: tag workflows restore replaces
     scripts/check_release_workflows.py --selftest      # gate the checker itself
 """
@@ -34,6 +40,7 @@ import json
 import os
 import subprocess
 import sys
+import time
 
 import yaml
 
@@ -111,6 +118,84 @@ def assess_runs(runs: list[dict], tag: str) -> tuple[str, str]:
         return PENDING, f"still running via {events}"
     worst = ",".join(sorted({str(r.get("conclusion")) for r in mine}))
     return FAILED, f"{len(mine)} run(s) via {events}, concluded {worst}"
+
+
+POLL_SECONDS = 30
+
+
+def wait_for_verdicts(workflows, tag, fetch, timeout, sleep=time.sleep, now=time.monotonic, log=print):
+    """Assess every workflow, re-polling while any is PENDING or MISSING.
+
+    A run can take a minute to appear after the push and several more to
+    finish, so straight after a release both are expected and neither is an
+    answer yet. FAILED is final and ends the wait. Returns {workflow: (status,
+    detail)} as of the last poll.
+    """
+    deadline = now() + timeout
+    while True:
+        verdicts = {w: assess_runs(fetch(w), tag) for w in workflows}
+        statuses = {v[0] for v in verdicts.values()}
+        if FAILED in statuses or statuses <= {OK} or now() >= deadline:
+            return verdicts
+        waiting = sorted(w for w, v in verdicts.items() if v[0] in (PENDING, MISSING))
+        log(f"  waiting on {', '.join(waiting)}")
+        sleep(min(POLL_SECONDS, max(0.0, deadline - now())))
+
+
+def run(status, conclusion=None, tag="v1.0.0"):
+    return {"event": "push", "head_branch": tag, "status": status, "conclusion": conclusion}
+
+
+# Each case is (label, per-poll run lists per workflow, timeout, expected
+# statuses, expected poll count). Time moves only when the fake sleep runs.
+SELFTEST_WAIT = [
+    (
+        "pending then green: waits, then reports ok",
+        {"a.yml": [[run("in_progress")], [run("completed", "success")]]},
+        600, {"a.yml": OK}, 2,
+    ),
+    (
+        "not registered yet, then green: missing is not final while waiting",
+        {"a.yml": [[], [], [run("completed", "success")]]},
+        600, {"a.yml": OK}, 3,
+    ),
+    (
+        "a failure ends the wait though another is still pending",
+        {"a.yml": [[run("completed", "failure")]], "b.yml": [[run("in_progress")]]},
+        600, {"a.yml": FAILED, "b.yml": PENDING}, 1,
+    ),
+    (
+        "never fires: missing once the timeout passes",
+        {"a.yml": [[]]},
+        60, {"a.yml": MISSING}, 3,
+    ),
+]
+
+
+def selftest_wait() -> int:
+    failures = 0
+    for label, polls, timeout, expected, expected_polls in SELFTEST_WAIT:
+        clock = [0.0]
+        count = {w: 0 for w in polls}
+
+        def fetch(w):
+            seq = polls[w]
+            out = seq[min(count[w], len(seq) - 1)]
+            count[w] += 1
+            return out
+
+        def sleep(d):
+            clock[0] += d
+
+        got = wait_for_verdicts(
+            sorted(polls), "v1.0.0", fetch, timeout, sleep, lambda: clock[0], log=lambda _: None
+        )
+        statuses = {w: v[0] for w, v in got.items()}
+        n = max(count.values())
+        if statuses != expected or n != expected_polls:
+            failures += 1
+            print(f"selftest: {label}\n  expected {expected} in {expected_polls} poll(s), got {statuses} in {n}")
+    return failures
 
 
 # Cases that pin down both halves. The YAML ones are regression guards as much
@@ -270,7 +355,8 @@ def selftest() -> int:
         if got != expected:
             failures += 1
             print(f"selftest: {label}\n  expected {expected}, got {got}")
-    total = len(SELFTEST_RESTORE) + len(SELFTEST_DISCOVERY) + len(SELFTEST_RUNS)
+    failures += selftest_wait()
+    total = len(SELFTEST_RESTORE) + len(SELFTEST_DISCOVERY) + len(SELFTEST_RUNS) + len(SELFTEST_WAIT)
     print(f"selftest: {total - failures}/{total} cases pass")
     return 1 if failures else 0
 
@@ -310,7 +396,17 @@ def main() -> int:
         print("check-release-workflows: every tag workflow that builds Go restores the replaces")
         return 0
 
-    args = [a for a in sys.argv[1:] if not a.startswith("-")]
+    argv = sys.argv[1:]
+    timeout = 0.0
+    if "--wait" in argv:
+        i = argv.index("--wait")
+        try:
+            timeout = float(argv[i + 1])
+        except (IndexError, ValueError):
+            print("check-release-workflows: --wait needs a number of seconds")
+            return 2
+        del argv[i : i + 2]
+    args = [a for a in argv if not a.startswith("-")]
     if len(args) != 1:
         print(__doc__)
         return 2
@@ -322,8 +418,9 @@ def main() -> int:
         return 1
 
     bad = 0
+    verdicts = wait_for_verdicts(workflows, tag, fetch_runs, timeout)
     for workflow in workflows:
-        status, detail = assess_runs(fetch_runs(workflow), tag)
+        status, detail = verdicts[workflow]
         print(f"  {status:<8} {workflow:<22} {detail}")
         if status != OK:
             bad += 1
