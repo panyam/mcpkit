@@ -9,17 +9,13 @@
 EXAMPLES_DIR := justfile_directory()
 
 # Run every infra-free example test
-test: test-skills test-tasks-v2 test-common test-otel-stdout test-protogen test-events-kitchen-sink test-events-discord test-events-telegram test-whole-enchilada-event-server test-agents-discovery
+test: test-skills test-common test-otel-stdout test-protogen test-events-kitchen-sink test-events-discord test-events-telegram test-whole-enchilada-event-server test-whole-enchilada-gen-compose test-agents-discovery
 
 
 
-# skills (agent scenario + SEP-2640 security harness)
+# skills (SEP-2640 security harness)
 test-skills:
-    cd {{EXAMPLES_DIR}}/skills && go test ./... -count=1 -timeout 60s -run 'TestAgentScenario|TestSecurityDemo'
-
-# tasks-v2 (agent scenario)
-test-tasks-v2:
-    cd {{EXAMPLES_DIR}}/tasks-v2 && go test ./... -count=1 -timeout 60s -run TestAgentScenario
+    cd {{EXAMPLES_DIR}}/skills && go test ./... -count=1 -timeout 60s
 
 # common (shared example helpers + otel setup)
 test-common:
@@ -44,6 +40,10 @@ test-events-kitchen-sink:
 # whole-enchilada/events/event-server
 test-whole-enchilada-event-server:
     cd {{EXAMPLES_DIR}}/whole-enchilada/events/event-server && go test ./... -count=1 -timeout 60s
+
+# whole-enchilada/events/tools/gen-compose
+test-whole-enchilada-gen-compose:
+    cd {{EXAMPLES_DIR}}/whole-enchilada/events/tools/gen-compose && go test ./... -count=1 -timeout 60s
 
 # events/discord (runner-agnostic script, shared with the Makefile)
 test-events-discord:

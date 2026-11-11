@@ -145,7 +145,7 @@ func TestDeliveryStatus_LastErrorIsCategorical(t *testing.T) {
 	}))
 	defer receiver.Close()
 
-	srv, webhooks := buildAuthGateStack(t, "test-principal")
+	srv, webhooks := buildAuthGateStackWithOpts(t, "test-principal", withFastRetries())
 	params := map[string]any{
 		"name": "fake.event",
 		"delivery": map[string]any{
@@ -157,9 +157,7 @@ func TestDeliveryStatus_LastErrorIsCategorical(t *testing.T) {
 	require.Nil(t, dispatchSubscribe(t, srv, params).Error)
 
 	webhooks.Deliver(context.Background(), MakeEvent("fake.event", "evt_fail", "1", time.Now(), map[string]string{"k": "v"}))
-	// Wait long enough for the deliver loop to retry-and-fail (3 retries
-	// with backoff 0.5s + 1s + 2s = ~3.5s total).
-	time.Sleep(4 * time.Second)
+	waitForLastError(t, webhooks, canonicalKey("test-principal", receiver.URL, "fake.event", nil))
 
 	result := dispatchSubscribeForStatus(t, srv, receiver.URL, params["delivery"].(map[string]any)["secret"].(string))
 	status, ok := result["deliveryStatus"].(map[string]any)
@@ -203,6 +201,7 @@ func TestSuspend_AfterThresholdConsecutiveFailures(t *testing.T) {
 		WithWebhookAllowPrivateNetworks(true), WithUnsafeWebhookAllowPlaintextCallbacks(),
 		WithWebhookSuspendThreshold(threshold),
 		WithWebhookSuspendWindow(10*time.Second),
+		withFastRetries(),
 	)
 	canonical := []byte("suspend-threshold-test")
 	r.Register(RegisterParams{CanonicalKey: canonical, DerivedID: "sub_st", URL: receiver.URL, Secret: "whsec_secret", MaxAgeMs: 0})
@@ -237,6 +236,7 @@ func TestSuspend_FailuresOutsideWindowDontAccumulate(t *testing.T) {
 		WithWebhookAllowPrivateNetworks(true), WithUnsafeWebhookAllowPlaintextCallbacks(),
 		WithWebhookSuspendThreshold(threshold),
 		WithWebhookSuspendWindow(200*time.Millisecond),
+		withFastRetries(),
 	)
 	canonical := []byte("suspend-window-test")
 	r.Register(RegisterParams{CanonicalKey: canonical, DerivedID: "sub_sw", URL: receiver.URL, Secret: "whsec_secret", MaxAgeMs: 0})
@@ -275,6 +275,7 @@ func TestSuspend_SuccessfulRefreshReactivates(t *testing.T) {
 		WithWebhookAllowPrivateNetworks(true), WithUnsafeWebhookAllowPlaintextCallbacks(),
 		WithWebhookSuspendThreshold(2),
 		WithWebhookSuspendWindow(10*time.Second),
+		withFastRetries(),
 	)
 	canonical := []byte("reactivate-test")
 	r.Register(RegisterParams{CanonicalKey: canonical, DerivedID: "sub_react", URL: receiver.URL, Secret: "whsec_secret", MaxAgeMs: 0})
@@ -327,6 +328,7 @@ func TestSuspend_SuspendedTargetSkippedInDeliver(t *testing.T) {
 		WithWebhookAllowPrivateNetworks(true), WithUnsafeWebhookAllowPlaintextCallbacks(),
 		WithWebhookSuspendThreshold(2),
 		WithWebhookSuspendWindow(10*time.Second),
+		withFastRetries(),
 	)
 	canonical := []byte("skip-deliver-test")
 	r.Register(RegisterParams{CanonicalKey: canonical, DerivedID: "sub_skip", URL: receiver.URL, Secret: "whsec_secret", MaxAgeMs: 0})
@@ -384,6 +386,7 @@ func TestSuspend_AutoPostsTerminatedEnvelopeOnSuspension(t *testing.T) {
 		WithWebhookAllowPrivateNetworks(true), WithUnsafeWebhookAllowPlaintextCallbacks(),
 		WithWebhookSuspendThreshold(2),
 		WithWebhookSuspendWindow(10*time.Second),
+		withFastRetries(),
 	)
 	canonical := []byte("auto-terminated-test")
 	r.Register(RegisterParams{CanonicalKey: canonical, DerivedID: "sub_at", URL: receiver.URL, Secret: "whsec_secret", MaxAgeMs: 0})
@@ -430,6 +433,7 @@ func TestSuspend_DoesNotAutoPostTerminatedTwice(t *testing.T) {
 		WithWebhookAllowPrivateNetworks(true), WithUnsafeWebhookAllowPlaintextCallbacks(),
 		WithWebhookSuspendThreshold(2),
 		WithWebhookSuspendWindow(10*time.Second),
+		withFastRetries(),
 	)
 	canonical := []byte("idempotent-terminated-test")
 	r.Register(RegisterParams{CanonicalKey: canonical, DerivedID: "sub_idem", URL: receiver.URL, Secret: "whsec_secret", MaxAgeMs: 0})
@@ -465,7 +469,7 @@ func TestSuspend_DoesNotAutoPostTerminatedTwice(t *testing.T) {
 // connection_refused bucket — a receiver that's down (refused TCP).
 // Use a known-closed port.
 func TestDeliveryStatus_LastErrorBucketsForConnectionRefused(t *testing.T) {
-	srv, webhooks := buildAuthGateStack(t, "test-principal")
+	srv, webhooks := buildAuthGateStackWithOpts(t, "test-principal", withFastRetries())
 	// Port 1 is reserved and reliably refuses.
 	deadURL := "http://127.0.0.1:1/sink"
 	params := map[string]any{
@@ -479,7 +483,7 @@ func TestDeliveryStatus_LastErrorBucketsForConnectionRefused(t *testing.T) {
 	require.Nil(t, dispatchSubscribe(t, srv, params).Error)
 
 	webhooks.Deliver(context.Background(), MakeEvent("fake.event", "evt_refused", "1", time.Now(), map[string]string{"k": "v"}))
-	time.Sleep(4 * time.Second) // 3 retries with backoff
+	waitForLastError(t, webhooks, canonicalKey("test-principal", deadURL, "fake.event", nil))
 
 	result := dispatchSubscribeForStatus(t, srv, deadURL, params["delivery"].(map[string]any)["secret"].(string))
 	status, ok := result["deliveryStatus"].(map[string]any)

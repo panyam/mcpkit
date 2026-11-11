@@ -110,15 +110,15 @@ func TestDelivery_413NotRetried(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	r := NewWebhookRegistry(WithWebhookAllowPrivateNetworks(true), WithUnsafeWebhookAllowPlaintextCallbacks())
+	r := NewWebhookRegistry(WithWebhookAllowPrivateNetworks(true), WithUnsafeWebhookAllowPlaintextCallbacks(), withFastRetries())
 	r.Register(RegisterParams{CanonicalKey: []byte("k"), DerivedID: "sub_test", URL: srv.URL, Secret: "whsec_secret", MaxAgeMs: 0})
 
 	r.Deliver(context.Background(), MakeEvent("fake.event", "evt_413", "1", time.Now(),
 		map[string]string{"text": "tiny"}))
 
-	// Generous wait — if 413 were retried with backoff, we'd see 4 attempts
-	// over ~3.5 seconds. 1 second covers a single attempt + safety margin.
-	time.Sleep(1 * time.Second)
+	// With fast retries a retried 413 would show 4 attempts within ~10ms, so
+	// 200ms is a generous window.
+	time.Sleep(200 * time.Millisecond)
 
 	assert.Equal(t, int32(1), hits.Load(),
 		"413 MUST be treated as non-retryable per spec L487; got %d attempts", hits.Load())

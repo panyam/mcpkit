@@ -11,6 +11,10 @@
 # This is a build gate, not a test gate. It is cheap and its failure is
 # unambiguous, matching check-no-binaries.sh and check-ext-isolation.sh.
 #
+# `go build` skips _test.go files, so each module is vetted too: vet
+# type-checks the test files. A stale call site in examples/events/kitchen-sink's
+# tests passed `go build` for two merged PRs (#1431).
+#
 # Modules whose go.mod carries a `replace` pointing outside this repository are
 # skipped: they need a sibling checkout that exists on a developer's machine but
 # not on a CI runner, so building one here reports the missing directory rather
@@ -60,14 +64,18 @@ while IFS= read -r mod; do
         echo "FAIL: $dir"
         echo "$out" | sed 's/^/    /'
         rc=1
+    elif ! out=$(cd "$dir" && go vet ./... 2>&1); then
+        echo "FAIL (vet, includes _test.go): $dir"
+        echo "$out" | sed 's/^/    /'
+        rc=1
     fi
 done < <(find examples -name go.mod | sort)
 
 if [ $rc -ne 0 ]; then
     echo
-    echo "check-examples-build: one or more example modules do not compile."
+    echo "check-examples-build: one or more example modules do not compile or vet."
     echo "Examples are published as reference code; a broken one is a broken doc."
     exit 1
 fi
 
-echo "check-examples-build: $built example modules compile, $skipped skipped."
+echo "check-examples-build: $built example modules compile and vet, $skipped skipped."

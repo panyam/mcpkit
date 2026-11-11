@@ -618,6 +618,7 @@ type WebhookRegistry struct {
 	maxBodyBytes            int               // outbound POST body cap (SEP-3415 §"Webhook security" (delivery profile); default 256 KiB
 	suspendThreshold        int               // consecutive failures → Active=false (SEP-3415 §"Webhook delivery status"; default 5
 	suspendWindow           time.Duration     // sliding window over which failures accumulate; default 10min
+	retryBackoff            time.Duration     // first retry's delay, doubling per retry up to maxBackoff; initialBackoff outside tests
 
 	// callbackOrigins holds origins permitted past both guards at run time
 	// by UnsafeAllowCallbackOrigins, keyed "scheme://host:port" with the port
@@ -799,6 +800,7 @@ func NewWebhookRegistry(opts ...WebhookOption) *WebhookRegistry {
 		maxBodyBytes:            defaultWebhookMaxBodyBytes,
 		suspendThreshold:        defaultWebhookSuspendThreshold,
 		suspendWindow:           defaultWebhookSuspendWindow,
+		retryBackoff:            initialBackoff,
 		noExpiryFailureGCWindow: DefaultNoExpiryFailureGCWindow,
 		logf:                    log.Printf,
 	}
@@ -1605,7 +1607,7 @@ func (r *WebhookRegistry) deliver(target WebhookTarget, eventName string, body [
 			span.SetAttribute("http.response.status_code", strconv.Itoa(finalStatus))
 		}
 	}()
-	backoff := initialBackoff
+	backoff := r.retryBackoff
 	// Tracks the last per-attempt failure bucket. Recorded onto
 	// deliveryStatus only after all retries are exhausted (i.e., this
 	// is the FINAL outcome). A transient blip during a successful

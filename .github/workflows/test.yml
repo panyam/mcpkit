@@ -97,13 +97,6 @@ jobs:
       - name: bump-root pin self-test
         run: make bump-pins-selftest
 
-      # examples/ holds 58 modules but `make test-examples` only runs the ~10
-      # that have tests, so nothing compiled the rest. apps/react/server was
-      # broken from c45ccb78 until it was found by hand, with CI green
-      # throughout. Build-only, so it stays fast.
-      - name: Examples compile
-        run: ./scripts/check-examples-build.sh
-
       - name: Run unit tests
         run: go test ./... -v -count=1
 
@@ -173,6 +166,82 @@ jobs:
 
       - name: Run E2E tests (auth + apps)
         run: cd tests/e2e && go test ./... -v -count=1 -timeout 60s
+
+      - if: github.ref == 'refs/heads/main' && !cancelled()
+        uses: actions/cache/save@v6.1.0
+        with:
+          path: |
+            ~/go/pkg/mod
+            ~/.cache/go-build
+          key: go-${{ runner.os }}-${{ steps.go.outputs.go-version }}-${{ github.job }}-${{ hashFiles('**/go.sum') }}-${{ github.run_id }}
+
+  # examples/ holds about 60 modules. Each one must compile and vet, test
+  # files included. apps/react/server was broken from c45ccb78 until someone
+  # found it by hand, and a stale call site in kitchen-sink's tests passed a
+  # build-only check for two PRs (#1431). Its own job, beside examples-test,
+  # because the two together outran every other job here.
+  examples-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      # Its own Go cache, as the test job explains.
+      - id: go
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: false
+
+      - uses: actions/cache/restore@v6.1.0
+        with:
+          path: |
+            ~/go/pkg/mod
+            ~/.cache/go-build
+          key: go-${{ runner.os }}-${{ steps.go.outputs.go-version }}-${{ github.job }}-${{ hashFiles('**/go.sum') }}-${{ github.run_id }}
+          restore-keys: |
+            go-${{ runner.os }}-${{ steps.go.outputs.go-version }}-${{ github.job }}-${{ hashFiles('**/go.sum') }}-
+            go-${{ runner.os }}-${{ steps.go.outputs.go-version }}-${{ github.job }}-
+
+      - name: Examples compile and vet
+        run: make check-examples-build
+
+      - if: github.ref == 'refs/heads/main' && !cancelled()
+        uses: actions/cache/save@v6.1.0
+        with:
+          path: |
+            ~/go/pkg/mod
+            ~/.cache/go-build
+          key: go-${{ runner.os }}-${{ steps.go.outputs.go-version }}-${{ github.job }}-${{ hashFiles('**/go.sum') }}-${{ github.run_id }}
+
+  # Runs every example test (#1431). Until then nothing ran `make
+  # test-examples`, and three merged PRs shipped with example tests red.
+  examples-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      # Its own Go cache, as the test job explains.
+      - id: go
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: false
+
+      - uses: actions/cache/restore@v6.1.0
+        with:
+          path: |
+            ~/go/pkg/mod
+            ~/.cache/go-build
+          key: go-${{ runner.os }}-${{ steps.go.outputs.go-version }}-${{ github.job }}-${{ hashFiles('**/go.sum') }}-${{ github.run_id }}
+          restore-keys: |
+            go-${{ runner.os }}-${{ steps.go.outputs.go-version }}-${{ github.job }}-${{ hashFiles('**/go.sum') }}-
+            go-${{ runner.os }}-${{ steps.go.outputs.go-version }}-${{ github.job }}-
+
+      - name: Every example with tests is run somewhere
+        run: make check-example-tests-listed
+
+      - name: Example tests
+        run: make test-examples
 
       - if: github.ref == 'refs/heads/main' && !cancelled()
         uses: actions/cache/save@v6.1.0
@@ -375,11 +444,6 @@ jobs:
 
       - name: Run experimental agents Go client tests
         run: bash experimental/scripts/test-agents-clients-go.sh
-
-      # make test-examples runs in no workflow yet (issue 1431), so the agents
-      # example would otherwise ship with its walkthrough test unrun.
-      - name: Run the agents discovery example test
-        run: make -C examples test-agents-discovery
 
       # The bridge JS tests and the stale-build check ran in no workflow, so
       # fixtures that matched a wrong wire shape stayed green (issue 1452).

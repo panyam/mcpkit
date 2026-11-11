@@ -160,13 +160,13 @@ func TestWebhookDeliver_RetriesExhausted_RecordsError(t *testing.T) {
 	wh := NewWebhookRegistry(
 		WithWebhookAllowPrivateNetworks(true), WithUnsafeWebhookAllowPlaintextCallbacks(),
 		WithWebhookTracerProvider(tp),
+		withFastRetries(),
 	)
 	registerTestTarget(t, wh, receiver.URL)
 
 	wh.Deliver(context.Background(),
 		MakeEvent("fake.event", "evt_500", "1", time.Now(), map[string]string{"k": "v"}))
 
-	// Retry timing: 0.5s + 1s + 2s = ~3.5s total; wait a bit longer for end.
 	require.Eventually(t, func() bool {
 		sp := tp.findSpan("events.webhook.deliver")
 		return sp != nil && sp.isEnded()

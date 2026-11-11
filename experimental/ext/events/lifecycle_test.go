@@ -342,6 +342,7 @@ func TestLifecycle_Webhook_SuspendDoesNotFireOnUnsubscribe(t *testing.T) {
 	f := newLifecycleFixture(t, hooks,
 		WithWebhookSuspendThreshold(threshold),
 		WithWebhookSuspendWindow(10*time.Second),
+		withFastRetries(),
 	)
 	defer f.close()
 

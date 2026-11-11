@@ -17,23 +17,22 @@
 EXAMPLES_DIR := $(abspath $(dir $(lastword $(MAKEFILE_LIST))))
 
 .PHONY: test help \
-  test-skills test-tasks-v2 \
+  test-skills \
   test-common test-otel-stdout test-protogen \
   test-events-kitchen-sink test-events-discord test-events-telegram \
-  test-whole-enchilada-event-server test-agents-discovery
+  test-whole-enchilada-event-server test-whole-enchilada-gen-compose \
+  test-agents-discovery
 
-test: test-skills test-tasks-v2 \
+test: test-skills \
       test-common test-otel-stdout test-protogen \
       test-events-kitchen-sink test-events-discord test-events-telegram \
-      test-whole-enchilada-event-server test-agents-discovery ## Run every infra-free example test
+      test-whole-enchilada-event-server test-whole-enchilada-gen-compose \
+      test-agents-discovery ## Run every infra-free example test
 
 
 
-test-skills: ## skills (agent scenario + SEP-2640 security harness)
-	cd $(EXAMPLES_DIR)/skills && go test ./... -count=1 -timeout 60s -run 'TestAgentScenario|TestSecurityDemo'
-
-test-tasks-v2: ## tasks-v2 (agent scenario)
-	cd $(EXAMPLES_DIR)/tasks-v2 && go test ./... -count=1 -timeout 60s -run TestAgentScenario
+test-skills: ## skills (SEP-2640 security harness)
+	cd $(EXAMPLES_DIR)/skills && go test ./... -count=1 -timeout 60s
 
 test-common: ## common (shared example helpers + otel setup)
 	cd $(EXAMPLES_DIR)/common && go test ./... -count=1 -timeout 60s
@@ -52,6 +51,9 @@ test-events-kitchen-sink: ## events/kitchen-sink
 
 test-whole-enchilada-event-server: ## whole-enchilada/events/event-server
 	cd $(EXAMPLES_DIR)/whole-enchilada/events/event-server && go test ./... -count=1 -timeout 60s
+
+test-whole-enchilada-gen-compose: ## whole-enchilada/events/tools/gen-compose
+	cd $(EXAMPLES_DIR)/whole-enchilada/events/tools/gen-compose && go test ./... -count=1 -timeout 60s
 
 test-events-discord: ## events/discord (runner-agnostic script, shared with the justfile)
 	@bash $(EXAMPLES_DIR)/../experimental/scripts/test-events-discord.sh

@@ -275,7 +275,7 @@ What that costs, and what bit us while turning it on:
   allowlists its dead `http://localhost:1/sink` instead, so its real receivers still handshake.
 - **The discord walkthrough had a success step aimed at `http://localhost:1/sink`.** No test runs
   walkthrough steps, so only running the demo found it. Run the affected demos by hand after touching
-  subscribe; `make test-examples` is in no workflow (#1431).
+  subscribe.
 - **It emptied `events-webhook` for a day and nothing went red.** That scenario grades subscribe
   semantics against callbacks under `https://conformance.invalid/mcp-events`, which never resolves,
   so with verification on every subscribe failed and 26 of 28 rows went untestable (22/23 to 1).
@@ -516,3 +516,19 @@ subscription id does not change. The handler also answers 503, not 404, for a wa
 not running. A quick restart then gets the upstream's retry as well. The test waits 300 ms before
 starting the second bridge, so the old behaviour fails every run. The SEP-3415 field report on
 abandoned webhook events covers the protocol gap underneath, which is still open upstream.
+
+## Tests that fail deliveries use `withFastRetries()`
+
+Picture a test that drives a webhook delivery into a 500. `deliver` retries three times, sleeping
+500ms, then 1s, then 2s, so each failed delivery takes 3.5s. The suspend tests fail several
+deliveries each, and this package's tests took 88s, about 80s of it in those sleeps. Nothing runs
+in parallel here.
+
+The first retry delay is a registry field, `retryBackoff`, and production sets it to
+`initialBackoff`. `withFastRetries()` in `retry_backoff_test.go` sets it to 1ms, so the package
+runs in about 10s. The retry count and the doubling keep their production values.
+
+A test that fails a delivery takes `withFastRetries()`. A test that checks no retry happened, as
+the 410 and 413 tests do, needs it too. Otherwise a retry would land after the test's 200ms wait,
+and the test would pass for the wrong reason. To wait for retries to end, call
+`waitForLastError`, not a fixed sleep: `deliver` records `LastError` only after the last attempt.
