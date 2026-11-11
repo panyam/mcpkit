@@ -256,6 +256,42 @@ jobs:
             ~/.cache/go-build
           key: go-${{ runner.os }}-${{ steps.go.outputs.go-version }}-${{ github.job }}-${{ hashFiles('**/go.sum') }}-${{ github.run_id }}
 
+  # cmd/mcpskills shipped in v0.6.0 unable to compile, and no job built it.
+  # This builds and vets every module in SUB_MODS_TO_TAG against main, and runs
+  # the tests of each one that no other job here tests (#1486).
+  tagged-modules:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      # Its own Go cache, as the test job explains.
+      - id: go
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: false
+
+      - uses: actions/cache/restore@v6.1.0
+        with:
+          path: |
+            ~/go/pkg/mod
+            ~/.cache/go-build
+          key: go-${{ runner.os }}-${{ steps.go.outputs.go-version }}-${{ github.job }}-${{ hashFiles('**/go.sum') }}-${{ github.run_id }}
+          restore-keys: |
+            go-${{ runner.os }}-${{ steps.go.outputs.go-version }}-${{ github.job }}-${{ hashFiles('**/go.sum') }}-
+            go-${{ runner.os }}-${{ steps.go.outputs.go-version }}-${{ github.job }}-
+
+      - name: Every tagged module builds, vets and tests against main
+        run: make check-tagged-modules
+
+      - if: github.ref == 'refs/heads/main' && !cancelled()
+        uses: actions/cache/save@v6.1.0
+        with:
+          path: |
+            ~/go/pkg/mod
+            ~/.cache/go-build
+          key: go-${{ runner.os }}-${{ steps.go.outputs.go-version }}-${{ github.job }}-${{ hashFiles('**/go.sum') }}-${{ github.run_id }}
+
   # Every command in a tagged module failed `go install pkg@vX` at every
   # release until #1488, because the tags carried in-repo replaces. This runs
   # bump-pins and tag-all at a fake version in a clone and installs each

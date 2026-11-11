@@ -35,6 +35,8 @@ From a green `main`:
    CI already ran the root suite `make test` runs, and the sub-module suites,
    on it, so re-running it locally repeats that work. Run `make test` yourself
    only when that run is missing or red.
+   That run's `tagged-modules` job builds and vets every module in
+   `SUB_MODS_TO_TAG` against main (#1486).
    A stable minor still adds `make audit` and `make testall`, which CI doesn't
    cover.
 2. **Bump sub-module requires.** `make bump-root V=<version>` — repoints every
