@@ -9,6 +9,19 @@ Releases before 0.3.0 were tag-only and are not back-filled here.
 
 ## [Unreleased]
 
+## [0.8.21] - 2026-11-11
+
+Full write-up: [`docs/releases/v0.8.21.md`](docs/releases/v0.8.21.md).
+
+### Fixed
+- **A dialled room join no longer fails when room traffic arrives before its answer**
+  (`experimental/ext/rooms/massrelay`, PR 1696).
+
+### Changed
+- **`experimental/ext/protogen` is tagged with every release again** (PR 1693).
+- **CI builds, vets and tests every tagged module, and runs the example tests** (PRs 1694, 1692).
+- **`make testall`'s protogen stage fails when generation fails** (PR 1695).
+
 ### Changed
 - **`experimental/ext/protogen` is tagged with every release again** (#1319). Its last tag was
   v0.2.47, which pins mcpkit v0.2.3. `go install

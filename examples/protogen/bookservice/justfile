@@ -1,9 +1,8 @@
 # bookservice example justfile
 
-# Generate Go code from proto files
+# Generate Go code from proto files (gen/ is replaced only if buf succeeds)
 generate:
-    rm -rf gen
-    buf generate
+    bash ../../../experimental/ext/protogen/scripts/generate.sh .
 
 # Run the example MCP server
 run:

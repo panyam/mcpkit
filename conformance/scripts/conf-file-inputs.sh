@@ -8,8 +8,7 @@ set -eu
 . "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/_common.sh"
 
 require_conf_dir MCPCONFORMANCE_FILE_INPUTS_PATH \
-    "Clone https://github.com/panyam/mcpconformance there or set MCPCONFORMANCE_FILE_INPUTS_PATH=<path-to-clone>." \
-    "Default expects the 'pending' branch checked out at ../conf-pending."
+    "Run 'make conf-pending-setup' to create it, or set MCPCONFORMANCE_FILE_INPUTS_PATH=<path-to-checkout>."
 
 (cd "$REPO_ROOT/examples/file-inputs" && go build -o file-inputs-demo .)
 (cd "$MCPCONFORMANCE_FILE_INPUTS_PATH" && npm install --silent && \

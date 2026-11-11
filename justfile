@@ -155,6 +155,10 @@ conf-agents-setup:
 conf-events-setup:
     just -f conformance/justfile conf-events-setup
 
+# Create the file-inputs and auth-server suite checkout if missing (delegates to conformance/justfile)
+conf-pending-setup:
+    just -f conformance/justfile conf-pending-setup
+
 # Mission #1552 exercise: session vs stateless parity rows plus testconf, testconf-stateless, testconf-agents
 exercise-wire:
     @bash scripts/exercise-wire.sh

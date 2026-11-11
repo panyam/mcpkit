@@ -314,12 +314,9 @@ These span packages and will bite on a task that never opens a routed doc.
 - **A mutation that breaks the build reads as a pass** to a red-before-green runner that greps for
   `--- FAIL`. Check for `build failed` too, or a "no test went red" result means nothing. It hid two
   mutations in #1613 until a direct run showed the build error.
-- **A clean `make testall` needs setup it does not do** (#1551). Stages 8f and 8g fail in 0s
-  without a `../conf-pending` checkout (point `MCPCONFORMANCE_FILE_INPUTS_PATH` and
-  `MCPCONFORMANCE_AUTH_PATH` at any `pending` checkout, e.g. `../conf-pending-v080`), stage 9
-  needs a free `KC_PORT`, and the protogen stage can delete the generated files under
-  `examples/protogen/`, so run `git checkout -- examples/protogen` before staging anything after
-  a testall. testall also skips `testconf-stateless` and `testconf-client`; run those by hand.
+- **A clean `make testall` needs setup it does not do.** Run `make conf-pending-setup` for
+  stages 8f and 8g (#1551), and give stage 9 a free `KC_PORT`. testall also skips
+  `testconf-stateless` and `testconf-client`; run those by hand.
 - **A new example with tests needs a target in `examples/Makefile`'s `test` umbrella** and its
   justfile twin, or `make check-example-tests-listed` fails CI (#1431). `examples/NOTES.md`
   § Test orchestration has the CI jobs.
