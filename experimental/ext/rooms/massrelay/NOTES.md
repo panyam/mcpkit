@@ -9,6 +9,16 @@ WebSocket pings, and expects a `pong` with the same `pingId`; the read loop answ
 relay stamps a message's sender from the connection and ignores the client id in the action, so
 `Dial` leaves it empty.
 
+## A join's answer can arrive after room traffic
+
+The relay adds a joining client to the room and starts forwarding the room's events to it before it
+writes the join's `RoomJoined`. So a `PeerJoined`, a `PeerLeft` or an `AppMessage` can reach the
+socket first. `Join` used to read the first event as the join's answer and fail with "unexpected
+answer" on anything else, which made a join flaky whenever the room was busy. `Join` now holds
+those events and replays them through `handle` once the member exists. They happened after the
+`RoomJoined` roster was taken, so replaying them is what keeps the roster and the message stream
+right. Dropping them would lose a peer or a message.
+
 ## Only addressed messages are reported
 
 `RoomTransport` promises the messages addressed to this peer. massrelay also fans out room-wide
