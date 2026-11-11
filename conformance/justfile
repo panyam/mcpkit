@@ -128,6 +128,11 @@ testconf-events-client:
 conf-events-setup:
     @bash {{CONFORMANCE_DIR}}/scripts/conf-events-setup.sh
 
+# Create the file-inputs and auth-server suite checkout (MCPCONFORMANCE_FILE_INPUTS_PATH,
+# MCPCONFORMANCE_AUTH_PATH) if missing. Safe to re-run.
+conf-pending-setup:
+    @bash {{CONFORMANCE_DIR}}/scripts/conf-pending-setup.sh
+
 # Run elicitation conformance suite (SEP-1036 URL mode + form, requires Node.js, target server must be running)
 testconf-elicitation:
     cd {{CONFORMANCE_DIR}} && pnpm install --silent && \

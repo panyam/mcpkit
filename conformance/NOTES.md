@@ -29,7 +29,7 @@ Defaults, resolved relative to `conformance/justfile`:
 |---|---|
 | `MCPCONFORMANCE_TASKS_V2_PATH`, `MCPCONFORMANCE_MRTR_PATH` | `../conf-upstream-main` (upstream `main`) |
 | `MCPCONFORMANCE_BASE_PATH` | `../conf-upstream-main` (audit + stateless) |
-| `MCPCONFORMANCE_FILE_INPUTS_PATH`, `MCPCONFORMANCE_AUTH_PATH` | `../conf-pending` (fork `pending`) |
+| `MCPCONFORMANCE_FILE_INPUTS_PATH`, `MCPCONFORMANCE_AUTH_PATH` | `../conf-pending` (fork `pending`), created by `make conf-pending-setup` |
 | `MCPCONFORMANCE_SKILLS_PATH` | `../conf-upstream-main` (upstream `main`, retargeted once PR 330 merged) |
 | `MCPCONFORMANCE_EVENTS_PATH` | `../conf-events` (fork `feat/events-conformance-suite`, upstream PR 521) |
 | `MCPCONFORMANCE_EVENTS_CLIENT_PATH` | `../conf-events-client` (fork `feat/events-client-conformance`, upstream PR 541, a worktree of `../conf-events`) |

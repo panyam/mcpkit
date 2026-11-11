@@ -33,6 +33,7 @@ import (
 	"strings"
 
 	"google.golang.org/protobuf/compiler/protogen"
+	"google.golang.org/protobuf/types/pluginpb"
 
 	"github.com/panyam/mcpkit/experimental/ext/protogen/generator"
 )
@@ -47,6 +48,8 @@ func main() {
 	protogen.Options{
 		ParamFunc: flags.Set,
 	}.Run(func(gen *protogen.Plugin) error {
+		// The generator reads HasOptionalKeyword and skips synthetic oneofs.
+		gen.SupportedFeatures = uint64(pluginpb.CodeGeneratorResponse_FEATURE_PROTO3_OPTIONAL)
 		cfg := generator.Config{
 			PackageSuffix: *packageSuffix,
 		}

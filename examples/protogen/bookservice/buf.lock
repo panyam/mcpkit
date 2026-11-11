@@ -2,8 +2,8 @@
 version: v2
 deps:
   - name: buf.build/mcpkit/protogen
-    commit: f90e302eaa51495f81f3d4376e3f6c7d
+    commit: a364674a03bc4c4e9cf12d50168ff284
     digest: b5:cee4b088d63f4778be8d438dd3c4d49cc90db6c53971116076c3bc5af974b8792d041435d5602c16e130f0ad9fcf44680a0521bd3a77a372a137b75b417502e1
   - name: buf.build/protocolbuffers/wellknowntypes
-    commit: 9d16d599a978406980f6e2f081331a93
-    digest: b5:dd06e497a5c52f5ddf6ec02b3c7d289cc6c0432093fc2f6bf7a4fb5fae786c3e4c893e55d2759ffb6833268daf3de0bce303a406fed15725790528f2c27dc219
+    commit: f1151727eddb493abf82a1d919dc35e4
+    digest: b5:e05c29a4347e1ef07cb978e9ece8a44c59c8cb6ff31884cd632f88266f81baaba7a67bcfc6ac52d8caada7f77faf2d37683af0d69755ef52d9f1288cd1fd5d93

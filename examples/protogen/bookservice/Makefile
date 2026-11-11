@@ -4,9 +4,8 @@
 
 all: generate test run 
 
-generate: ## Generate Go code from proto files
-	rm -rf gen
-	buf generate
+generate: ## Generate Go code from proto files (gen/ is replaced only if buf succeeds)
+	bash ../../../experimental/ext/protogen/scripts/generate.sh .
 
 run: ## Run the example MCP server
 	go run .

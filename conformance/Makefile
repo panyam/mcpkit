@@ -38,7 +38,7 @@ MCPCONFORMANCE_BASE_PATH        ?= $(abspath $(REPO_ROOT)/../conf-upstream-main)
         testconf-tasks testconf-tasks-v2 testconf-mrtr \
         testconf-file-inputs testconf-auth-server \
         testconf-stateless testconf-skills testconf-events \
-        testconf-events-client conf-events-setup testconf-agents conf-agents-setup \
+        testconf-events-client conf-events-setup conf-pending-setup testconf-agents conf-agents-setup \
         testconf-elicitation testconf-upstream-audit \
         testconf-external-checker \
         refresh-conformance check-conformance-stale \
@@ -100,6 +100,9 @@ testconf-agents: ## Run agent discovery conformance (agents-wg#22), informationa
 
 conf-agents-setup: ## Create the agents suite checkout (MCPCONFORMANCE_AGENTS_PATH) if missing. Safe to re-run.
 	@bash $(CONFORMANCE_DIR)/scripts/conf-agents-setup.sh
+
+conf-pending-setup: ## Create the file-inputs and auth-server suite checkout (MCPCONFORMANCE_FILE_INPUTS_PATH, MCPCONFORMANCE_AUTH_PATH) if missing. Safe to re-run.
+	@bash $(CONFORMANCE_DIR)/scripts/conf-pending-setup.sh
 
 conf-events-setup: ## Create the events suite checkouts (MCPCONFORMANCE_EVENTS_PATH, MCPCONFORMANCE_EVENTS_CLIENT_PATH) if missing. Safe to re-run.
 	@bash $(CONFORMANCE_DIR)/scripts/conf-events-setup.sh

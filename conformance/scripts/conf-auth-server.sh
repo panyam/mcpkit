@@ -9,8 +9,7 @@ set -u
 . "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/_common.sh"
 
 require_conf_dir MCPCONFORMANCE_AUTH_PATH \
-    "Clone https://github.com/panyam/mcpconformance there or set MCPCONFORMANCE_AUTH_PATH=<path-to-clone>." \
-    "Default expects the 'pending' branch checked out at ../conf-pending."
+    "Run 'make conf-pending-setup' to create it, or set MCPCONFORMANCE_AUTH_PATH=<path-to-checkout>."
 (cd "${REPO_ROOT}/examples/auth" && go build -o auth-demo .)
 (cd "${MCPCONFORMANCE_AUTH_PATH}" && npm install --silent)
 # Manual spawn: Phase 2 + 2.5's token-needing checks pull four pre-
