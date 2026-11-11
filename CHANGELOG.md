@@ -9,6 +9,14 @@ Releases before 0.3.0 were tag-only and are not back-filled here.
 
 ## [Unreleased]
 
+### Changed
+- **`experimental/ext/protogen` is tagged with every release again** (#1319). Its last tag was
+  v0.2.47, which pins mcpkit v0.2.3. `go install
+  github.com/panyam/mcpkit/experimental/ext/protogen/cmd/protoc-gen-go-mcp@<tag>` works from
+  this release on.
+- **CI fails when a module outside `examples/` and `docs/` is missing from `SUB_MODS_TO_TAG`**
+  (`make check-tag-set`, #1319).
+
 ## [0.8.20] - 2026-11-09
 
 Full write-up: [`docs/releases/v0.8.20.md`](docs/releases/v0.8.20.md).

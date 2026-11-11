@@ -21,6 +21,7 @@ SUB_MODS_TO_TAG := \
 	experimental/ext/events \
 	experimental/ext/events/stores/memory experimental/ext/events/stores/gorm experimental/ext/events/stores/redis \
 	experimental/ext/events/clients/go \
+	experimental/ext/protogen \
 	experimental/ext/rooms experimental/ext/rooms/massrelay \
 	experimental/integrations/roomsevents \
 	cmd/testclient cmd/common cmd/mcpskills \
@@ -162,6 +163,9 @@ check-example-tests-listed: ## CI gate — every example module with tests is ru
 
 check-dep-consistency: ## CI gate — fail if a third-party dep is pinned at 2+ versions across published modules
 	python3 scripts/check_dep_consistency.py
+
+check-tag-set: ## CI gate — fail if a module outside examples/ and docs/ is missing from SUB_MODS_TO_TAG (#1319)
+	python3 scripts/check_tag_set.py
 
 check-dependabot-dirs: ## CI gate — fail if a directory in .github/dependabot.yml no longer exists
 	python3 scripts/check_dependabot_dirs.py
@@ -487,5 +491,5 @@ setup: setup-tools setup-hooks ## Full development setup
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-18s\033[0m %s\n", $$1, $$2}'
 
-.PHONY: build test test-examples test-race test-v cover cover-html cover-func cover-all test-auth test-ui test-skills test-mcpskills build-mcpskills test-mcpskills-walkthrough test-protogen test-e2e test-experimental test-apps-playwright test-apps-playwright-docker test-apps-playwright-all test-apps-playwright-docker-all refresh-visual-gallery release-audit-apps demo-app demo-upstream testkcl testkcl-auto testall test-report smoke smoke-wire verify-dual testconfall testconf testconfauth testconf-client testconf-tasks testconf-tasks-v2 testconf-mrtr testconf-file-inputs testconf-auth-server testconf-elicitation testconf-skills testconf-events testconf-events-client conf-events-setup testconf-agents conf-agents-setup exercise-aipage exercise-events exercise-wire conf-events-remote testconf-stateless testconf-upstream-audit testconf-external-checker refresh-conformance check-conformance-stale check-local-suites-stale check-conf-fixture-guards check-kcl-guards check-rooms-ts-version check-snippets check-examples-build check-example-tests-listed check-dep-consistency check-dependabot-dirs update-dep-baseline dep-sweep check-auth-markers refresh-apps-compat-report check-apps-compat-stale vet lint vulncheck seccheck secrets verify-submodule-deps verify-submodule-deps-resolve audit ci ci-full serve serve-streamable serve-both tidy tidy-all bump-root collect-walkthroughs ghbuild ghserve ghdeploy tag tag-push check-install rehearse-release setup-tools setup-hooks setup upkcl downkcl kcllogs build-bridge help
+.PHONY: build test test-examples test-race test-v cover cover-html cover-func cover-all test-auth test-ui test-skills test-mcpskills build-mcpskills test-mcpskills-walkthrough test-protogen test-e2e test-experimental test-apps-playwright test-apps-playwright-docker test-apps-playwright-all test-apps-playwright-docker-all refresh-visual-gallery release-audit-apps demo-app demo-upstream testkcl testkcl-auto testall test-report smoke smoke-wire verify-dual testconfall testconf testconfauth testconf-client testconf-tasks testconf-tasks-v2 testconf-mrtr testconf-file-inputs testconf-auth-server testconf-elicitation testconf-skills testconf-events testconf-events-client conf-events-setup testconf-agents conf-agents-setup exercise-aipage exercise-events exercise-wire conf-events-remote testconf-stateless testconf-upstream-audit testconf-external-checker refresh-conformance check-conformance-stale check-local-suites-stale check-conf-fixture-guards check-kcl-guards check-rooms-ts-version check-snippets check-examples-build check-example-tests-listed check-dep-consistency check-tag-set check-dependabot-dirs update-dep-baseline dep-sweep check-auth-markers refresh-apps-compat-report check-apps-compat-stale vet lint vulncheck seccheck secrets verify-submodule-deps verify-submodule-deps-resolve audit ci ci-full serve serve-streamable serve-both tidy tidy-all bump-root collect-walkthroughs ghbuild ghserve ghdeploy tag tag-push check-install rehearse-release setup-tools setup-hooks setup upkcl downkcl kcllogs build-bridge help
 .DEFAULT_GOAL := help
