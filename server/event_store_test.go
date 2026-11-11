@@ -84,7 +84,9 @@ func TestStreamableHTTPEventStoreIntegration(t *testing.T) {
 	req, _ := http.NewRequest("POST", ts.URL+"/mcp", strings.NewReader(notifBody))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Mcp-Session-Id", sessionID)
-	http.DefaultClient.Do(req)
+	notifResp, err := http.DefaultClient.Do(req)
+	require.NoError(t, err)
+	notifResp.Body.Close()
 
 	// Make a tool call via SSE-streaming POST (Accept: text/event-stream)
 	toolBody := `{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"echo","arguments":{"message":"stored"}}}`
@@ -142,12 +144,22 @@ func TestSSETransportEventsHaveIDs(t *testing.T) {
 	ts.Close()
 }
 
+// slowStore delays every Store call. emitSSEEvent sends an event before it
+// stores it, so a test that reads the store without draining the response
+// fails every time instead of only on a loaded CI runner (#1307).
+type slowStore struct{ gohttp.EventStore }
+
+func (s slowStore) Store(streamID string, ev gohttp.StoredEvent) error {
+	time.Sleep(50 * time.Millisecond)
+	return s.EventStore.Store(streamID, ev)
+}
+
 // TestEventStoreTrimOnSessionDelete verifies that stored events are cleaned
 // up when a Streamable HTTP session is explicitly deleted. This prevents
 // unbounded memory growth from abandoned sessions.
 func TestEventStoreTrimOnSessionDelete(t *testing.T) {
 	srv := testutil.NewTestServer()
-	store := gohttp.NewMemoryEventStore(100)
+	store := slowStore{gohttp.NewMemoryEventStore(100)}
 	handler := srv.Handler(
 		server.WithStreamableHTTP(true),
 		server.WithSSE(false),
@@ -176,10 +188,11 @@ func TestEventStoreTrimOnSessionDelete(t *testing.T) {
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "text/event-stream")
 	req.Header.Set("Mcp-Session-Id", sessionID)
-	resp2, _ := http.DefaultClient.Do(req)
-	if resp2 != nil {
-		resp2.Body.Close()
-	}
+	resp2, err := http.DefaultClient.Do(req)
+	require.NoError(t, err)
+	// Read to EOF: the stream ends only after the last event is stored.
+	_, _ = io.Copy(io.Discard, resp2.Body)
+	resp2.Body.Close()
 
 	// Verify events exist before delete
 	events, _ := gohttp.ReplayAll(store, sessionID, "unknown")
