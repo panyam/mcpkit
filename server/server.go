@@ -364,7 +364,6 @@ func effectiveStatelessSubCap(raw int) int {
 // subscriptions/listen) is in the 2026-07-28 release candidate, not
 // Final. The cap is mcpkit-internal and not spec-defined; if a future
 // SEP standardizes subscription caps, callers may need to migrate.
-// See docs/SEP_2640_STATELESS_INTERACTION.md.
 func WithStatelessSubscriptionCap(n int) Option {
 	return func(o *serverOptions) { o.statelessSubCap = n }
 }
