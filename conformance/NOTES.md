@@ -422,6 +422,17 @@ non-conformant artifact is the skill. If a check for it is ever added it belongs
 authority. Every one of the 89 rows in `src/seps/sep-2640.yaml` carries a verbatim SEP quote, and
 there is no sentence to quote for this one.
 
+**SEP-2640 went Final on 2026-09-11** (`8075db4a` upstream; Accepted was `d6b31a03`, 2026-09-03).
+We wrote the conformance tests that gated Final, and they merged as
+`modelcontextprotocol/conformance` PR 330: three server scenarios and five client scenarios. Three
+independent implementations passed them all: mcpkit, go-sdk and csharp-sdk. **Don't quote row or
+check counts from prose.** An earlier `CLAUDE.md` said 96 rows and 89 checks against a merged file
+holding 98 and 90. The yaml's own header was wrong by a similar margin in four places. Nothing
+recomputes either number, so each one is a claim with a date. Read the counts from a
+`traceability` run. Running it against another implementation found two bugs in the suite, and
+mcpkit alone could reach neither. Per-SDK setup is in `RUNNING_SEP2640.md` on the conformance
+branch, and more detail in `ext/skills/NOTES.md`.
+
 ## Adding a `testconf-*` target
 
 Six places, and two independent CI gates. Passing the first gate says nothing about the second,

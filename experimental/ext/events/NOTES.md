@@ -154,6 +154,12 @@ Worth keeping for the next time a document and a reference implementation disagr
 document is what made the question visible. Declaring in both places would have been the
 accommodating choice and would have left the sketch saying the wrong thing indefinitely.
 
+**ChatGPT reads the top-level key** (OpenAI's MCP Events guide, sketch issue 8). Following the SEP
+alone hides an mcpkit server from it. Decided 2026-10-13: the SEP by default, plus the opt-in
+`events.Config.ChatGPTCompat`. That option declares in both places through the generic
+`core.Extension.TopLevel` hook (#1501). It covers only the declaration, because nobody has observed
+any other ChatGPT behaviour. It goes when ChatGPT reads the extensions map (#1511).
+
 `ListChanged` is true whenever `Register` wires the handlers, because `AddSource` and `RemoveSource`
 broadcast unconditionally. The spec reads the flag as a promise rather than a hint — a server
 declaring false must not send the notification — so a future option that suppresses the broadcast has
