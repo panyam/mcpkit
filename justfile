@@ -163,6 +163,10 @@ conf-pending-setup:
 exercise-wire:
     @bash scripts/exercise-wire.sh
 
+# Mission #1701 exercise: testconf-skills, the SEP-2640 client scenarios, then examples/disclosure's plain and groups checks on both wires
+exercise-disclosure:
+    @bash scripts/exercise-disclosure.sh
+
 # Mission #1683 exercise: an agent drives a player's page in examples/rooms/lanternfall
 exercise-aipage:
     @bash scripts/exercise-aipage.sh

@@ -29,7 +29,8 @@
       { "name": "MRTR",                "url": "examples/mrtr/" },
       { "name": "MCP Apps",            "url": "examples/apps/" },
       { "name": "Events",             "url": "examples/events/discord/" },
-      { "name": "Skills",              "url": "examples/skills-core/" }
+      { "name": "Skills",              "url": "examples/skills-core/" },
+      { "name": "Progressive disclosure", "url": "examples/disclosure/" }
     ]
   },
   {
@@ -45,7 +46,8 @@
       { "name": "Reverse calls",         "url": "concepts/reverse-call/" },
       { "name": "MRTR internals",        "url": "concepts/mrtr/" },
       { "name": "Tracing",               "url": "concepts/tracing/" },
-      { "name": "Events",                "url": "concepts/events/" }
+      { "name": "Events",                "url": "concepts/events/" },
+      { "name": "Progressive disclosure", "url": "concepts/progressive-disclosure/" }
     ]
   },
   {

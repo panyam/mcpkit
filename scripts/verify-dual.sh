@@ -110,6 +110,7 @@ verify tasks-v2    examples/tasks-v2
 verify mrtr        examples/mrtr
 verify file-inputs examples/file-inputs
 verify list-ttl    examples/list-ttl
+verify disclosure  examples/disclosure
 verify agents-discovery examples/agents/discovery
 
 echo

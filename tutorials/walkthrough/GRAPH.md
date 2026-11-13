@@ -37,6 +37,8 @@ graph TD
     click notifications "https://github.com/panyam/mcpkit/blob/main/tutorials/walkthrough/notifications.md"
     otel["otel<br/>(root)"]
     click otel "https://github.com/panyam/mcpkit/blob/main/tutorials/walkthrough/otel.md"
+    progressive-disclosure["progressive-disclosure<br/>(root)"]
+    click progressive-disclosure "https://github.com/panyam/mcpkit/blob/main/tutorials/walkthrough/progressive-disclosure.md"
     request-anatomy["request-anatomy<br/>(root)"]
     click request-anatomy "https://github.com/panyam/mcpkit/blob/main/tutorials/walkthrough/request-anatomy.md"
     reverse-call["reverse-call<br/>(root)"]
@@ -83,6 +85,8 @@ graph TD
     request-anatomy --> otel
     extension-mechanisms --> otel
     reverse-call --> otel
+    bringup --> progressive-disclosure
+    extension-mechanisms --> progressive-disclosure
     bringup --> request-anatomy
     transport-mechanics --> request-anatomy
     notifications --> request-anatomy
@@ -98,6 +102,6 @@ graph TD
 
     classDef written fill:#e8f5e9,stroke:#2e7d32,color:#000;
     classDef stub fill:#fff3e0,stroke:#e65100,color:#000;
-    class bringup,events,extension-mechanisms,mrtr,notifications,otel,request-anatomy,reverse-call,transport-mechanics written;
+    class bringup,events,extension-mechanisms,mrtr,notifications,otel,progressive-disclosure,request-anatomy,reverse-call,transport-mechanics written;
     class apps,auth,cancellation,elicitation,events-hmac,events-identity,events-ssrf,initialize,list-ttl,middleware,roots-list,sampling,session-resumption,sse-resumption,tasks stub;
 ```
