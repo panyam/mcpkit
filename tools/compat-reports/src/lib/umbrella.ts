@@ -1,4 +1,4 @@
-// Shared utilities for fetching + parsing an extension-compat tracking
+{ encoding: 'utf-8' }// Shared utilities for fetching + parsing an extension-compat tracking
 // umbrella issue. Each MCP extension that ships a drop-in compat suite
 // (apps, tasks-v2, mrtr, ...) keeps its per-fixture status in a single
 // hand-maintained GitHub issue. These helpers turn that issue body into
@@ -48,16 +48,7 @@ export function fetchUmbrellaBody(opts: FetchOptions): string {
       '--json', 'body',
       '--jq', '.body',
     ],
-    {
-      encoding: 'utf-8',
-      // EMU accounts can't read personal repos with their org token.
-      // GH_PERSONAL_TOKEN (when set) takes precedence over GH_TOKEN —
-      // matches the project-wide convention from scripts/*.sh.
-      env: {
-        ...process.env,
-        GH_TOKEN: process.env.GH_PERSONAL_TOKEN || process.env.GH_TOKEN || '',
-      },
-    },
+    { encoding: 'utf-8' },
   ).trim();
   if (!body) {
     throw new Error(

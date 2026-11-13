@@ -311,30 +311,11 @@ neither of which is obvious from reading the scenario source.
 
 ## Writing to a repo we do not own
 
-`gh` writes against `modelcontextprotocol/*` fail with 403 "Resource not accessible by personal
-access token", **including on a PR we authored**. `$GH_PERSONAL_TOKEN` is a fine-grained PAT, and
-fine-grained PATs can only be scoped to repositories in the owner's own account, so no setting fixes
-this. Both `gh pr edit` and REST `PATCH /repos/{o}/{r}/pulls/{n}` are affected.
-
-The web UI works, because GitHub grants PR authors edit rights through the session.
-
-**But there is a second credential already on the box that does work, and it is easier than a new
-PAT.** `gh` keeps its own `gho_` OAuth login in `~/.config/gh/hosts.yml` with full `repo` scope.
-Dropping the env override falls back to it:
-
-```sh
-env -u GH_TOKEN gh pr create --repo modelcontextprotocol/conformance --draft …
-env -u GH_TOKEN gh pr edit 504 --repo modelcontextprotocol/conformance --body-file …
-env -u GH_TOKEN gh api -X POST repos/modelcontextprotocol/conformance/pulls/504/comments --input …
-```
-
-All three verified against PR 504 on 2026-09-15: create, edit, and an inline review comment. So the
-rule is not "upstream writes need the web UI", it is **"upstream writes need a credential that is
-not the fine-grained PAT"**, and we already have one. Keep `GH_TOKEN="$GH_PERSONAL_TOKEN"` for
-`panyam/*`, which the `gho_` token reaches too but which the EMU account does not.
-
-Pushing to our own fork branches is unaffected, that is SSH — via the agent socket, since
-`~/.ssh/id_github` does not exist in the container: `SSH_AUTH_SOCK=~/.ssh/agent.sock git push …`.
+A fine-grained token gets 403 "Resource not accessible by personal access token" on
+`modelcontextprotocol/*` writes, **even on a PR you authored**. Fine-grained tokens only reach repos
+in their owner's account, so no setting fixes it. `gh pr create`, `gh pr edit`, REST
+`PATCH /repos/{o}/{r}/pulls/{n}` and review comments are all affected. A `gh auth login` OAuth login
+with `repo` scope does all of them (verified on PR 504, 2026-09-15).
 
 **The fork's pre-push hook runs the whole suite, and a `timeout` wrapper kills it without a word.**
 `conf-events` (and any clone of `panyam/mcpconformance`) has a lefthook `pre-push` that runs prettier
@@ -345,9 +326,9 @@ unpushed with nothing on screen saying so, since the push is what prints and the
 The hook is now about six minutes, and that breaks SSH too. Git opens the SSH connection *before* the
 hook runs, and GitHub drops it after a few idle minutes, so the hook passes and the push then fails
 with `send-pack: unexpected disconnect` / `the remote end hung up`. Twice on 2026-10-15 the only
-visible output was the hook's green summary. Push over HTTPS with the `gho_` login instead, which
-opens its connection after the hook and does not prompt:
-`env -u GH_TOKEN git -c credential.helper='!gh auth git-credential' push https://github.com/panyam/mcpconformance.git <local>:<branch>`.
+visible output was the hook's green summary. Push over HTTPS instead. HTTPS opens its connection
+after the hook, and `gh`'s credential helper answers without a prompt:
+`git -c credential.helper='!gh auth git-credential' push https://github.com/<fork>.git <local>:<branch>`.
 Either way, confirm with `git ls-remote origin <branch>` rather than trusting the exit status.
 
 **`modelcontextprotocol/conformance` dismisses stale reviews on push.** A commit landed after an
@@ -421,6 +402,17 @@ non-conformant artifact is the skill. If a check for it is ever added it belongs
 `sep-2640-skillmd-frontmatter` as a WARNING, naming Agent Skills rather than SEP-2640 as the
 authority. Every one of the 89 rows in `src/seps/sep-2640.yaml` carries a verbatim SEP quote, and
 there is no sentence to quote for this one.
+
+**SEP-2640 went Final on 2026-09-11** (`8075db4a` upstream; Accepted was `d6b31a03`, 2026-09-03).
+We wrote the conformance tests that gated Final, and they merged as
+`modelcontextprotocol/conformance` PR 330: three server scenarios and five client scenarios. Three
+independent implementations passed them all: mcpkit, go-sdk and csharp-sdk. **Don't quote row or
+check counts from prose.** An earlier `CLAUDE.md` said 96 rows and 89 checks against a merged file
+holding 98 and 90. The yaml's own header was wrong by a similar margin in four places. Nothing
+recomputes either number, so each one is a claim with a date. Read the counts from a
+`traceability` run. Running it against another implementation found two bugs in the suite, and
+mcpkit alone could reach neither. Per-SDK setup is in `RUNNING_SEP2640.md` on the conformance
+branch, and more detail in `ext/skills/NOTES.md`.
 
 ## Adding a `testconf-*` target
 

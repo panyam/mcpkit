@@ -61,7 +61,7 @@ Options:
   --out <path>       Output markdown path (default: conformance/apps/COMPAT.md)
   -h, --help         Show this help
 
-Auth: uses GH_PERSONAL_TOKEN if set, falling back to GH_TOKEN.
+Auth: whatever gh uses (GH_TOKEN, or gh auth login).
 `);
   process.exit(2);
 }

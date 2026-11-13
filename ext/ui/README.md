@@ -302,7 +302,7 @@ The flat `ui/resourceUri` key alongside the nested `ui.resourceUri` is a backwar
 
 ## Sub-module status
 
-- Separate `go.mod` (see [Sub-Modules in the root `CLAUDE.md`](../../CLAUDE.md#sub-modules)) — `just test` at the repo root does NOT cover this package. Use `just test-ui` or `cd ext/ui && go test ./...`.
+- Separate `go.mod` (listed in `SUB_MODS_TO_TAG` in the root [`Makefile`](../../Makefile)) — `just test` at the repo root does NOT cover this package. Use `just test-ui` or `cd ext/ui && go test ./...`.
 - Run `just tidy-all` after touching `core/` imports.
 - The bridge JS source (`assets/mcp-app-bridge.ts`) builds via `just build-bridge` (delegates to `assets/`'s pnpm setup).
 

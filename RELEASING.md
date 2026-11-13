@@ -126,62 +126,36 @@ npm trust github @panyam/mcpkit-rooms --repo panyam/mcpkit --file publish-npm-ro
 Then push the tags as usual. The workflow finds X.Y.Z already published and skips it, and every
 later tag publishes on its own.
 
-## GitHub Release: use gh's own login, not the PAT
+## GitHub Release
 
-Publish with `gh`'s stored `gho_` OAuth login, which carries full `repo` scope:
+`make release-publish` runs `gh release create` once the tag's workflows pass:
 
 ```
-env -u GH_TOKEN gh release create <tag> --repo panyam/mcpkit \
+gh release create <tag> --repo panyam/mcpkit \
   --title "<tag>" --notes-file docs/releases/<tag>.md [--prerelease]
 ```
 
-`env -u GH_TOKEN` is the whole trick. With `GH_TOKEN="$GH_PERSONAL_TOKEN"` set,
-`gh` uses the fine-grained PAT, which lacks **Contents: write** and 403s on
-Releases; unset it for the command and `gh` falls back to the login in
-`~/.config/gh/hosts.yml`, which does not. Verified publishing v0.6.0 on
-2026-09-17. `gh release edit` works the same way.
+The credential `gh` uses needs **Contents: write**. A `gh auth login` OAuth
+login has it. A fine-grained token scoped for PR and issue work often doesn't,
+and it gets 403. If you hit a 403, check which credential `gh` picked up
+(`gh auth status`) before anything else.
 
-This supersedes a long-standing note here that a Release had to be created in
-the browser with a URL-encoded prefill. That was true of the PAT and was never
-true of the stored login, so the browser step was never actually necessary. If
-you hit a 403, check which credential `gh` picked up before reaching for the
-browser.
+### Permissions release work needs
 
-The same `env -u GH_TOKEN` form reads Dependabot alerts, which the PAT also
-403s on. The fine-grained PAT is still the right credential for `panyam/*` PR
-and issue work; it is release and security endpoints it cannot reach.
+A fine-grained token needs these permissions for release and security work:
 
-### The wider PAT gap
-
-The missing Contents permission is one facet of a fine-grained PAT that is scoped
-narrower than release work needs. During the v0.5.1 release the same token blocked
-three separate things:
-
-| Operation | Endpoint | Missing permission |
+| Operation | Endpoint | Permission |
 |---|---|---|
 | `gh release create` / `edit` | `POST`/`PATCH /repos/…/releases` | Contents: read and write |
 | Enable or read Dependabot alerts and automated security fixes | `…/vulnerability-alerts`, `…/automated-security-fixes` | Administration: read and write |
 | Read open Dependabot alerts | `…/dependabot/alerts` | Dependabot alerts: read |
 | Read branch protection | `…/branches/main/protection` | Administration: read |
 
-Every row above is reachable with `env -u GH_TOKEN gh …`, which is the practical
-workaround for all of them rather than widening the PAT.
-
-`GET /repos/…/private-vulnerability-reporting` works on Metadata alone, which is why
-that one field is readable while the rest return 403.
+`GET /repos/…/private-vulnerability-reporting` works on Metadata alone. So that one
+field reads fine while the rest return 403.
 
 A 403 here is not a 404. A status script that treats any non-success as "disabled"
 will report a fully-configured repository as unprotected. Distinguish the two.
-
-Pushing commits and tags is unaffected. That goes over SSH, through the agent
-socket. `~/.ssh/id_github` does not exist in the container, so the old
-`ssh -i ~/.ssh/id_github` form fails with "Identity file not accessible" and
-then "Permission denied (publickey)" (#1415). `~/.ssh/agent.sock` holds the
-right key:
-
-```
-SSH_AUTH_SOCK=~/.ssh/agent.sock git push origin main
-```
 
 ## Full-minor checklist (e.g. tagging the final v0.4.0)
 

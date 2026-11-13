@@ -379,6 +379,31 @@ type. And an extension never needed `ext/auth` to send a scope challenge, since 
 with `core.InsufficientScopeChallenge` is what `ext/auth` itself returns; `core.InsufficientScope`
 and `(*ScopeChallenge).AuthError` just stop each caller rebuilding it.
 
+## Request rules every handler meets
+
+- **The stateless wire refuses a request without SEP-2243 routing headers** (#1567). Every request
+  needs `Mcp-Method`. The name-carrying methods also need `Mcp-Name`, and `core.DeriveMcpName`
+  lists them. A value that isn't plain ASCII is Base64-sentinel encoded. A missing header gets 400
+  and `-32020`. A raw-HTTP test against a stateless server has to send both:
+  `stampRoutingHeaders` in `server/streamable_stateless_test.go` derives them from the body. The
+  session wire has been strict the same way since 2026-07-28 is negotiated.
+  `conformance/NOTES.md` § Upstream watch explains why the upstream-issue-323 dispute no longer
+  applies.
+- **Capability checks read the per-request envelope too.** The 2026-07-28 stateless wire has no
+  `initialize`, so client capabilities arrive only in each request's `_meta`
+  (`core.RequestMetaFromContext`). A helper that reads session caps alone answers false for every
+  stateless client, silently. `core.ClientSupportsExtension` did that until #1470, which made it read
+  both. `ClientSupportsTasksV1` still reads session caps only, because v1 is frozen and legacy-only.
+  Any new capability helper checks both sources.
+- **The four base list methods page at 250 by default** (#1356). `tools/list`, `resources/list`,
+  `resources/templates/list` and `prompts/list` return 250 items and a `nextCursor`, on both wires.
+  `WithDefaultPageSize(0)` turns paging off. An invalid cursor is `-32602`. `ext/skills` still
+  defaults to 0, with its own `WithSkillsListPageSize` and `WithDirectoryReadPageSize`. Test paging
+  over the wire, as the `TestWireParity` 1356 rows do. Unit tests of `paginate` with hand-passed
+  sizes once certified a path no server could reach.
+- **Background goroutines use `core.DetachForBackground(ctx)`, never `context.WithoutCancel`.** It
+  swaps the dead POST-scoped requestFunc and notifyFunc for the session-level persistent push.
+
 ## Testing
 
 - **The server requires initialization.** A direct `srv.Dispatch()` in a test fails. Use httptest

@@ -1,447 +1,111 @@
 # CLAUDE.md — MCPKit
 
-Go library for building production-grade MCP servers and clients.
+Go library for building production-grade MCP servers and clients. The agent SDK moved to
+[chakra](https://github.com/panyam/chakra), and nothing here may require it.
 
-The agent SDK that used to sit above the protocol here now lives in its own repository,
-[chakra](https://github.com/panyam/chakra). Nothing in this tree depends on it.
+This file is a router. Keep it under 10,000 characters. Detail goes beside the code it describes,
+per **Where knowledge lives**.
 
-This file is a router. Detail lives beside the code it describes. See **Where knowledge lives**
-below before adding anything here.
+## Commands
 
-## Quick Commands
-
-`make` is the supported runner and the only one CI uses. Justfiles mirroring these names exist but
-are an experiment; `make` is authoritative when they disagree.
+`make` is authoritative, and the only runner CI uses. The justfiles are partial.
 
 ```bash
-make test              # Core tests (core/server/client/testutil)
-make test-auth         # ext/auth sub-module
-make test-ui           # ext/ui sub-module
-make test-e2e          # E2E tests (auth + apps)
-make test-examples     # examples/ orchestrator
-make testall           # Everything (9 stages, 21 sub-stages) + Keycloak + HTML report
+make test              # core/server/client/testutil; sub-modules have their own targets
+make testall           # everything + Keycloak + HTML report; needs `make conf-pending-setup` and a free KC_PORT
 make audit             # govulncheck + gosec + gitleaks + race
-make tidy-all          # Required after touching core/ imports
-make tag-push V=vX.Y.Z # Tag root + all sub-modules and push (RELEASING.md; pre-release is vX.Y.Z-bN)
-make release-publish V=vX.Y.Z  # Wait for the tag's workflows, check installs, then create the Release (#1414)
+make tidy-all          # after touching core/ imports, or sub-module go.sum drifts
+make exercise-wire     # after any wire change: TestWireParity + testconf testconf-stateless testconf-agents
+make tag-push V=vX.Y.Z / make release-publish V=vX.Y.Z   # RELEASING.md
 ```
 
-Conformance targets (`testconf`, `testconf-client`, `testconf-tasks-v2`, `testconf-mrtr`,
-`testconf-skills`, `testconf-events`, `testconf-stateless`, `testconf-upstream-audit`,
-`refresh-conformance`, `check-conformance-stale`, …) are orchestrated in `conformance/Makefile`, which also documents each
-suite's `MCPCONFORMANCE_*_PATH`. See `conformance/NOTES.md` for how they are wired and which
-upstream changes to watch.
+`conformance/Makefile` runs the `testconf-*` suites, and `conformance/NOTES.md` explains them.
 
-## Package Layout
+## Package layout
 
 | Package | Docs |
 |---------|------|
-| `core/` — Protocol types, typed contexts, session APIs | `core/README.md`, `core/CONSTRAINTS.md` |
-| `server/` — Server, transports, middleware, v1 tasks (frozen) | `server/README.md`, `server/CONSTRAINTS.md`, `server/NOTES.md` |
-| `client/` — Client, transports, reconnection, auth retry | `client/README.md`, `client/CONSTRAINTS.md` |
-| `ext/auth/` — JWT, PRM, OAuth (separate go.mod) | `ext/auth/docs/DESIGN.md` |
-| `ext/tasks/` — SEP-2663 v2 tasks extension (separate go.mod) | `ext/tasks/README.md` |
-| `ext/skills/` — SEP-2640 skills (data-only, enforced) | `ext/skills/NOTES.md` |
-| `ext/ui/` — MCP Apps, Bridge JS, AppHost, ServerRegistry | `docs/APPS_DESIGN.md`, `docs/APPS_HOST.md`, `ext/ui/NOTES.md` |
-| `ext/otel/` — SEP-414 OpenTelemetry adapter | `ext/otel/README.md`, `docs/SEP_414_OTEL.md` |
-| `experimental/ext/events/` — MCP Events protocol; `clients/go/bridge` is the watch-and-act daemon (#1579) | `experimental/ext/events/README.md`, `experimental/ext/events/NOTES.md`, `experimental/ext/events/clients/go/bridge/README.md` |
-| `experimental/ext/agents/` — Server-declared agent discovery (pre-SEP) | `experimental/ext/agents/README.md`, `experimental/ext/agents/NOTES.md` |
-| `experimental/ext/rooms/` — Room bridge: agents call tools web pages offer (#1581); `examples/rooms/lanternfall` is the end-to-end example | `experimental/ext/rooms/README.md`, `experimental/ext/rooms/NOTES.md`, `experimental/ext/rooms/WIRE.md` (the page wire, replayed by both pages from `testdata/wire/page.jsonl`) |
-| `experimental/integrations/roomsevents/` — Room events as SEP-3415, plus the Claude Code channel front end (#1581) | `experimental/integrations/roomsevents/README.md`, `experimental/integrations/roomsevents/NOTES.md` |
-| `experimental/ext/rooms/massrelay/` — `RoomTransport` over massrelay, embedded or WebSocket (separate go.mod) | `experimental/ext/rooms/massrelay/README.md`, `experimental/ext/rooms/massrelay/NOTES.md` |
-| `experimental/ext/rooms/ts/` — `joinToolRoom`, the browser page client for the room bridge (pnpm) | `experimental/ext/rooms/ts/README.md`, `experimental/ext/rooms/ts/NOTES.md` |
-| `experimental/ext/protogen/` — Proto → MCP codegen | `experimental/ext/protogen/docs/DESIGN.md` |
-| `conformance/` — Suite orchestration + audits | `conformance/NOTES.md` |
-| `examples/` — Working examples | `examples/README.md`, `examples/CONVENTIONS.md`, `examples/NOTES.md` |
-| `testutil/`, `tests/e2e/`, `tests/keycloak/` — Helpers and integration tests | `tests/e2e/apps/README.md` |
+| `core/`, `server/`, `client/` | each has `README.md` and `CONSTRAINTS.md`; `server/NOTES.md` |
+| `ext/auth/`, `ext/tasks/`, `ext/skills/`, `ext/ui/`, `ext/otel/` (separate go.mods) | `ext/auth/docs/DESIGN.md`, `ext/tasks/README.md`, `ext/skills/NOTES.md`, `docs/APPS_*.md` + `ext/ui/NOTES.md`, `ext/otel/README.md` |
+| `experimental/ext/events/` (+ `clients/go/bridge`) | `README.md`, `NOTES.md`, `DEPLOYMENT.md` |
+| `experimental/ext/agents/` | `README.md`, `NOTES.md` |
+| `experimental/ext/rooms/` (+ `massrelay/`, `ts/`), `experimental/integrations/roomsevents/` | each has `README.md` and `NOTES.md`; page wire in `rooms/WIRE.md` |
+| `experimental/ext/protogen/` | `docs/DESIGN.md` |
+| `conformance/` | `NOTES.md` |
+| `examples/` | `README.md`, `CONVENTIONS.md`, `NOTES.md` |
 
 ## Where knowledge lives
 
-Three kinds of file, three audiences. Put new material in the right one rather than here.
-
-- **`README.md`** — how to use the package. Some of these are **published to the docs site**
-  verbatim (`core`, `server`, `client`, `ext/tasks`, and every `examples/*`), wired via
-  `docs/site/content/`. Do not put internal lore in those.
-- **`NOTES.md`** — why the code is shaped this way and what bit us. Internal, never published.
-  This is where implementation lore belongs.
-- **`CLAUDE.md`** (this file, plus nested ones) — routing and the rules that cause wrong edits when
-  missed. A nested `CLAUDE.md` loads automatically when working in that subtree, so keep it short.
-  There are none today; this is the only one in the tree. Conformance lore lives in
-  `conformance/NOTES.md`.
-- **`CONSTRAINTS.md`** — enforceable architectural rules. Project-wide at the root; per-package in
-  `core/`, `server/`, `client/`.
-
-Design docs live in `docs/`: `ARCHITECTURE.md`, `APPS_DESIGN.md`, `SEP_414_OTEL.md`, and the
-per-SEP migration guides. The `AGENT_*.md` set left with the agent SDK and now lives in
-[chakra](https://github.com/panyam/chakra) under its `docs/`.
-
-**Do not recreate `CAPABILITIES.md`** (retired 2026-07-18, `bc402a03`). Learnings go in the
-per-package `NOTES.md`, the design docs, and the roadmap.
-
-## Sub-Modules
-
-**`SUB_MODS_TO_TAG` in the root `Makefile` is the authoritative list.** Do not maintain a copy
-here, it rots. `make test` does not cover sub-modules; each has its own target, and
-`make check-tagged-modules` builds and vets all of them against main (#1486).
-
-**That list is parsed, not just expanded.** `scripts/check_dep_consistency.py` reads it out of the
-`Makefile` with a regex, so its *shape* is load-bearing: the backslash-continued form is what the
-parser expects. The justfile used to carry a second copy that no recipe referenced, and deleting it
-as dead broke that gate with `SUB_MODS_TO_TAG not found in justfile`. Before removing a variable
-from a build file, grep the whole tree rather than only the recipes — a Python script reading a
-Makefile does not look like a reference.
-
-Run **`make tidy-all` after touching `core/` imports** or sub-module `go.sum` files drift and CI
-fails in a module you did not edit.
-
-`docs/site/` is the GitHub Pages renderer. It is a tool, not a library, and is excluded from
-`SUB_MODS_TO_TAG`.
-
-**The agent SDK is not in this repo.** It was extracted to
-[chakra](https://github.com/panyam/chakra) and consumes mcpkit as an ordinary dependency. The
-dependency runs one way: nothing here may require chakra. `scripts/verify-submodule-deps.sh` now
-enforces two policies rather than three, protocol and non-library, the agent policy having left with
-the tree.
+- **`README.md`**: how to use a package. `core`, `server`, `client`, `ext/tasks` and every
+  `examples/*` README is published to the docs site verbatim. No internal lore there.
+- **`NOTES.md`**: why the code has its shape, and what bit us. Internal. The root `NOTES.md` holds
+  repo-wide lore: credentials, hygiene, CI gaps.
+- **`CONSTRAINTS.md`**: enforceable rules, at the root and in `core/`, `server/`, `client/`.
+- **`CLAUDE.md`**: routing, plus rules that cause wrong edits when missed.
+- Status goes in issues and `NEXTSTEPS.md`. Design docs go in `docs/`. Don't recreate
+  `CAPABILITIES.md`, retired 2026-07-18.
 
 ## Issues and missions
 
-Work is queued by mission, per `~/.claude/skills/retriage/CONVENTIONS.md`. Two missions are active,
-each worked in its own worktree:
+Work is queued by mission. A mission is an issue labelled `mission`, and its tickets block it.
+A new issue gets `P0`–`P3`, plus a mission link (blocked-by on the mission issue) or `waiting`
+with its trigger. Run a
+mission's exercise after each merged PR on it and log the result on the mission issue. Active
+missions, one worktree each:
 
-- **#1683** (`mission_ai_inside_ui`): a user asks an agent from inside a custom web app, and the
-  agent drives the page through the room bridge (`experimental/ext/rooms`). The agent is any MCP
-  client. An interactive one like Claude Code keeps its own system prompt and learns the page from
-  the server's instructions and tool descriptions. A custom one on LangGraph, Mastra or another
-  agent SDK may set its own. Exercise `make exercise-aipage` (CI job `rooms-aipage`), which plays
-  `examples/rooms/lanternfall` with a scripted client, with the bundled LangGraph game master when
-  `ANTHROPIC_API_KEY` is set, and prints by-hand steps for Claude Code through `rooms-channel`.
-  The by-hand run is the one check CI can't do. Aligning the page wire with WebMCP is wanted but
-  comes after the custom-app case works (`experimental/ext/rooms/WIRE.md`, "Later").
-- **#1553** (`mission_release_installable`): every tagged module installs from the proxy at release.
-  Exercise in the issue. #1488 (`go install …/cmd/mcpskills@<tag>` failing on in-repo `replace`
-  directives) closed with #1624, which tags a tree without them.
+- **#1683** `mission_ai_inside_ui`: `make exercise-aipage`, plus a by-hand Claude Code run through
+  `rooms-channel`.
+- **#1553** `mission_release_installable`: `make check-install V=<tag>`.
+- **#1701** `mission_progressive_disclosure`: `make exercise-disclosure`, which #1700 adds.
 
-#1554 (`mission_apps_host`) is queued behind #1683. Its tickets and every MCP Apps ticket carry the
-`mcpapps` label, and `proposals/mcp-apps-wg/CURRENT_GAPS.md` in mcpcontrib tracks upstream against them.
+#1554 (`mission_apps_host`, label `mcpapps`) is queued behind #1683.
 
-#1552 (`mission_wire_2026_07_28`) closed 2026-11-09, and its exercise still guards the wire. Run
-`make exercise-wire` after any wire change: session-vs-stateless parity rows (`TestWireParity` in
-`server/` and `experimental/ext/agents`) plus `testconf testconf-stateless testconf-agents`. A new
-wire bug gets a parity row first. Those rows are the only cross-wire check anywhere. Each upstream
-suite grades one wire on its own fixture (`testconf` on `cmd/testserver` sessions,
-`testconf-stateless` on the cart example), so #1352, #1355 and the #1637 gaps all shipped with every
-suite green.
+## Rules that cause wrong edits
 
-The #1580 exercise (chakra's `make host-exercise`) runs against `../mcpkit/main` through chakra's
-replaces, and that shared checkout is often stale or carries another session's edits. To grade your
-own tree, `git clone --local` chakra into your scratch directory and rewrite every
-`=> (../)+mcpkit/main` replace in its `go.mod` files to your checkout's absolute path.
-#1508 (events, SEP-3415) closed 2026-10-16.
-Run a mission's exercise after each merged PR on it and log the result on the mission issue. A new
-issue gets a priority (`P0`–`P3`) and either a mission link (blocked-by on the mission issue) or
-`waiting` with its trigger.
+Wire and server:
+- Both wires run `Server.runRequest`. Put a wire difference in a `wire` branch, never a second
+  handler (C7, #1625). A new wire bug gets a `TestWireParity` row first.
+- The stateless wire needs `Mcp-Method` and `Mcp-Name` headers (#1567). Capability helpers read
+  the request `_meta` too (#1470). Base list methods page at 250 (#1356). Detail:
+  `server/NOTES.md` § Request rules every handler meets.
+- Background goroutines use `core.DetachForBackground(ctx)`, never `context.WithoutCancel`.
+- Tests can't call `srv.Dispatch()` directly. Use httptest plus a client.
+- A list response has a stable order (C10). A notification is `req.IsNotification()`, never
+  `req.ID == nil` (#1520). A per-caller notification goes through `NotifyListeners`, not
+  `Broadcast` (#1523).
+- With no `WithAllowedOrigins`, a server under a public name refuses unauthenticated clients
+  (#1547). `httptest` hides it; set `req.Host`.
+- Webhook subscribes verify the endpoint by default (#1444). Test stacks opt out with
+  `WithUnsafeSkipEndpointVerification()`.
 
-## Cross-cutting rules
+Build and CI:
+- Never commit compiled binaries. A bare `go build` leaves one (`scripts/check-no-binaries.sh`).
+- Never `gofmt -w` a glob. The tree isn't gofmt-clean. Format files by name.
+- Makefile and justfile recipes dispatch to `scripts/`; no inline logic (C8).
+- Generated files: `conformance/path-defaults.*` (`gen_conf_paths.py`), `CONFORMANCE.md` and the
+  badge (`make refresh-conformance`), `examples/*/WALKTHROUGH.md` (from Go; `examples/host` inverts
+  it). Don't hand-edit them. A new `testconf-*` target trips two gates (`conformance/NOTES.md`).
+- A new example with tests needs an entry in `examples/Makefile`'s `test` umbrella (#1431).
+- `SUB_MODS_TO_TAG` in the root `Makefile` is the module list, and a script parses its shape.
+- Experimental modules are separate modules. Run `go test` inside them.
+- CI runs `-race` only in the rooms jobs. Run it by hand after concurrent changes.
+- `INFO` suites don't go red (#1446). After touching a surface one grades, run it with `make`.
+- A green suite may not be grading mcpkit (#1358). Break the fixture and watch it go red.
+- Keycloak runs only on auth-path PRs, `main` and nightly (#1597). Locally `make testkcl-auto`.
+- `check-dep-consistency` wants `--prune-baseline`, never `--update-baseline`.
+- CodeQL rejects `make(T, len(a)+len(b))`. Size from one operand.
+- `govulncheck` green doesn't mean dependencies are current (`DEPENDENCY_POLICY.md`).
 
-These span packages and will bite on a task that never opens a routed doc.
-
-- **Background goroutines use `core.DetachForBackground(ctx)`, never `context.WithoutCancel`.** It
-  replaces the dead POST-scoped requestFunc/notifyFunc with the session-level persistent push.
-- **The server requires initialization.** A direct `srv.Dispatch()` in a test fails; use httptest
-  plus a client.
-- **Never commit compiled binaries.** A bare `go build` in a module directory drops an executable
-  named after the directory, with no extension, which `git add -A` then sweeps into an unrelated
-  commit. Nine accumulated this way before a `git filter-repo` purge took `.git` from 466 MB to
-  23 MB. Two layers now gate it, both detecting by **magic bytes, not filename**:
-  `scripts/pre-commit-hook.sh` (local, opt-in via `make setup-hooks`) and
-  `scripts/check-no-binaries.sh` (whole-tree, wired into `test.yml`, the actual gate).
-  `HANDOFF.md` / `HANDOFF_*.md` are gitignored for the same `git add -A` reason.
-- **Both wires run one request path, and wire differences are explicit branches in it.** Since
-  #1625 the stateless wire's `Server.dispatchStateless` runs its envelope checks and then
-  `Server.runRequest` with `wireStateless`, the same function the session wire uses, ending in the
-  shared method table `Dispatcher.route`. Per-request context, user middleware, metrics and trace all live there, with
-  the session-only parts inside `if wire == wireLegacy`. Before that the stateless wire dispatched
-  per method and each handler had to call the chain itself; `resources/read` didn't (#1352), so a
-  scope gate held on `tools/call` and not on the resource. Don't add a stateless path that answers
-  above `runRequest`, and put a new wire difference in a `wire` branch of the shared code
-  rather than a second handler (`server/NOTES.md` § Stateless-wire dispatch parity, constraint C7).
-- **Makefiles and justfiles dispatch; they do not hold shell scripts.** Control flow, or four or
-  more statements, goes in `scripts/` and the recipe calls it. Nearly every directory carries both
-  a `Makefile` and a `justfile`, and in `examples/` they must stay name-and-behavior identical
-  (`examples/CONVENTIONS.md` §6), so inline logic is written twice in two escaping dialects and
-  maintained in neither. The root justfile is partial (72 Makefile targets have no twin as of
-  2026-10-22) and nothing gates its parity. Keep the Makefile complete; bringing the justfile up
-  to it is open to whoever wants it. `just clean-backends` became a
-  byte-identical copy of `just clean`, wiping the events volumes while promising to wipe
-  `docker/backends` (#1396). Constraint C8, gated by `make check-recipe-complexity`. The
-  sweep is done and `scripts/recipe-complexity-allowed.txt` is empty, so any entry appearing there
-  is a new decision. The gate's own precision is self-tested: `$(if ...)` in a Makefile is a
-  function, not a script.
-- **`conformance/path-defaults.{mk,sh,just}` are generated, not hand-edited.** They come from
-  `conformance/local-suites.yaml` via `uv run scripts/gen_conf_paths.py --write`. Editing two of
-  the three by hand fails CI as "case E drift" in `check_local_suites.py`, and the `just` runner is
-  the one people forget. Adding a `testconf-*` target means adding a manifest entry too; the drift
-  check enforces both directions.
-- **Adding a `testconf-*` target trips two independent CI gates, and passing the first says
-  nothing about the second.** `check-local-suites-stale` covers the manifest and the generated
-  path-defaults; `check-conformance-stale` covers `CONFORMANCE.md` and the badge JSON, which are
-  rendered *from* `local-suites.yaml` and go stale the moment an entry is added. Run
-  `make refresh-conformance` and commit the result, or CI fails after everything else has gone
-  green. Cost a round-trip on #1378. The full checklist for a new target is in
-  `conformance/NOTES.md` § Adding a testconf-* target.
-- **Example walkthrough prose is generated, and lives in Go, not in the `.md`.** Every
-  `examples/*/WALKTHROUGH.md` comes from `go run . --doc md`, so hand-editing one is reverted by
-  the next `just readme` and reported as drift by `/example-audit`. The words live in
-  `walkthrough.go` / `main.go` string literals and in demokit's own renderer, which is a separate
-  repo. **`examples/host/` inverts the pair:** there the `README.md` is the generated file
-  (`--readme`) and the `WALKTHROUGH.md` is hand-written, the opposite of everywhere else. Check
-  for a `readme` recipe before editing any example doc. Detail in `examples/NOTES.md` § demokit.
-- **The docs-site conformance page needs no separate update.**
-  `docs/site/content/conformance/index.html` is a shim that renders `CONFORMANCE.md` at build
-  time, so regenerating that file *is* the site update. Same for the audit pages.
-- **`govulncheck` green does not mean dependencies are current.** Default govulncheck is
-  *reachability*-based, so it exits 0 while advisories sit unfixed in required modules. Version
-  matching is a separate pass. Command, blockers, and rationale: `DEPENDENCY_POLICY.md`
-  § Security updates.
-- **Two GitHub credentials, and the one you want depends on the repo.**
-  `GH_TOKEN="$GH_PERSONAL_TOKEN"` is **fine-grained** and scoped to the owner's account: use it for
-  `panyam/*`, where the EMU account cannot reach. It can read but never write
-  `modelcontextprotocol/*` — `POST .../pulls`, `gh pr edit` and `PATCH .../pulls/N` all 403 even on
-  a PR we authored, and no setting fixes it, because fine-grained PATs only scope to repos in the
-  owner's account.
-  **For upstream writes, use `gh`'s own stored login instead**: `env -u GH_TOKEN gh …` falls back to
-  the `gho_` OAuth token in `~/.config/gh/hosts.yml`, which carries full `repo` scope and *does*
-  create and edit PRs and post review comments on `modelcontextprotocol/*`. Verified on
-  conformance#504. An earlier version of this note said upstream edits need the web UI or a classic
-  PAT; that is only true of the fine-grained token.
-  Pushing to our fork branches is unaffected. See `conformance/NOTES.md`, which also covers the
-  `panyam/mcpconformance` pre-push hook: it runs the full suite (~6 min), so never wrap that
-  push in `timeout`, and push it over HTTPS with the `gho_` login, because an SSH connection idles
-  out during the hook and the push fails after the hook passes.
-  **The fine-grained PAT cannot create a branch carrying workflow files**, even when no commit on
-  it touches `.github/`. Creating a ref counts every workflow present on that ref as "created", so
-  the push is rejected with "refusing to allow a Personal Access Token to create or update workflow
-  `.github/workflows/test.yml` without `workflow` scope". Pushing to a branch that already exists,
-  and pushing tags, both work on the PAT, which is why a release push succeeds and the *first* push
-  of a new branch does not. The `gho_` login carries `workflow`, so hand that push to it:
-  `env -u GH_TOKEN git -c credential.helper='!gh auth git-credential' push -u https://github.com/panyam/mcpkit.git <branch>`.
-  Cost a round-trip on #1405. Pushing to a URL leaves no remote-tracking ref, so a bare
-  `--force-with-lease` after a rebase is refused; name the sha you expect,
-  `--force-with-lease=<branch>:<old-sha>`.
-  **SSH pushes use the agent, not a key file.** `~/.ssh/id_github` does not exist in the container —
-  only `~/.ssh/agent.sock`, which holds the right key. Use
-  `SSH_AUTH_SOCK=~/.ssh/agent.sock git push …`; the `-i ~/.ssh/id_github` form fails with
-  "Identity file not accessible" then "Permission denied (publickey)".
-  Releases are the same story: `env -u GH_TOKEN gh release create` publishes fine, while the
-  fine-grained PAT 403s on Contents: write. So does reading Dependabot alerts. See `RELEASING.md`.
-- **Stacked PRs get no CI** when the base is not `main`. Verify locally, then either retarget to
-  main after the base merges or push an empty commit to fire checks. GitHub's `Closes #N` only
-  fires on a merge to the **default** branch, so carry it on whichever PR actually reaches main.
-  Two branches that both append tests to the end of the same file will re-conflict at every cross
-  merge; land the shared base before branching the second consumer.
-  **Upstream, a fork PR cannot stack on another fork PR at all**: the base must be a branch in
-  the upstream repo, where we have no push. So conformance PR 541 bases on `main`, carries all of
-  PR 521's commits, and says "review #521 first" with a compare link in its body.
-- **A release that triggers no workflows looks exactly like one whose workflows all passed.**
-  v0.4.0 through v0.6.0 shipped with `publish-images.yml` never run (#1412). `make
-  release-publish` waits for every tag-triggered workflow to run green, and for every command to
-  install, before it creates the GitHub Release (#1414). The checker reads its list from
-  `on.push.tags`, so a new tag-triggered workflow is covered the day it lands.
-- **Release tags carry no `replace` directives; `main` does, on purpose** (#1488). Go refuses
-  `go install pkg@vX` for a module with any `replace`, so `make tag` commits a tree with the
-  in-repo ones stripped, tags it, and restores them in the next commit
-  (`scripts/release-replaces.sh`). A tagged module may only `replace` an in-repo path, or the strip
-  refuses. A tag workflow that sets up Go runs `release-replaces.sh restore`
-  first, as `vulncheck.yml` and `publish-npm-rooms.yml` do, and `check-release-workflows-selftest`
-  fails one that doesn't. v0.8.8's npm publish broke on exactly that. CI's `release-rehearsal` job
-  installs every command from a fake tag; after a real one, `make check-install V=`.
-- **The stateless wire refuses a request without SEP-2243 routing headers** (#1567). `Mcp-Method`
-  on every request and `Mcp-Name` on the name-carrying methods (`core.DeriveMcpName` lists them),
-  Base64-sentinel encoded when not plain ASCII, or it is 400 + `-32020`. A raw-HTTP test against a
-  stateless server has to send them: `stampRoutingHeaders` in `server/streamable_stateless_test.go`
-  derives both from the body. The session wire has been strict the same way since 2026-07-28 is
-  negotiated. Why this is not the upstream-issue-323 dispute any more: `conformance/NOTES.md`
-  § Upstream watch.
-- **Capability checks must read the per-request envelope too.** On the 2026-07-28 stateless wire
-  there is no `initialize`, so client capabilities arrive only in each request's `_meta`
-  (`core.RequestMetaFromContext`). A helper that reads session caps alone answers false for every
-  stateless client, silently. `core.ClientSupportsExtension` did exactly that until #1470, which
-  made it read both. `ClientSupportsTasksV1` still reads session caps only (v1 is frozen and
-  legacy-only). Any new capability helper checks both sources.
-- **A list response has a stable order, never map iteration order.** Sorted keys or registration
-  order both qualify. Constraint C10, added after the same bug turned up twice: `tools/list` on the
-  apps bridge (#1408) and `events/list` (#1416). Every entry is present and correct, so no unit test catches it; what breaks is whatever
-  downstream assumed a stable order, and it surfaces as flakiness somewhere else.
-- **A notification is `req.IsNotification()`, never `req.ID == nil`.** A peer may send `"id":null`,
-  which a raw nil check reads as a request, and JSON-RPC never answers a notification on any
-  transport (#1520). The same check skipped stdio's no-reply rule and gave a panicking `"id":null`
-  notification a `-32603`.
-- **A notification for one caller goes through `Server.NotifyListeners`, not `Broadcast`.**
-  `Broadcast` reaches every session's GET stream and the relay, which is right for list-changed and
-  leaks anything per-caller, such as a task's status (#1523). `NotifyListeners` reaches only
-  `subscriptions/listen` streams, each applying its own filter key.
-- **A server reached under a public name refuses every unauthenticated client by default.** With no
-  `WithAllowedOrigins` the Origin check admits only localhost and judges a request with no `Origin`
-  by its `Host`, so curl and Claude Code get a 403 too; only a valid bearer token skips it (#1547).
-  `httptest` sends a `127.0.0.1` Host, so no test sees this unless it sets `req.Host`. Deployers list
-  their own host (`server/README.md` § Remote deployments).
-- **The Keycloak suite (`tests/keycloak`) runs only on auth-path PRs, `main` and nightly**
-  (`keycloak-interop.yml`, #1597). A change elsewhere that breaks auth on the wire shows up there
-  later, not on its own PR. Locally, `make testkcl-auto`, with `KC_PORT=<free port>` if 8180 is
-  taken; it refuses any port that serves no `mcpkit-test` realm, and 8181 is often taken too.
-- **`@panyam/mcpkit-rooms` (npm) is released with mcpkit.** `make bump-root` sets
-  `experimental/ext/rooms/ts/package.json`'s version, `make check-rooms-ts-version` holds it to the
-  rooms module's pin in CI, and the root tag publishes it (`publish-npm-rooms.yml`, which
-  `check-release-workflows` now expects). The first publish is manual; see `RELEASING.md` § npm.
-- **CI runs `-race` only in the rooms jobs.** `test-rooms-massrelay.sh` runs that module fully under
-  `-race` since servicekit v0.1.10 fixed its `OnClose` race, and roomsevents runs under it too; that
-  is where a client race in `Close` (#1614) first showed, though the root `test` job never runs
-  `-race`. The other experimental scripts don't either: the events bridge shipped a test-helper race
-  that failed 5 runs in 6 under `-race` and never showed in CI. After touching anything concurrent,
-  run `go test -race` on the package a few times by hand.
-- **A commit message can close an issue across a line break.** A title ending in "closed" and a
-  body starting with "#1683" read to GitHub as "closed #1683", and merging the PR closed the
-  mission. Keep a closing word (close, fix, resolve and their forms) away from the end of a line
-  when the next line starts with an issue number, and check the mission is still open after a
-  merge.
-- **`go test ./experimental/ext/rooms/` from the repo root reports `[setup failed]`**, which reads
-  like a flaky failure. The experimental modules are separate modules: run `go test` inside the
-  module directory, or through its `make test-experimental-*` target.
-- **A failed `bump-root` tidy can break `check-install` for an hour after tagging.** A module
-  missing a `replace` makes tidy ask the Go proxy for the new version before its tag exists, and
-  the proxy and sum.golang.org cache the miss. Fix the module and finish the steps `bump-root`
-  skipped before tagging. Detail and the workaround in `RELEASING.md` step 2.
-- **A mutation that breaks the build reads as a pass** to a red-before-green runner that greps for
-  `--- FAIL`. Check for `build failed` too, or a "no test went red" result means nothing. It hid two
-  mutations in #1613 until a direct run showed the build error.
-- **A clean `make testall` needs setup it does not do.** Run `make conf-pending-setup` for
-  stages 8f and 8g (#1551), and give stage 9 a free `KC_PORT`. testall also skips
-  `testconf-stateless` and `testconf-client`; run those by hand.
-- **A new example with tests needs a target in `examples/Makefile`'s `test` umbrella** and its
-  justfile twin, or `make check-example-tests-listed` fails CI (#1431). `examples/NOTES.md`
-  § Test orchestration has the CI jobs.
-- **One session, one worktree of the conformance fork.** `../conf-events` and the other
-  `MCPCONFORMANCE_*_PATH` defaults are shared by every session on the machine, and two sessions
-  once had uncommitted work in the same one, where either's next `git add` takes both. Check
-  `git status` there before editing; work in `git worktree add ../conf-events-<ticket>` and point
-  the suite at it with the path variable. Detail in `conformance/NOTES.md` § One session, one
-  worktree.
-- **Never `gofmt -w` a glob in this repo.** The tree is not gofmt-clean, so `gofmt -w pkg/*.go`
-  rewrites pre-existing drift alongside your file and `git add -A` sweeps it into the commit. It
-  happened twice in one session, 36 files then 9, both caught only by reading `git status` before
-  pushing. Format the files you actually edited, by name.
-- **`check-dep-consistency` failures want `--prune-baseline`, not `--update-baseline`.** The CI
-  error text suggests the latter, which also accepts any *new* divergence silently, defeating the
-  point of the baseline. Prune only drops entries that stopped diverging. A cross-module
-  `go mod tidy` sweep converges pins as a side effect, so this fires on dependency bumps that look
-  unrelated to it.
-- **CodeQL rejects `make(T, len(a)+len(b))`** as an allocation size that may overflow. Capacity is
-  a hint and the map or slice grows anyway, so size from one operand.
-- **Repo security settings are settings, not files.** Dependabot alerts, security updates, and
-  private vulnerability reporting need no commit; `dependabot.yml` governs *version* updates only.
-  A 403 is not a 404, and a status check that treats any non-success as "disabled" reports a
-  configured repo as unprotected.
-
-- **Endpoint verification is on by default for webhook subscribes** (#1444). `events/subscribe`
-  POSTs a signed challenge to `delivery.url` and fails with `-32027` unless it is echoed, so any
-  test, demo or fixture that subscribes to a URL nobody answers now fails. Shared test stacks opt
-  out with `WithUnsafeSkipEndpointVerification()`; fixtures allowlist a known origin
-  (`WithWebhookDeliveryAllowlist`); a hand-rolled receiver calls
-  `events.AnswerVerificationChallenge` and must be serving *before* it subscribes. Paths, cache and
-  rate limit: `experimental/ext/events/DEPLOYMENT.md` § Endpoint verification.
-- **A regression in an `INFO` suite is invisible.** `testconf-events` fell from 22/23 to 1 for a day
-  after #1444 and nothing went red (#1446). After touching a surface an `INFO` suite grades, run
-  that suite by hand, all of its wired scenarios rather than the one you had in mind. Run it through
-  `make testconf-*`, not `node dist/index.js` directly: only the make path rebuilds `dist/`, and a
-  stale build reports the previous suite's numbers with no warning.
-- **The four base list methods page at 250 by default.** `tools/list`, `resources/list`,
-  `resources/templates/list` and `prompts/list` return 250 items and a `nextCursor`, on both wires
-  (#1356). `WithDefaultPageSize(0)` turns paging off. An invalid cursor is `-32602`. `ext/skills`
-  still defaults to 0, with its own `WithSkillsListPageSize` and `WithDirectoryReadPageSize`. Test
-  paging over the wire, as the `TestWireParity` 1356 rows do: unit tests of `paginate` with
-  hand-passed sizes once certified a path no server could reach.
-
-## Conformance
-
-All tier-scored surfaces are at 100% on upstream tier-check: **Server 31/31** (checks 73/0) and
-**Client 21/21** (581/0), per the generated block in `CONFORMANCE.md`. Full client suite **43/43**
-since the SEP-1932 DPoP pair went green (#803), so `conformance/baseline.yml` lists no expected
-failures and any red scenario now fails `testconf-client`. Take the numbers from `CONFORMANCE.md` rather than this paragraph — the prose here went
-stale by a whole server scenario once already.
-
-`CONFORMANCE.md` is generated and CI-gated for staleness; `conformance/UPSTREAM_AUDIT.md` grades
-mcpkit against every upstream scenario. Do not hand-edit either, or the README badge.
-
-**A green suite is not proof it graded mcpkit.** `testconf-tasks-v2` and `testconf-mrtr` reported
-PASS for months while scoring upstream's own reference server, because they set env vars nothing
-upstream reads (#1358). Before trusting a new or edited suite, break its fixture and confirm the
-suite goes red. `conformance/NOTES.md` § A green suite is not proof it graded mcpkit also covers why
-the MRTR fixture is `cmd/testserver`, how to regenerate the reports when a red suite has left them
-stale, and the two inputs regeneration never touches (`known-gaps.yaml`,
-`client-check-counts.json`).
-
-**SEP-2640 went Final on 2026-09-11** (`8075db4a` upstream; Accepted was `d6b31a03`, 2026-09-03).
-The conformance tests that gated Final are ours and have merged:
-`modelcontextprotocol/conformance` PR 330, three server scenarios and five client scenarios,
-cross-checked against three independent implementations (mcpkit, go-sdk, csharp-sdk), all green.
-**Do not quote row or check counts from here.** This paragraph said 96 rows and 89 checks against a
-merged file holding 98 and 90, and the yaml's own header was wrong by a similar margin in four
-places. Nothing recomputes either, so both are claims with a date. Read the counts from a
-`traceability` run. Running it against someone else's
-implementation is how two bugs in the suite were found and fixed, neither reachable from mcpkit
-alone. Detail in `ext/skills/NOTES.md`, per-SDK setup in `RUNNING_SEP2640.md` on the conformance
-branch.
-
-**MCP Events has a conformance suite.** `testconf-events` (stage 8i, `INFO`) drives
-`examples/events/kitchen-sink` against scenarios proposed upstream in
-`modelcontextprotocol/conformance` PR 521, out of draft since 2026-10-16 after the WG saw a run
-against a second implementation (`metronome-mcp.fly.dev`, via `make conf-events-remote`). MCP Events is **SEP-3415**
-(`modelcontextprotocol/modelcontextprotocol` PR 3415, draft), so check ids carry `sep-3415-`. They
-carried a `sep-9999-` placeholder until #1502, because SEP numbers are PR numbers and no PR existed.
-Every row quotes SEP-3415 at `b08e4f9d` with a per-row section url; they quoted the design sketch
-until #1502, `c47fd245` until 2026-10-20, when the SEP added `Mcp-Name` on `events/*` (#1567),
-and `2ec39b9c` until 2026-11-08, when `webhook-id` became a per-message id (#1664). Each move
-changed few or no quoted rows, so check the SEP diff before assuming a re-extraction is needed. `testconf-events` drives
-all five of the suite's scenarios; take the counts from its note in `conformance/local-suites.yaml`.
-The fixture is spawned with `--conformance-events`, which registers the diagnostic controls the
-scenarios drive; see `examples/CONVENTIONS.md` § Conformance fixtures. `events-webhook-delivery`
-needs the harness's loopback receiver, so it grades the SSRF refusal first and then calls
-`events_conformance_allow_callback_origin` to permit that one origin (#1457).
-
-Building the suite surfaced **thirteen divergences in our own implementation**, which is the whole
-argument for having one. Six closed by #1379, #1381 and #1416; five more by #1432, #1433 and #1434;
-the last, endpoint verification, by #1444. The set is tracked in #1425. Since #1570 every row in both
-events suites is green; `subscribe-auth-required` and `subscribe-refresh-replaces-secret`, which no
-harness can grade over the wire, moved to excluded after the rmcp team's review on PR 521. The suite
-stays `INFO` until the spec text stabilises. Detail in `conformance/NOTES.md` § MCP Events suite.
-
-**The Events client has a conformance suite too**, proposed as conformance PR 541 (issue 540), also
-out of draft, and stacked on PR 521. Its scenarios grade what a client sends to a scripted mock server, and the Go
-client is driven through `experimental/ext/events/clients/go/cmd/conformance-client`, which lives in
-that module so the root module never imports `experimental/`. The driver only calls what the SDK
-offers, so a red row is an SDK gap, never a driver choice to patch. `make testconf-events-client`
-(stage 8j, `INFO`) runs it, `make exercise-events` runs both suites into one table, and
-`make conf-events-setup` creates the two checkouts they read.
-
-**The Events capability moved, and the story is worth keeping.** It declares through the SEP-2133
-extensions map like everything else here (`io.modelcontextprotocol/events`), via
-`events.EventsExtension` and `srv.RegisterExtension`. It did not always: the design sketch put it
-top-level under `capabilities.events`, mcpkit implemented that in #1416, and the sketch author's own
-reference server (`metronome-mcp.fly.dev`) used the extensions map instead. Rather than pick a side
-or declare in both places, the disagreement went to the author, who confirmed the extensions map and
-opened upstream PR 7 to correct the sketch. #1421 moved mcpkit and the conformance rows together.
-PR 7 closed unmerged on 2026-09-28. SEP-3415's Capability Negotiation section carries the rule now,
-and the sketch's `main` still says top-level.
-
-Two things that cost nothing to remember. **Following the document is what surfaced the question** —
-matching metronome quietly would have left the sketch wrong indefinitely. And **ChatGPT reads the
-top-level key** (OpenAI's MCP Events guide, sketch issue 8), so following the SEP alone hides an
-mcpkit server from it. Decided 2026-10-13: SEP by default, plus the opt-in
-`events.Config.ChatGPTCompat`, which declares in both places through the generic
-`core.Extension.TopLevel` hook (#1501). Only the declaration is covered, because it is the only
-ChatGPT behaviour anyone has observed. It goes when ChatGPT reads the extensions map (#1511).
+Git, GitHub and releases:
+- Every branch here carries workflows, so creating one needs a token with `workflow` scope
+  (`NOTES.md` § GitHub token scopes).
+- Stacked PRs get no CI, and `Closes #N` fires only on merge to `main`.
+- Keep closing words (close, fix, resolve) off a line end when the next line starts with `#N`.
+- One session, one worktree of each conformance fork checkout (`conformance/NOTES.md`).
+- Release tags carry no `replace` directives, and `main` keeps them (#1488, `RELEASING.md`).
+- Repo security settings are GitHub settings, not files.
 
 ## Tasks v1 vs v2
 
-Two surfaces, two entry points: `server.RegisterTasksV1` (frozen) and `tasks.Register`
-(v2 / SEP-2663, canonical, in `ext/tasks/`). See `docs/TASKS_V2_MIGRATION.md`.
+`server.RegisterTasksV1` is frozen. `tasks.Register` in `ext/tasks/` is v2 and canonical
+(`docs/TASKS_V2_MIGRATION.md`).
