@@ -26,6 +26,7 @@ Use this to:
 | [mrtr](./mrtr.md) | root *(FAQ-style)* | request-anatomy, extension-mechanisms | `InputRequiredResult` envelope (resultType:"input_required", inputRequests, requestState); retry shape (same tools/call + inputResponses + echoed token); server keeps no state between rounds; `ctx.RequestInput()` handler primitive; dispatch reshape via IsInputRequired sentinel; `CallToolWithInputs` client loop (default 16-round cap, `ErrMRTRMaxRounds`); `DefaultInputHandler` bridges via `dispatchMRTRInputRequest` to same dispatcher real reverse calls use — host's existing sampling/elicitation/roots handlers serve MRTR for free; signed mode (HMAC-SHA256, TTL-bounded, tool-name-pinned) vs plaintext (dev-only); `WithRequestStateSigning` configures both ephemeral MRTR and SEP-2663 tasks; tasks v2 reuses same envelope shape | [tasks](./tasks.md) *(stub)*; [reverse-call](./reverse-call.md); [cancellation](./cancellation.md) *(stub, leaf)* |
 | [reverse-call](./reverse-call.md) | root *(FAQ-style)* | request-anatomy, transport-mechanics | three reverse-call methods (sampling/createMessage, elicitation/create, roots/list) with capability gates; spec's "in association with originating call" rule enforced via handler-context-only access to `sessionCtx.request`; bc.Sample / bc.Elicit do capability gate + optional schema reshape (SEP-2356 file-input strip) + origination via `sc.request` hook; `makeRequestFunc(pushFunc)` wires the hook at session setup; client dispatches via `Client.HandleServerRequestWithContext` switch (samplingHandler / elicitationHandler / rootsHandler); MRTR's `dispatchMRTRInputRequest` reuses the same dispatcher; **roots is infrastructure-managed** (cache populated by background fetch on `notifications/roots/list_changed`, read synchronously via `bc.AllowedRoots()`); handler context dies with forward request — `core.DetachForBackground(ctx)` swaps in session-level push via `ReplaceSessionRequestFunc` (not equivalent to `context.WithoutCancel`) | [elicitation](./elicitation.md) *(stub, leaf)*; [sampling](./sampling.md) *(stub, leaf)*; [roots-list](./roots-list.md) *(stub, leaf)*; [mrtr](./mrtr.md); [cancellation](./cancellation.md) *(stub, leaf)*; [otel](./otel.md) |
 | [otel](./otel.md) | root *(FAQ-style)* | request-anatomy, extension-mechanisms, reverse-call | tracing off by default (Noop, zero-alloc, base module dep-free; OTel SDK isolated in `ext/otel` own go.mod); install gated on a non-Noop `core.TracerProvider` via `server.WithTracerProvider` / `client.WithTracerProvider`; W3C Trace Context as the cross-SDK wire standard, carried in-band on `_meta.traceparent` / `_meta.tracestate` (bare W3C names, not `io.modelcontextprotocol/`-namespaced) with the SEP-2028 HTTP-header → `_meta` bridge (in-band wins); structure validated, IDs opaque; malformed traceparent drops to zero per W3C MUST-NOT-forward; OTel TracerProvider (heavyweight, per-process, you `Shutdown()`) vs Tracer (cached once in the adapter); trace middleware OUTERMOST both directions (user mw inside the span for latency; outbound `_meta` injection outside user interceptors so they see the final wire); server inbound flow extract→`WithTraceContext`→`StartSpan`→handler→inject→`End`+outcome; child-trace-context rewrite lives in the `ext/otel` adapter (Noop correlates coarsely); client/server symmetry + two asymmetries (no outbound HTTP header, no SpanKind) | [reverse-call](./reverse-call.md); [extension-mechanisms](./extension-mechanisms.md); [`experimental/ext/events/`](../../experimental/ext/events/README.md) *(branch — cross-replica EventBus is a third propagation surface)* |
+| [progressive-disclosure](./progressive-disclosure.md) | root *(FAQ-style, experimental)* | bring-up, extension-mechanisms | flat `tools/list` costs context (~82 KB for 200 tools); skills disclose content, groups disclose tools; `groups/list` (name/title/description only) and `groups/get` (instructions + tools/prompts/resources/groups, `-32002` on unknown); client declares the extension in per-request `_meta`; activation is client state; a group lists a `SKILL.md` by URI in `resources` and the host still verifies it through skills; per-caller view: one placement, flatten for plain clients, caches keyed on capabilities, discovery gating is not access control; nested groups form a graph, each child fetched separately; mcpkit serves skills, not groups (`make exercise-disclosure`) | [extension-mechanisms](./extension-mechanisms.md); [list-ttl](./list-ttl.md) *(stub, leaf)* |
 
 ## Mid-journey branch points
 
@@ -88,6 +89,7 @@ graph TD
     canceldeep["cancellation deep-dive<br/>(leaf, stub)"]
     listttl["list-TTL SEP-2549<br/>(leaf, stub)"]
     otel["tracing SEP-414<br/>(root, FAQ)"]
+    disclosure["progressive disclosure<br/>(root, FAQ, experimental)"]
 
     L0 --> bringup
     L0 --> wire
@@ -125,14 +127,18 @@ graph TD
     anat --> otel
     rev --> otel
 
+    ext --> disclosure
+    bringup --> disclosure
+
     classDef written fill:#e8f5e9,stroke:#2e7d32,color:#000;
     classDef next fill:#fff3e0,stroke:#e65100,color:#000;
     classDef stub fill:#fff3e0,stroke:#e65100,color:#000,stroke-dasharray:4 3;
-    class bringup,wire,notif,anat,ext,events,mrtr,rev,otel written;
+    class bringup,wire,notif,anat,ext,events,mrtr,rev,otel,disclosure written;
     class tasks next;
     class auth,apps,resume,mw,init,reinit,elicit,sample,rootsLeaf,canceldeep,listttl stub;
 
     click bringup "./bringup.md"
+    click disclosure "./progressive-disclosure.md"
     click wire "./transport-mechanics.md"
     click notif "./notifications.md"
     click anat "./request-anatomy.md"

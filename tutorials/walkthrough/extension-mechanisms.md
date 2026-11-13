@@ -214,3 +214,4 @@ After reading this page, downstream pages can assume:
 - **[List-TTL (SEP-2549)](./list-ttl.md)** *(stub, leaf off notifications)* - the canonical `_meta`-only extension; orthogonal to list_changed.
 - **[Tracing (SEP-414)](./otel.md)** *(root, FAQ-style)* - the canonical `_meta`-field-plus-middleware extension; W3C trace context over `_meta`, spans in middleware, the `ext/otel` adapter.
 - **[`experimental/ext/events/`](../../experimental/ext/events/README.md)** *(branch, target-shape)* - events as first-class.
+- **[Progressive disclosure](./progressive-disclosure.md)** *(root, FAQ-style, experimental)* - the groups draft: a method-namespace extension whose client declaration rides `_meta` on every request, and how it composes with skills.
