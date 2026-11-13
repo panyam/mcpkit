@@ -1,6 +1,6 @@
 # Progressive disclosure
 
-How a server with hundreds of tools shows a model only the ones it needs. The groups extension is a working-group draft, and mcpkit does not serve it yet. This page explains the draft, how it fits with skills, and what you can run today.
+How a server with hundreds of tools shows a model only the ones it needs. The groups extension is a working-group draft, and mcpkit does not serve it yet. This page explains the draft as we read it, how it fits with skills, and what you can run today.
 
 > **Kind:** root *(FAQ-style)* · **Prerequisites:** [bring-up](./bringup.md), [extension-mechanisms](./extension-mechanisms.md)
 > **Reachable from:** [README](./README.md), [extension-mechanisms](./extension-mechanisms.md)
@@ -18,11 +18,11 @@ How a server with hundreds of tools shows a model only the ones it needs. The gr
 
 ## Q1. What problem does progressive disclosure solve?
 
-An agent connects to a server with 200 tools. It calls `tools/list` and gets 200 schemas. The host puts every schema into the model's context before the user has asked anything. The user wants a refund, which takes two billing tools.
+An agent connects to a server with 200 tools, calls `tools/list`, and gets 200 schemas back. The host puts every schema into the model's context before the user has asked anything. The user wants a refund, which takes two billing tools.
 
-[`examples/disclosure`](https://github.com/panyam/mcpkit/tree/main/examples/disclosure) serves that server: 200 tools in eight themes. Its flat `tools/list` is about 82 KB of JSON. A model pays that on every turn, and a larger tool list also makes the model pick the wrong tool more often.
+[`examples/disclosure`](https://github.com/panyam/mcpkit/tree/main/examples/disclosure) serves a server like that, with 200 tools in eight themes. Its flat `tools/list` is about 82 KB of JSON, and the host sends all of it to the model on every call. The draft also argues that a model picks the wrong tool more often as the list grows.
 
-Skills already solve half of this. A [skill](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2640) is a `SKILL.md` with instructions, and a host reads its body only when the model picks it. A skill can only *name* tools, though. A resource can't carry a tool's schema or make it callable. The tools still arrive through `tools/list`, all 200 of them.
+Skills already solve about half of this. A [skill](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2640) is a `SKILL.md` with instructions, and a host reads its body only when the model picks it. A skill can only *name* tools, though. A resource can't carry a tool's schema or make it callable. The tools still arrive through `tools/list`, all 200 of them.
 
 Groups disclose the tools. The server shows one short entry per group. The model picks a group, and only then does the client fetch that group's tools.
 
@@ -33,9 +33,9 @@ Groups disclose the tools. The server shows one short entry per group. The model
 | **Method namespace** | `groups/list` and `groups/get` |
 | **Capability flag** | The server declares `io.modelcontextprotocol/groups` under `capabilities.extensions`. The client declares it under `_meta["io.modelcontextprotocol/clientCapabilities"].extensions`. |
 | **Notifications** | None. Clients re-fetch when `ttlMs` runs out. |
-| **`_meta`** | The client's declaration rides in `_meta` on each request, which keeps the extension stateless. |
+| **`_meta`** | The client puts its declaration in `_meta` on each request, so the server needs no session state to read it. |
 
-The client declares the extension on each request because the server decides per request what that caller sees. On the stateless wire there is no session to remember it in. On the session wire mcpkit reads both places through `core.ClientSupportsExtension`.
+The client declares the extension on each request because the server decides per request what that caller sees. On the stateless wire there's no session to remember it in, and on the session wire mcpkit reads both places through `core.ClientSupportsExtension`.
 
 > [!IMPORTANT]
 > Both sides opt in. A client must not send `groups/*` to a server that didn't advertise the extension. A server must not reject a client for lacking it.
@@ -83,7 +83,7 @@ sequenceDiagram
     Server-->>Host: all 200 tools
 ```
 
-"Activation" is client state. `groups/get` fetches and changes nothing on the server. The host decides when to show a group's tools to the model, and it can drop them again without telling the server.
+The draft calls the moment a group comes into play *activation*, and it happens on the client. `groups/get` only fetches and changes nothing on the server. The host decides when to show a group's tools to the model, and it can drop them again without telling the server.
 
 ## Q4. Where do skills fit?
 
@@ -103,12 +103,9 @@ sequenceDiagram
     Note over Host: verify size + digest, then load the skill
 ```
 
-The skill stays a skill. The host verifies and loads it through the skills extension, as it would for any other reference. Listing a skill in a group grants no approval. The group's own `instructions` are not a skill either, and they carry no digests.
+A group doesn't change how a skill loads. The host still verifies and loads it through the skills extension, as it would for any other reference. Listing a skill in a group grants no approval. The group's own `instructions` are not a skill either, and they carry no digests.
 
-The split:
-
-- **Skills** carry content: instructions, reference files, assets.
-- **Groups** carry typed, callable primitives, plus a pointer to the skill that drives them.
+The two extensions carry different things. Skills carry content, meaning instructions, reference files and assets. Groups carry typed, callable primitives, plus a pointer to the skill that drives them.
 
 > [!NOTE]
 > The working group has not settled how the two relate long term. The [positioning doc](https://github.com/modelcontextprotocol/progressive-disclosure-wg/pull/22) compares groups complementing skills, competing with them, and a rename to "Skills v2". The draft follows the complementary option.
@@ -133,16 +130,16 @@ flowchart LR
 ```
 
 > [!WARNING]
-> **Target-shape gap.** mcpkit's `tools/list` returns the same list to every caller apart from the `x-mcp-file` strip. Serving groups means adding a per-caller filter at that point, and keying `listCacheHints` on the caller's capabilities.
+> **Target-shape gap.** For now mcpkit's `tools/list` returns pretty much the same list to every caller, and the one exception is the `x-mcp-file` strip. Serving groups means adding a per-caller filter at that point, and keying `listCacheHints` on the caller's capabilities.
 
 ## Q6. How do nested groups work?
 
-A group may list child groups in its `groups` field. A server uses this to keep `groups/list` short: `deploy` might hold `deploy-staging` and `deploy-prod`.
+A group may list child groups in its `groups` field. A server uses this to keep `groups/list` short. For example, `deploy` might hold `deploy-staging` and `deploy-prod`.
 
-- A child appears under one or more parents and never in `groups/list` too.
+- A child sits under one or more parents, and never in `groups/list` as well.
 - Groups form a graph, so a child can have several parents, and cycles are allowed.
-- Fetching a parent does not expand its children. Each child takes its own `groups/get`.
-- A client stops at a group it has already fetched, which ends any cycle without special detection.
+- A parent's `groups/get` doesn't expand its children, so each child takes its own `groups/get`.
+- A client stops at any group it has already fetched, so a cycle ends without special detection.
 
 ```mermaid
 flowchart TD
@@ -164,7 +161,7 @@ The draft asks servers to keep the graph shallow. Each level costs one round tri
 | Fixture | [`examples/disclosure`](https://github.com/panyam/mcpkit/tree/main/examples/disclosure): 200 tools, two skills, a `--check` mode. |
 | Exercise | `make exercise-disclosure` at the repo root |
 
-The exercise runs the skills suites, then connects two clients to the fixture on each wire. The plain client must get the flat list and a verified skill. The groups client must get groups instead. Today the groups rows fail:
+We wrote the fixture and its checks before any groups code, so the mission has something to fail against today. The exercise runs the skills suites, then connects two clients to the fixture on each wire. The plain client must get the flat list and a verified skill. The groups client must get groups instead. Today the groups rows fail:
 
 ```
   PASS stateless plain client: tools/list returns every tool: 200 of 200 tools, 82054 bytes
@@ -175,7 +172,7 @@ The exercise runs the skills suites, then connects two clients to the fixture on
   INFO stateless sizes: groups/get billing vs flat tools/list: flat tools/list 82054 bytes, groups/get n/a
 ```
 
-When groups land, the last row will print the size of one group next to the flat list.
+Once mcpkit serves groups, the last row will print the size of one group next to the flat list.
 
 ## End-state
 

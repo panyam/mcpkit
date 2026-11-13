@@ -72,7 +72,7 @@ func runDemo() {
 	demo.Step("tools/list returns all 200 tools").
 		Arrow("Host", "Server", "tools/list").
 		DashedArrow("Server", "Host", "{ tools: [200 schemas] }").
-		Note("The tools come in eight themes: billing, deploy, search, users, storage, metrics, alerts and docs. A model that needs one billing tool still receives all 200 schemas. The byte count is the context cost a host pays before the model does anything.").
+		Note("The tools come in eight themes: billing, deploy, search, users, storage, metrics, alerts and docs. A model that needs one billing tool still receives all 200 schemas. The host sends that many bytes to the model before the model does anything.").
 		Run(func(ctx demokit.StepContext) (result *demokit.StepResult) {
 			if c == nil {
 				return
@@ -137,7 +137,7 @@ func runDemo() {
 		})
 
 	demo.Section("Where groups fit",
-		"The Progressive Disclosure working group drafts a groups extension, `io.modelcontextprotocol/groups`. A server that serves it shows one name and description per theme in `groups/list`. The client calls `groups/get` when the model picks a theme, and only then sees that theme's tools and skills. mcpkit does not serve groups yet. This fixture has the themes and the skill links a groups server needs.",
+		"The Progressive Disclosure working group drafts a groups extension, `io.modelcontextprotocol/groups`. A server that serves it shows one name and description per theme in `groups/list`. The client calls `groups/get` when the model picks a theme, and only then sees that theme's tools and skills. mcpkit does not serve groups yet. A groups server would need themes and skill links, and this fixture already has both.",
 	)
 
 	demo.Section("Where to look in the code",

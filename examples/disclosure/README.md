@@ -1,7 +1,7 @@
 # disclosure: 200 tools and two skills
 
 An agent connects to a server with 200 tools. `tools/list` sends every schema, and the host puts
-all of them into the model's context, about 80 KB of JSON here. The model may need one billing
+all of them into the model's context, about 82 KB of JSON here. The model may need one billing
 tool.
 
 This example serves that situation so you can measure it. The server has 200 tools in eight
