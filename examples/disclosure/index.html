@@ -1,0 +1,436 @@
+<!DOCTYPE html>
+
+
+
+
+
+
+
+
+
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    
+    <script>
+      try {
+        const t = localStorage.getItem('theme');
+        if (t === 'dark' || t === 'light') document.documentElement.dataset.theme = t;
+      } catch {}
+    </script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="A fixture with 200 tools and two skills. Measures how many bytes a flat tools/list sends to the model, and checks a plain client and a groups client on both wires.">
+    <title>Progressive disclosure (experimental) · mcpkit</title>
+
+    <link rel="stylesheet" href="/mcpkit/static/css/main.css">
+</head>
+<body>
+    
+<header class="site-header">
+    <div class="site-header-inner">
+        
+        <a class="brand" href="/mcpkit/">
+            <span class="brand-name">mcpkit</span>
+        </a>
+        <nav class="top-nav">
+            
+            
+            <a class="top-nav-link" href="/mcpkit/get-started/">Get Started</a>
+            
+            <a class="top-nav-link" href="/mcpkit/guides/transports/">Guides</a>
+            
+            <a class="top-nav-link" href="/mcpkit/examples/">Examples</a>
+            
+            <a class="top-nav-link" href="/mcpkit/concepts/">Concepts</a>
+            
+            <a class="top-nav-link" href="/mcpkit/conformance/">Conformance</a>
+            
+            <a class="top-nav-link" href="/mcpkit/packages/core/">Packages</a>
+            
+            <a class="top-nav-link" href="/mcpkit/design/apps/">Reference</a>
+            
+            <a class="top-nav-link external" href="https://github.com/panyam/mcpkit">GitHub</a>
+            <button type="button" class="theme-toggle" aria-label="Toggle dark mode" title="Toggle dark mode">
+                <span class="theme-toggle-light">☀</span>
+                <span class="theme-toggle-dark">☾</span>
+            </button>
+        </nav>
+    </div>
+</header>
+
+
+    <div class="page">
+        
+<aside class="sidebar">
+    
+    
+    <nav class="sidebar-nav">
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/get-started/">Get Started</a>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/guides/transports/">Guides</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/guides/transports/">Transports</a></li>
+                
+                <li><a href="/mcpkit/guides/auth/">Auth</a></li>
+                
+                <li><a href="/mcpkit/guides/tasks/">Long-running tasks</a></li>
+                
+                <li><a href="/mcpkit/guides/apps/">MCP Apps</a></li>
+                
+                <li><a href="/mcpkit/guides/prompts/">Prompts</a></li>
+                
+                <li><a href="/mcpkit/guides/elicitation/">Elicitation</a></li>
+                
+                <li><a href="/mcpkit/guides/completions/">Argument completion</a></li>
+                
+                <li><a href="/mcpkit/guides/observability/">Observability</a></li>
+                
+                <li><a href="/mcpkit/guides/mrtr/">MRTR input-gathering</a></li>
+                
+                <li><a href="/mcpkit/guides/deployment/">Deployment</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/examples/">Examples</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/examples/">All examples</a></li>
+                
+                <li><a href="/mcpkit/examples/auth/">Auth</a></li>
+                
+                <li><a href="/mcpkit/examples/tasks-v2/">Tasks v2</a></li>
+                
+                <li><a href="/mcpkit/examples/mrtr/">MRTR</a></li>
+                
+                <li><a href="/mcpkit/examples/apps/">MCP Apps</a></li>
+                
+                <li><a href="/mcpkit/examples/events/discord/">Events</a></li>
+                
+                <li><a href="/mcpkit/examples/skills-core/">Skills</a></li>
+                
+                <li><a href="/mcpkit/examples/disclosure/">Progressive disclosure</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/concepts/">Concepts</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/concepts/">Overview</a></li>
+                
+                <li><a href="/mcpkit/concepts/bringup/">Bring-up</a></li>
+                
+                <li><a href="/mcpkit/concepts/transport-mechanics/">Transport mechanics</a></li>
+                
+                <li><a href="/mcpkit/concepts/notifications/">Notifications</a></li>
+                
+                <li><a href="/mcpkit/concepts/request-anatomy/">Anatomy of a request</a></li>
+                
+                <li><a href="/mcpkit/concepts/extension-mechanisms/">Extension mechanisms</a></li>
+                
+                <li><a href="/mcpkit/concepts/reverse-call/">Reverse calls</a></li>
+                
+                <li><a href="/mcpkit/concepts/mrtr/">MRTR internals</a></li>
+                
+                <li><a href="/mcpkit/concepts/tracing/">Tracing</a></li>
+                
+                <li><a href="/mcpkit/concepts/events/">Events</a></li>
+                
+                <li><a href="/mcpkit/concepts/progressive-disclosure/">Progressive disclosure</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/conformance/">Conformance</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/conformance/">Coverage matrix</a></li>
+                
+                <li><a href="/mcpkit/conformance/upstream-audit/">Upstream audit</a></li>
+                
+                <li><a href="/mcpkit/conformance/fixture-audit/">Fixture audit</a></li>
+                
+                <li><a href="/mcpkit/conformance/external-checker/">External checker</a></li>
+                
+                <li><a href="/mcpkit/conformance/apps/compat/">Apps compat</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/packages/core/">Packages</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/packages/core/">core</a></li>
+                
+                <li><a href="/mcpkit/packages/server/">server</a></li>
+                
+                <li><a href="/mcpkit/packages/client/">client</a></li>
+                
+                <li><a href="/mcpkit/packages/ext-auth/">ext/auth</a></li>
+                
+                <li><a href="/mcpkit/packages/ext-tasks/">ext/tasks</a></li>
+                
+                <li><a href="/mcpkit/packages/ext-ui/">ext/ui</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/design/apps/">Reference</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/design/apps/">MCP Apps — design</a></li>
+                
+                <li><a href="/mcpkit/design/apps-host/">MCP Apps — host model</a></li>
+                
+                <li><a href="/mcpkit/design/apps-onboarding/">MCP Apps — onboarding</a></li>
+                
+                <li><a href="/mcpkit/design/tasks-v2-migration/">Tasks v2 migration</a></li>
+                
+                <li><a href="/mcpkit/design/sep-2567-handles/">SEP-2567 handles</a></li>
+                
+                <li><a href="/mcpkit/design/sep-2577-deprecations/">SEP-2577 deprecations</a></li>
+                
+                <li><a href="/mcpkit/design/list-ttl-migration/">List TTL migration</a></li>
+                
+            </ul>
+            
+        </div>
+        
+    </nav>
+</aside>
+
+        <main class="main">
+            
+<article class="content">
+    
+    <header class="content-header">
+        <h1>Progressive disclosure (experimental)</h1>
+        
+        <p class="lead">A fixture with 200 tools and two skills. Measures how many bytes a flat tools/list sends to the model, and checks a plain client and a groups client on both wires.</p>
+        
+        
+        <p class="source-link">
+            Source: <a href="https://github.com/panyam/mcpkit/blob/main/examples/disclosure/README.md"><code>examples/disclosure/README.md</code></a>
+        </p>
+        
+    </header>
+    
+
+    <div class="content-body">
+        
+<h1 id="disclosure-200-tools-and-two-skills">disclosure: 200 tools and two skills <a class="anchor" href="#disclosure-200-tools-and-two-skills">¶</a></h1>
+<p>An agent connects to a server with 200 tools. <code>tools/list</code> sends every schema, and the host puts<br />
+all of them into the model&rsquo;s context, about 82 KB of JSON here. The model may need one billing<br />
+tool.</p>
+<p>This example serves that situation so you can measure it. The server has 200 tools in eight<br />
+themes (billing, deploy, search, users, storage, metrics, alerts, docs) and two SEP-2640 skills.<br />
+<code>billing-refunds</code> uses billing tools. <code>incident-triage</code> uses alerts, metrics and deploy tools.</p>
+<h2 id="run-it">Run it <a class="anchor" href="#run-it">¶</a></h2>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span>just serve          <span style="color:#998;font-style:italic"># terminal 1: the fixture on :8080</span>
+</span></span><span style="display:flex;"><span>just demo           <span style="color:#998;font-style:italic"># terminal 2: the walkthrough</span>
+</span></span></code></pre><p>Both sides take <code>--wire=legacy</code> or <code>--wire=stateless</code>.</p>
+<p>The walkthrough connects, counts the bytes of the flat <code>tools/list</code>, lists the skills, and reads<br />
+<code>billing-refunds</code> with its digest checked. See <a href="https://github.com/panyam/mcpkit/blob/main/examples/disclosure/WALKTHROUGH.md">WALKTHROUGH.md</a> for the steps.</p>
+<h2 id="check-mode">Check mode <a class="anchor" href="#check-mode">¶</a></h2>
+<p><code>--check</code> connects two clients and prints one row per check:</p>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span>go run . --serve --addr<span style="color:#000;font-weight:bold">=</span>127.0.0.1:18420 --wire<span style="color:#000;font-weight:bold">=</span>stateless &amp;
+</span></span><span style="display:flex;"><span>go run . --check --url http://127.0.0.1:18420 --wire<span style="color:#000;font-weight:bold">=</span>stateless
+</span></span></code></pre><pre><code>  PASS stateless plain client: tools/list returns every tool: 200 of 200 tools, 82054 bytes
+  PASS stateless plain client: SKILL.md reads and verifies: skill://billing-refunds/SKILL.md, 424 bytes, digest verified true
+  FAIL stateless groups client: groups/list returns one group per theme: RPC error -32601: method not found: groups/list
+  FAIL stateless groups client: groups/get billing returns its tools and SKILL.md: RPC error -32601: method not found: groups/get
+  FAIL stateless groups client: tools/list leaves out grouped tools: 200 of 200 tools, 82054 bytes
+  INFO stateless sizes: groups/get billing vs flat tools/list: flat tools/list 82054 bytes, groups/get n/a
+</code></pre>
+<p>The plain client declares no extensions and must get the flat list. The groups client declares<br />
+<code>io.modelcontextprotocol/groups</code>, an extension the Progressive Disclosure working group drafts.<br />
+mcpkit does not serve it yet, so the groups rows fail and the command exits 1. The last row<br />
+prints the size of one group next to the flat list.</p>
+<h2 id="files">Files <a class="anchor" href="#files">¶</a></h2>
+<table>
+<thead>
+<tr>
+<th>File</th>
+<th>What it holds</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>fixture.go</code></td>
+<td>The 200 tool definitions and the embedded <code>skills/</code> tree</td>
+</tr>
+<tr>
+<td><code>check.go</code></td>
+<td>The <code>--check</code> rows</td>
+</tr>
+<tr>
+<td><code>walkthrough.go</code></td>
+<td>The demokit walkthrough</td>
+</tr>
+<tr>
+<td><code>skills/</code></td>
+<td><code>billing-refunds</code> and <code>incident-triage</code></td>
+</tr>
+</tbody>
+</table>
+
+
+<hr/>
+
+<h2 id="walkthrough">Walkthrough</h2>
+<p class="source-link">Generated from the scripted demo — run it with <code>make serve</code> + <code>make demo</code>. Source: <a href="https://github.com/panyam/mcpkit/blob/main/examples/disclosure/WALKTHROUGH.md"><code>examples/disclosure/WALKTHROUGH.md</code></a></p>
+
+<h1 id="progressive-disclosure-200-tools-and-two-skills">Progressive disclosure: 200 tools and two skills <a class="anchor" href="#progressive-disclosure-200-tools-and-two-skills">¶</a></h1>
+<p>A server with 200 tools sends all 200 in <code>tools/list</code>, and a client puts every schema into the model&rsquo;s context. This walkthrough counts those bytes on a fixture server, then loads a skill, which a client reads only when the model needs it.</p>
+<h2 id="what-youll-learn">What you&rsquo;ll learn <a class="anchor" href="#what-youll-learn">¶</a></h2>
+<ul>
+<li><strong>tools/list returns all 200 tools</strong> - The tools come in eight themes: billing, deploy, search, users, storage, metrics, alerts and docs. A model that needs one billing tool still receives all 200 schemas. The host sends that many bytes to the model before the model does anything.</li>
+<li><strong>skills/list names the skills without their bodies</strong> - A skill is a <code>SKILL.md</code> with instructions, served under <code>skill://</code>. The listing carries each skill&rsquo;s name, description and file digests. The host reads a body only when the model picks that skill.</li>
+<li><strong>Read billing-refunds and verify its digest</strong> - <code>ReadFromEntry</code> checks the served bytes against the size and digest from the listing before the host uses them. The skill names the billing tools it needs. A groups-aware server makes that link explicit.</li>
+</ul>
+<h2 id="flow">Flow <a class="anchor" href="#flow">¶</a></h2>
+<pre><code class="language-mermaid">sequenceDiagram
+    participant Host as MCP Host (this client)
+    participant Server as MCP Server (just serve, 200 tools + 2 skills)
+
+    Note over Host,Server: Step 1: Connect
+    Host-&gt;&gt;Server: initialize
+    Server--&gt;&gt;Host: serverInfo + capabilities, including the skills extension
+
+    Note over Host,Server: Step 2: tools/list returns all 200 tools
+    Host-&gt;&gt;Server: tools/list
+    Server--&gt;&gt;Host: { tools: [200 schemas] }
+
+    Note over Host,Server: Step 3: skills/list names the skills without their bodies
+    Host-&gt;&gt;Server: skills/list
+    Server--&gt;&gt;Host: { skills: [name, description, digest per file] }
+
+    Note over Host,Server: Step 4: Read billing-refunds and verify its digest
+    Host-&gt;&gt;Server: resources/read skill://billing-refunds/SKILL.md
+    Server--&gt;&gt;Host: SKILL.md body
+</code></pre>
+<h2 id="steps">Steps <a class="anchor" href="#steps">¶</a></h2>
+<h3 id="setup">Setup <a class="anchor" href="#setup">¶</a></h3>
+<p>Start the server in a separate terminal first:</p>
+<pre><code>Terminal 1:  just serve         # 200 tools + 2 skills on :8080
+Terminal 2:  just demo          # this walkthrough (--tui for the interactive TUI)
+</code></pre>
+<p>Both sides take <code>--wire=legacy</code> or <code>--wire=stateless</code>. The results are the same on either wire.</p>
+<h3 id="step-1-connect">Step 1: Connect <a class="anchor" href="#step-1-connect">¶</a></h3>
+<h3 id="step-2-toolslist-returns-all-200-tools">Step 2: tools/list returns all 200 tools <a class="anchor" href="#step-2-toolslist-returns-all-200-tools">¶</a></h3>
+<p>The tools come in eight themes: billing, deploy, search, users, storage, metrics, alerts and docs. A model that needs one billing tool still receives all 200 schemas. The host sends that many bytes to the model before the model does anything.</p>
+<h3 id="step-3-skillslist-names-the-skills-without-their-bodies">Step 3: skills/list names the skills without their bodies <a class="anchor" href="#step-3-skillslist-names-the-skills-without-their-bodies">¶</a></h3>
+<p>A skill is a <code>SKILL.md</code> with instructions, served under <code>skill://</code>. The listing carries each skill&rsquo;s name, description and file digests. The host reads a body only when the model picks that skill.</p>
+<h3 id="step-4-read-billing-refunds-and-verify-its-digest">Step 4: Read billing-refunds and verify its digest <a class="anchor" href="#step-4-read-billing-refunds-and-verify-its-digest">¶</a></h3>
+<p><code>ReadFromEntry</code> checks the served bytes against the size and digest from the listing before the host uses them. The skill names the billing tools it needs. A groups-aware server makes that link explicit.</p>
+<h3 id="where-groups-fit">Where groups fit <a class="anchor" href="#where-groups-fit">¶</a></h3>
+<p>The Progressive Disclosure working group drafts a groups extension, <code>io.modelcontextprotocol/groups</code>. A server that serves it shows one name and description per theme in <code>groups/list</code>. The client calls <code>groups/get</code> when the model picks a theme, and only then sees that theme&rsquo;s tools and skills. mcpkit does not serve groups yet. A groups server would need themes and skill links, and this fixture already has both.</p>
+<h3 id="where-to-look-in-the-code">Where to look in the code <a class="anchor" href="#where-to-look-in-the-code">¶</a></h3>
+<ul>
+<li>The fixture: <code>fixture.go</code> in this directory</li>
+<li>Skills provider and client: <a href="https://github.com/panyam/mcpkit/blob/main/ext/skills/provider.go"><code>ext/skills/provider.go</code></a>, <a href="https://github.com/panyam/mcpkit/blob/main/ext/skills/client_methods.go"><code>ext/skills/client_methods.go</code></a></li>
+<li>The checks <code>make exercise-disclosure</code> runs: <code>check.go</code> in this directory</li>
+</ul>
+<h2 id="run-it">Run it <a class="anchor" href="#run-it">¶</a></h2>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span>go run ./examples/disclosure/
+</span></span></code></pre><p>Pass <code>--non-interactive</code> to skip pauses:</p>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span>go run ./examples/disclosure/ --non-interactive
+</span></span></code></pre>
+
+    </div>
+</article>
+
+        </main>
+    </div>
+
+    
+<footer class="site-footer">
+    <div class="site-footer-inner">
+        <p>
+            <a href="https://github.com/panyam/mcpkit">https://github.com/panyam/mcpkit</a> ·
+            Licensed under Apache-2.0 ·
+            Source rendered by <a href="https://github.com/panyam/s3gen">s3gen</a>.
+        </p>
+    </div>
+</footer>
+
+
+    
+    <script type="module">
+      const blocks = document.querySelectorAll('pre > code.language-mermaid');
+      if (blocks.length) {
+        const { default: mermaid } = await import('https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs');
+        blocks.forEach((code) => {
+          const pre = document.createElement('pre');
+          pre.className = 'mermaid';
+          pre.textContent = code.textContent;
+          code.parentElement.replaceWith(pre);
+        });
+        mermaid.initialize({ startOnLoad: false, securityLevel: 'strict' });
+        await mermaid.run();
+      }
+    </script>
+
+    
+    <script>
+      document.querySelectorAll('pre > code:not(.language-mermaid)').forEach((code) => {
+        const pre = code.parentElement;
+        pre.classList.add('has-copy');
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'copy-btn';
+        btn.textContent = 'Copy';
+        btn.setAttribute('aria-label', 'Copy code to clipboard');
+        btn.addEventListener('click', async () => {
+          try {
+            await navigator.clipboard.writeText(code.textContent);
+            btn.textContent = 'Copied';
+          } catch {
+            btn.textContent = 'Failed';
+          }
+          setTimeout(() => { btn.textContent = 'Copy'; }, 1500);
+        });
+        pre.appendChild(btn);
+      });
+    </script>
+
+    
+    <script>
+      (function () {
+        const btn = document.querySelector('.theme-toggle');
+        if (!btn) return;
+        btn.addEventListener('click', () => {
+          const root = document.documentElement;
+          const current = root.dataset.theme ||
+            (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+          const next = current === 'dark' ? 'light' : 'dark';
+          root.dataset.theme = next;
+          try { localStorage.setItem('theme', next); } catch {}
+        });
+      })();
+    </script>
+</body>
+</html>

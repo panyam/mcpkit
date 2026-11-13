@@ -1,0 +1,520 @@
+<!DOCTYPE html>
+
+
+
+
+
+
+
+
+
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    
+    <script>
+      try {
+        const t = localStorage.getItem('theme');
+        if (t === 'dark' || t === 'light') document.documentElement.dataset.theme = t;
+      } catch {}
+    </script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="The groups draft: groups/list and groups/get, per-caller tool lists, nested groups, and how groups compose with skills.">
+    <title>Progressive disclosure (experimental) · mcpkit</title>
+
+    <link rel="stylesheet" href="/mcpkit/static/css/main.css">
+</head>
+<body>
+    
+<header class="site-header">
+    <div class="site-header-inner">
+        
+        <a class="brand" href="/mcpkit/">
+            <span class="brand-name">mcpkit</span>
+        </a>
+        <nav class="top-nav">
+            
+            
+            <a class="top-nav-link" href="/mcpkit/get-started/">Get Started</a>
+            
+            <a class="top-nav-link" href="/mcpkit/guides/transports/">Guides</a>
+            
+            <a class="top-nav-link" href="/mcpkit/examples/">Examples</a>
+            
+            <a class="top-nav-link" href="/mcpkit/concepts/">Concepts</a>
+            
+            <a class="top-nav-link" href="/mcpkit/conformance/">Conformance</a>
+            
+            <a class="top-nav-link" href="/mcpkit/packages/core/">Packages</a>
+            
+            <a class="top-nav-link" href="/mcpkit/design/apps/">Reference</a>
+            
+            <a class="top-nav-link external" href="https://github.com/panyam/mcpkit">GitHub</a>
+            <button type="button" class="theme-toggle" aria-label="Toggle dark mode" title="Toggle dark mode">
+                <span class="theme-toggle-light">☀</span>
+                <span class="theme-toggle-dark">☾</span>
+            </button>
+        </nav>
+    </div>
+</header>
+
+
+    <div class="page">
+        
+<aside class="sidebar">
+    
+    
+    <nav class="sidebar-nav">
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/get-started/">Get Started</a>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/guides/transports/">Guides</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/guides/transports/">Transports</a></li>
+                
+                <li><a href="/mcpkit/guides/auth/">Auth</a></li>
+                
+                <li><a href="/mcpkit/guides/tasks/">Long-running tasks</a></li>
+                
+                <li><a href="/mcpkit/guides/apps/">MCP Apps</a></li>
+                
+                <li><a href="/mcpkit/guides/prompts/">Prompts</a></li>
+                
+                <li><a href="/mcpkit/guides/elicitation/">Elicitation</a></li>
+                
+                <li><a href="/mcpkit/guides/completions/">Argument completion</a></li>
+                
+                <li><a href="/mcpkit/guides/observability/">Observability</a></li>
+                
+                <li><a href="/mcpkit/guides/mrtr/">MRTR input-gathering</a></li>
+                
+                <li><a href="/mcpkit/guides/deployment/">Deployment</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/examples/">Examples</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/examples/">All examples</a></li>
+                
+                <li><a href="/mcpkit/examples/auth/">Auth</a></li>
+                
+                <li><a href="/mcpkit/examples/tasks-v2/">Tasks v2</a></li>
+                
+                <li><a href="/mcpkit/examples/mrtr/">MRTR</a></li>
+                
+                <li><a href="/mcpkit/examples/apps/">MCP Apps</a></li>
+                
+                <li><a href="/mcpkit/examples/events/discord/">Events</a></li>
+                
+                <li><a href="/mcpkit/examples/skills-core/">Skills</a></li>
+                
+                <li><a href="/mcpkit/examples/disclosure/">Progressive disclosure</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/concepts/">Concepts</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/concepts/">Overview</a></li>
+                
+                <li><a href="/mcpkit/concepts/bringup/">Bring-up</a></li>
+                
+                <li><a href="/mcpkit/concepts/transport-mechanics/">Transport mechanics</a></li>
+                
+                <li><a href="/mcpkit/concepts/notifications/">Notifications</a></li>
+                
+                <li><a href="/mcpkit/concepts/request-anatomy/">Anatomy of a request</a></li>
+                
+                <li><a href="/mcpkit/concepts/extension-mechanisms/">Extension mechanisms</a></li>
+                
+                <li><a href="/mcpkit/concepts/reverse-call/">Reverse calls</a></li>
+                
+                <li><a href="/mcpkit/concepts/mrtr/">MRTR internals</a></li>
+                
+                <li><a href="/mcpkit/concepts/tracing/">Tracing</a></li>
+                
+                <li><a href="/mcpkit/concepts/events/">Events</a></li>
+                
+                <li><a href="/mcpkit/concepts/progressive-disclosure/">Progressive disclosure</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/conformance/">Conformance</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/conformance/">Coverage matrix</a></li>
+                
+                <li><a href="/mcpkit/conformance/upstream-audit/">Upstream audit</a></li>
+                
+                <li><a href="/mcpkit/conformance/fixture-audit/">Fixture audit</a></li>
+                
+                <li><a href="/mcpkit/conformance/external-checker/">External checker</a></li>
+                
+                <li><a href="/mcpkit/conformance/apps/compat/">Apps compat</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/packages/core/">Packages</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/packages/core/">core</a></li>
+                
+                <li><a href="/mcpkit/packages/server/">server</a></li>
+                
+                <li><a href="/mcpkit/packages/client/">client</a></li>
+                
+                <li><a href="/mcpkit/packages/ext-auth/">ext/auth</a></li>
+                
+                <li><a href="/mcpkit/packages/ext-tasks/">ext/tasks</a></li>
+                
+                <li><a href="/mcpkit/packages/ext-ui/">ext/ui</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/design/apps/">Reference</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/design/apps/">MCP Apps — design</a></li>
+                
+                <li><a href="/mcpkit/design/apps-host/">MCP Apps — host model</a></li>
+                
+                <li><a href="/mcpkit/design/apps-onboarding/">MCP Apps — onboarding</a></li>
+                
+                <li><a href="/mcpkit/design/tasks-v2-migration/">Tasks v2 migration</a></li>
+                
+                <li><a href="/mcpkit/design/sep-2567-handles/">SEP-2567 handles</a></li>
+                
+                <li><a href="/mcpkit/design/sep-2577-deprecations/">SEP-2577 deprecations</a></li>
+                
+                <li><a href="/mcpkit/design/list-ttl-migration/">List TTL migration</a></li>
+                
+            </ul>
+            
+        </div>
+        
+    </nav>
+</aside>
+
+        <main class="main">
+            
+<article class="content">
+    
+    <header class="content-header">
+        <h1>Progressive disclosure (experimental)</h1>
+        
+        <p class="lead">The groups draft: groups/list and groups/get, per-caller tool lists, nested groups, and how groups compose with skills.</p>
+        
+        
+        <p class="source-link">
+            Source: <a href="https://github.com/panyam/mcpkit/blob/main/tutorials/walkthrough/progressive-disclosure.md"><code>tutorials/walkthrough/progressive-disclosure.md</code></a>
+        </p>
+        
+    </header>
+    
+
+    <div class="content-body">
+        
+<h1 id="progressive-disclosure">Progressive disclosure <a class="anchor" href="#progressive-disclosure">¶</a></h1>
+<p>How a server with hundreds of tools shows a model only the ones it needs. The groups extension is a working-group draft, and mcpkit does not serve it yet. This page explains the draft as we read it, how it fits with skills, and what you can run today.</p>
+<blockquote>
+<p><strong>Kind:</strong> root <em>(FAQ-style)</em> · <strong>Prerequisites:</strong> <a href="/mcpkit/concepts/bringup/">bring-up</a>, <a href="/mcpkit/concepts/extension-mechanisms/">extension-mechanisms</a><br />
+<strong>Reachable from:</strong> <a href="https://github.com/panyam/mcpkit/blob/main/tutorials/walkthrough/README.md">README</a>, <a href="/mcpkit/concepts/extension-mechanisms/">extension-mechanisms</a><br />
+<strong>Branches into:</strong> none yet<br />
+<strong>Spec:</strong> <a href="https://github.com/modelcontextprotocol/progressive-disclosure-wg/blob/15b2a5cf919702ae95a591856525486c857b3ea5/seps/0000-progressive-disclosure-groups.md">groups draft</a> (progressive-disclosure-wg PR 19, pinned at <code>15b2a5cf</code>, 2026-11-07) · <a href="https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2640">SEP-2640 skills</a> · <strong>Code:</strong> <a href="https://github.com/panyam/mcpkit/tree/main/examples/disclosure"><code>examples/disclosure/</code></a> · <a href="https://github.com/panyam/mcpkit/tree/main/ext/skills"><code>ext/skills/</code></a></p>
+</blockquote>
+<blockquote>
+<p>[!CAUTION]<br />
+<strong>Experimental, and not implemented.</strong> The groups extension is an Extensions Track draft with no sponsor. Method names, params and result shapes can change. mcpkit has a fixture and an exercise for it, and nothing that answers <code>groups/list</code> yet. Everything below describes the draft at the pinned commit.</p>
+</blockquote>
+<h2 id="prerequisites">Prerequisites <a class="anchor" href="#prerequisites">¶</a></h2>
+<ul>
+<li>You know how a session starts and how capabilities are negotiated. → If not, read <a href="/mcpkit/concepts/bringup/">bring-up</a>.</li>
+<li>You know the four extension knobs (method namespace, capability flags, notifications, <code>_meta</code>). → If not, read <a href="/mcpkit/concepts/extension-mechanisms/">extension mechanisms</a>.</li>
+<li>You know <code>ttlMs</code> and <code>cacheScope</code> on list results. → If not, read the <a href="https://github.com/panyam/mcpkit/tree/main/examples/list-ttl">list-ttl example</a>.</li>
+</ul>
+<h2 id="q1-what-problem-does-progressive-disclosure-solve">Q1. What problem does progressive disclosure solve? <a class="anchor" href="#q1-what-problem-does-progressive-disclosure-solve">¶</a></h2>
+<p>An agent connects to a server with 200 tools, calls <code>tools/list</code>, and gets 200 schemas back. The host puts every schema into the model&rsquo;s context before the user has asked anything. The user wants a refund, which takes two billing tools.</p>
+<p><a href="https://github.com/panyam/mcpkit/tree/main/examples/disclosure"><code>examples/disclosure</code></a> serves a server like that, with 200 tools in eight themes. Its flat <code>tools/list</code> is about 82 KB of JSON, and the host sends all of it to the model on every call. The draft also argues that a model picks the wrong tool more often as the list grows.</p>
+<p>Skills already solve about half of this. A <a href="https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2640">skill</a> is a <code>SKILL.md</code> with instructions, and a host reads its body only when the model picks it. A skill can only <em>name</em> tools, though. A resource can&rsquo;t carry a tool&rsquo;s schema or make it callable. The tools still arrive through <code>tools/list</code>, all 200 of them.</p>
+<p>Groups disclose the tools. The server shows one short entry per group. The model picks a group, and only then does the client fetch that group&rsquo;s tools.</p>
+<h2 id="q2-how-does-the-groups-extension-use-the-extension-knobs">Q2. How does the groups extension use the extension knobs? <a class="anchor" href="#q2-how-does-the-groups-extension-use-the-extension-knobs">¶</a></h2>
+<table>
+<thead>
+<tr>
+<th>Knob</th>
+<th>What groups adds</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Method namespace</strong></td>
+<td><code>groups/list</code> and <code>groups/get</code></td>
+</tr>
+<tr>
+<td><strong>Capability flag</strong></td>
+<td>The server declares <code>io.modelcontextprotocol/groups</code> under <code>capabilities.extensions</code>. The client declares it under <code>_meta[&quot;io.modelcontextprotocol/clientCapabilities&quot;].extensions</code>.</td>
+</tr>
+<tr>
+<td><strong>Notifications</strong></td>
+<td>None. Clients re-fetch when <code>ttlMs</code> runs out.</td>
+</tr>
+<tr>
+<td><strong><code>_meta</code></strong></td>
+<td>The client puts its declaration in <code>_meta</code> on each request, so the server needs no session state to read it.</td>
+</tr>
+</tbody>
+</table>
+<p>The client declares the extension on each request because the server decides per request what that caller sees. On the stateless wire there&rsquo;s no session to remember it in, and on the session wire mcpkit reads both places through <code>core.ClientSupportsExtension</code>.</p>
+<blockquote>
+<p>[!IMPORTANT]<br />
+Both sides opt in. A client must not send <code>groups/*</code> to a server that didn&rsquo;t advertise the extension. A server must not reject a client for lacking it.</p>
+</blockquote>
+<h2 id="q3-what-does-a-groups-session-look-like-on-the-wire">Q3. What does a groups session look like on the wire? <a class="anchor" href="#q3-what-does-a-groups-session-look-like-on-the-wire">¶</a></h2>
+<p>A <code>Group</code> has a <code>name</code>, an optional <code>title</code> and a <code>description</code>. The description tells the model <em>when</em> to pick the group. <code>groups/list</code> returns only those fields, never the tools inside.</p>
+<p><code>groups/get</code> takes <code>{&quot;name&quot;: &quot;billing&quot;}</code> and returns the group&rsquo;s contents in one flat result:</p>
+<ul>
+<li><code>instructions</code>: optional markdown on <em>how</em> to use the group</li>
+<li><code>tools</code>, <code>prompts</code> and <code>resources</code>: complete definitions, ready to call</li>
+<li><code>groups</code>: child groups, each fetched with its own <code>groups/get</code></li>
+</ul>
+<p>An unknown name returns <code>-32002</code>, the same code <code>resources/read</code> uses for an unknown URI.</p>
+<pre><code class="language-mermaid">sequenceDiagram
+    participant Model
+    participant Host as Host (groups client)
+    participant Server
+
+    Host-&gt;&gt;Server: tools/list  (_meta declares groups)
+    Server--&gt;&gt;Host: top-level tools only
+    Host-&gt;&gt;Server: groups/list
+    Server--&gt;&gt;Host: [billing, deploy, search, ...] names + descriptions
+    Host-&gt;&gt;Model: top-level tools + one line per group
+    Model-&gt;&gt;Host: &quot;the user wants a refund, open billing&quot;
+    Host-&gt;&gt;Server: groups/get {name: &quot;billing&quot;}
+    Server--&gt;&gt;Host: billing tools + SKILL.md listed in resources
+    Host-&gt;&gt;Model: billing tools added to context
+    Model-&gt;&gt;Host: call billing_refund_create
+    Host-&gt;&gt;Server: tools/call billing_refund_create
+    Server--&gt;&gt;Host: result
+</code></pre>
+<p>A client without the extension sees none of this. It calls <code>tools/list</code> and gets the flat list:</p>
+<pre><code class="language-mermaid">sequenceDiagram
+    participant Host as Host (plain client)
+    participant Server
+
+    Host-&gt;&gt;Server: tools/list  (no groups declared)
+    Server--&gt;&gt;Host: all 200 tools
+</code></pre>
+<p>The draft calls the moment a group comes into play <em>activation</em>, and it happens on the client. <code>groups/get</code> only fetches and changes nothing on the server. The host decides when to show a group&rsquo;s tools to the model, and it can drop them again without telling the server.</p>
+<h2 id="q4-where-do-skills-fit">Q4. Where do skills fit? <a class="anchor" href="#q4-where-do-skills-fit">¶</a></h2>
+<p>A group and a skill compose by reference. The group lists the skill&rsquo;s <code>SKILL.md</code> URI in its <code>resources</code>, next to the tools the skill&rsquo;s steps call.</p>
+<pre><code class="language-mermaid">sequenceDiagram
+    participant Host
+    participant Server
+
+    Host-&gt;&gt;Server: groups/get {name: &quot;billing&quot;}
+    Server--&gt;&gt;Host: tools: [billing_*] · resources: [skill://billing-refunds/SKILL.md]
+    Host-&gt;&gt;Server: skills/get skill://billing-refunds/SKILL.md
+    Server--&gt;&gt;Host: skill entry with size + digest per file
+    Host-&gt;&gt;Server: resources/read skill://billing-refunds/SKILL.md
+    Server--&gt;&gt;Host: SKILL.md body
+    Note over Host: verify size + digest, then load the skill
+</code></pre>
+<p>A group doesn&rsquo;t change how a skill loads. The host still verifies and loads it through the skills extension, as it would for any other reference. Listing a skill in a group grants no approval. The group&rsquo;s own <code>instructions</code> are not a skill either, and they carry no digests.</p>
+<p>The two extensions carry different things. Skills carry content, meaning instructions, reference files and assets. Groups carry typed, callable primitives, plus a pointer to the skill that drives them.</p>
+<blockquote>
+<p>[!NOTE]<br />
+The working group has not settled how the two relate long term. The <a href="https://github.com/modelcontextprotocol/progressive-disclosure-wg/pull/22">positioning doc</a> compares groups complementing skills, competing with them, and a rename to &ldquo;Skills v2&rdquo;. The draft follows the complementary option.</p>
+</blockquote>
+<h2 id="q5-what-must-a-server-do-for-each-caller">Q5. What must a server do for each caller? <a class="anchor" href="#q5-what-must-a-server-do-for-each-caller">¶</a></h2>
+<p>The server builds a <strong>client view</strong> for each caller, from that caller&rsquo;s declared extensions. Four rules hold within a view.</p>
+<ol>
+<li><strong>One placement per primitive.</strong> A tool is either top-level, in <code>tools/list</code>, or scoped, in one or more groups. Never both. A scoped tool may sit in several groups, and its definition must be identical in each.</li>
+<li><strong>Flatten for plain clients.</strong> A client that didn&rsquo;t declare groups gets every tool the server wants it to use in <code>tools/list</code>. The server may hide a tool instead, but hiding is a discovery choice.</li>
+<li><strong>Key every cache on capabilities.</strong> <code>tools/list</code> now depends on the caller. A cached list built for a groups client must never reach a plain client. <code>groups/get</code> results are usually <code>cacheScope: &quot;private&quot;</code>.</li>
+<li><strong>Discovery gating is not access control.</strong> A scoped tool is a real tool. <code>tools/call</code> on it works whether or not the client fetched its group. Protect it with ordinary authorization.</li>
+</ol>
+<pre><code class="language-mermaid">flowchart LR
+    req[&quot;tools/list request&quot;] --&gt; q{&quot;caller declared&lt;br/&gt;groups?&quot;}
+    q -- no --&gt; flat[&quot;all tools&lt;br/&gt;(flattened)&quot;]
+    q -- yes --&gt; top[&quot;top-level tools only&quot;]
+    top -.-&gt; gl[&quot;groups/list&quot;]
+    gl -.-&gt; gg[&quot;groups/get name&quot;]
+    gg -.-&gt; scoped[&quot;that group's tools&quot;]
+</code></pre>
+<blockquote>
+<p>[!WARNING]<br />
+<strong>Target-shape gap.</strong> For now mcpkit&rsquo;s <code>tools/list</code> returns pretty much the same list to every caller, and the one exception is the <code>x-mcp-file</code> strip. Serving groups means adding a per-caller filter at that point, and keying <code>listCacheHints</code> on the caller&rsquo;s capabilities.</p>
+</blockquote>
+<h2 id="q6-how-do-nested-groups-work">Q6. How do nested groups work? <a class="anchor" href="#q6-how-do-nested-groups-work">¶</a></h2>
+<p>A group may list child groups in its <code>groups</code> field. A server uses this to keep <code>groups/list</code> short. For example, <code>deploy</code> might hold <code>deploy-staging</code> and <code>deploy-prod</code>.</p>
+<ul>
+<li>A child sits under one or more parents, and never in <code>groups/list</code> as well.</li>
+<li>Groups form a graph, so a child can have several parents, and cycles are allowed.</li>
+<li>A parent&rsquo;s <code>groups/get</code> doesn&rsquo;t expand its children, so each child takes its own <code>groups/get</code>.</li>
+<li>A client stops at any group it has already fetched, so a cycle ends without special detection.</li>
+</ul>
+<pre><code class="language-mermaid">flowchart TD
+    list[&quot;groups/list&quot;] --&gt; deploy &amp; billing
+    deploy --&gt; staging[&quot;deploy-staging&quot;] &amp; prod[&quot;deploy-prod&quot;]
+    prod --&gt; rollback[&quot;rollback&quot;]
+    staging --&gt; rollback
+</code></pre>
+<p>The draft asks servers to keep the graph shallow, because each level adds one round trip.</p>
+<h2 id="q7-what-can-i-run-in-mcpkit-today">Q7. What can I run in mcpkit today? <a class="anchor" href="#q7-what-can-i-run-in-mcpkit-today">¶</a></h2>
+<table>
+<thead>
+<tr>
+<th>Piece</th>
+<th>State</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Skills (<code>ext/skills</code>)</td>
+<td>Implemented. SEP-2640 Final. 45 server checks and 4 client scenarios pass.</td>
+</tr>
+<tr>
+<td>Groups methods</td>
+<td>Not implemented. <code>groups/list</code> returns <code>-32601</code>.</td>
+</tr>
+<tr>
+<td>Per-caller <code>tools/list</code> filter</td>
+<td>Not implemented.</td>
+</tr>
+<tr>
+<td>Fixture</td>
+<td><a href="https://github.com/panyam/mcpkit/tree/main/examples/disclosure"><code>examples/disclosure</code></a>: 200 tools, two skills, a <code>--check</code> mode.</td>
+</tr>
+<tr>
+<td>Exercise</td>
+<td><code>make exercise-disclosure</code> at the repo root</td>
+</tr>
+</tbody>
+</table>
+<p>We wrote the fixture and its checks before any groups code, so the mission has something to fail against today. The exercise runs the skills suites, then connects two clients to the fixture on each wire. The plain client must get the flat list and a verified skill. The groups client must get groups instead. Today the groups rows fail:</p>
+<pre><code>  PASS stateless plain client: tools/list returns every tool: 200 of 200 tools, 82054 bytes
+  PASS stateless plain client: SKILL.md reads and verifies: skill://billing-refunds/SKILL.md, 424 bytes, digest verified true
+  FAIL stateless groups client: groups/list returns one group per theme: RPC error -32601: method not found: groups/list
+  FAIL stateless groups client: groups/get billing returns its tools and SKILL.md: RPC error -32601: method not found: groups/get
+  FAIL stateless groups client: tools/list leaves out grouped tools: 200 of 200 tools, 82054 bytes
+  INFO stateless sizes: groups/get billing vs flat tools/list: flat tools/list 82054 bytes, groups/get n/a
+</code></pre>
+<p>Once mcpkit serves groups, the last row will print the size of one group next to the flat list.</p>
+<h2 id="end-state">End-state <a class="anchor" href="#end-state">¶</a></h2>
+<ul>
+<li>You can say how much a flat <code>tools/list</code> puts into the model&rsquo;s context, and what skills leave unsolved.</li>
+<li>You know the two group methods, what each returns, and that <code>groups/get</code> changes no server state.</li>
+<li>You know a group lists a skill by URI, and the host still verifies the skill through the skills extension.</li>
+<li>You know the four per-caller rules: one placement, flatten for plain clients, caches keyed on capabilities, and scoping that is not access control.</li>
+<li>You know nested groups form a graph, and how a client stops on cycles.</li>
+<li>You know mcpkit serves skills today and groups not yet, and how to run the exercise.</li>
+</ul>
+<h2 id="next-to-read">Next to read <a class="anchor" href="#next-to-read">¶</a></h2>
+<ul>
+<li><strong><a href="/mcpkit/concepts/extension-mechanisms/">Extension mechanisms</a></strong> <em>(root)</em>: how an extension moves from <code>experimental/ext/</code> to <code>ext/</code>, the path groups will take.</li>
+<li><strong><a href="https://github.com/panyam/mcpkit/blob/main/tutorials/walkthrough/list-ttl.md">List TTL</a></strong> <em>(stub, leaf)</em>: the caching hints groups reuse in place of change notifications.</li>
+<li><strong><a href="https://github.com/panyam/mcpkit/tree/main/examples/disclosure"><code>examples/disclosure</code></a></strong>: the fixture and its walkthrough.</li>
+</ul>
+
+
+    </div>
+</article>
+
+        </main>
+    </div>
+
+    
+<footer class="site-footer">
+    <div class="site-footer-inner">
+        <p>
+            <a href="https://github.com/panyam/mcpkit">https://github.com/panyam/mcpkit</a> ·
+            Licensed under Apache-2.0 ·
+            Source rendered by <a href="https://github.com/panyam/s3gen">s3gen</a>.
+        </p>
+    </div>
+</footer>
+
+
+    
+    <script type="module">
+      const blocks = document.querySelectorAll('pre > code.language-mermaid');
+      if (blocks.length) {
+        const { default: mermaid } = await import('https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs');
+        blocks.forEach((code) => {
+          const pre = document.createElement('pre');
+          pre.className = 'mermaid';
+          pre.textContent = code.textContent;
+          code.parentElement.replaceWith(pre);
+        });
+        mermaid.initialize({ startOnLoad: false, securityLevel: 'strict' });
+        await mermaid.run();
+      }
+    </script>
+
+    
+    <script>
+      document.querySelectorAll('pre > code:not(.language-mermaid)').forEach((code) => {
+        const pre = code.parentElement;
+        pre.classList.add('has-copy');
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'copy-btn';
+        btn.textContent = 'Copy';
+        btn.setAttribute('aria-label', 'Copy code to clipboard');
+        btn.addEventListener('click', async () => {
+          try {
+            await navigator.clipboard.writeText(code.textContent);
+            btn.textContent = 'Copied';
+          } catch {
+            btn.textContent = 'Failed';
+          }
+          setTimeout(() => { btn.textContent = 'Copy'; }, 1500);
+        });
+        pre.appendChild(btn);
+      });
+    </script>
+
+    
+    <script>
+      (function () {
+        const btn = document.querySelector('.theme-toggle');
+        if (!btn) return;
+        btn.addEventListener('click', () => {
+          const root = document.documentElement;
+          const current = root.dataset.theme ||
+            (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+          const next = current === 'dark' ? 'light' : 'dark';
+          root.dataset.theme = next;
+          try { localStorage.setItem('theme', next); } catch {}
+        });
+      })();
+    </script>
+</body>
+</html>
