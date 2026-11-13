@@ -7,7 +7,7 @@ Maintained by /checkpoint: one thread per branch, pruned when the branch merges.
 
 - Mission #1683 (ai_inside_ui, active): 5/5 tickets closed, issue kept open. Exercise `make exercise-aipage` passed 2026-11-09 @ b67480db, and only the v0.8.19 and v0.8.20 releases merged since. To close it, play Lanternfall by hand from Claude Code through `rooms-channel`.
 - Mission #1553 (release_installable, active): 1/8; next ready #1319 (`experimental/ext/protogen` is still missing from `SUB_MODS_TO_TAG`). `make check-install V=v0.8.20` passed 11/0 on an empty module cache, logged on the issue.
-- Mission #1701 (progressive_disclosure, active, started 2026-11-12): 0/4. First #1700, which adds `make exercise-disclosure`. Then #1685, the groups prototype; progressive-disclosure-wg PR 23 set the plural `groups/list` and `groups/get`.
+- Mission #1701 (progressive_disclosure, active, started 2026-11-12): 1/4 once #1700 merges. `make exercise-disclosure` runs: skills suites green, groups rows red. Next #1685, the groups prototype; progressive-disclosure-wg PR 23 set the plural `groups/list` and `groups/get`.
 - Mission #1580 (host_completion): 7/8; only #1576 (A2A client) left, `waiting`.
 - Mission #1554 (apps_host): queued behind #1683; next ready #1454.
 - Events conformance PRs 521 and 541 (upstream): open, out of draft.

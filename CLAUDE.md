@@ -56,7 +56,7 @@ missions, one worktree each:
 - **#1683** `mission_ai_inside_ui`: `make exercise-aipage`, plus a by-hand Claude Code run through
   `rooms-channel`.
 - **#1553** `mission_release_installable`: `make check-install V=<tag>`.
-- **#1701** `mission_progressive_disclosure`: `make exercise-disclosure`, which #1700 adds.
+- **#1701** `mission_progressive_disclosure`: `make exercise-disclosure`. The groups rows fail until #1685.
 
 #1554 (`mission_apps_host`, label `mcpapps`) is queued behind #1683.
 
