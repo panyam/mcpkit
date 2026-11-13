@@ -33,9 +33,8 @@ Coverage in this revision:
 
 ## Prerequisites
 
-1. `panyam/mcpconformance` worktree (branch `chore/sep-2640-yaml`) at
-   `~/newstack/mcpkit/conf-skills` (the default `MCPCONFORMANCE_SKILLS_PATH`).
-   Override per-invocation if the branch moves.
+1. A checkout of `modelcontextprotocol/conformance` `main`. `MCPCONFORMANCE_SKILLS_PATH`
+   names it, and defaults to `../conf-upstream-main` beside this repo.
 2. Node.js and npm available for the vitest runner.
 3. `examples/skills` builds clean (the target builds it before running).
 
@@ -46,7 +45,7 @@ Coverage in this revision:
 just testconf-skills
 
 # override path
-MCPCONFORMANCE_SKILLS_PATH=/path/to/conf-skills just testconf-skills
+MCPCONFORMANCE_SKILLS_PATH=/path/to/conformance just testconf-skills
 ```
 
 The target builds `examples/skills/skills-demo`, launches it on

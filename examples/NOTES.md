@@ -80,8 +80,7 @@ sweeps over the common path miss them.
   verification broke it and every test stayed green (#1444). Run it non-interactively against a
   server on a free port: `go run . --serve -addr 127.0.0.1:18411 &` then
   `go run . --non-interactive --url http://127.0.0.1:18411`, and grep the output for `UNEXPECTED`.
-  Port 8080 is often taken in the container by something else, which makes every call 405 and looks
-  like a demo bug.
+  If something else holds port 8080, every call returns 405, which looks like a demo bug.
 - **`common.SetupRenderer(demo)` is mandatory for `--tui`.** demokit ships no renderer by default,
   so without the call the binary silently falls back to PlainRenderer regardless of `--tui` or
   `--mode=tui`.

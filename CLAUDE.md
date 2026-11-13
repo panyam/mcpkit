@@ -47,8 +47,9 @@ make tag-push V=vX.Y.Z / make release-publish V=vX.Y.Z   # RELEASING.md
 
 ## Issues and missions
 
-Work is queued by mission (`~/.claude/skills/retriage/CONVENTIONS.md`). A new issue gets `P0`–`P3`,
-plus a mission link (blocked-by on the mission issue) or `waiting` with its trigger. Run a
+Work is queued by mission. A mission is an issue labelled `mission`, and its tickets block it.
+A new issue gets `P0`–`P3`, plus a mission link (blocked-by on the mission issue) or `waiting`
+with its trigger. Run a
 mission's exercise after each merged PR on it and log the result on the mission issue. Active
 missions, one worktree each:
 
@@ -96,9 +97,8 @@ Build and CI:
 - `govulncheck` green doesn't mean dependencies are current (`DEPENDENCY_POLICY.md`).
 
 Git, GitHub and releases:
-- `GH_TOKEN="$GH_PERSONAL_TOKEN"` for `panyam/*`. `env -u GH_TOKEN gh …` for upstream writes,
-  releases, and the first push of a branch carrying workflows. SSH uses
-  `SSH_AUTH_SOCK=~/.ssh/agent.sock`. Detail: `NOTES.md` § GitHub credentials.
+- Every branch here carries workflows, so creating one needs a token with `workflow` scope
+  (`NOTES.md` § GitHub token scopes).
 - Stacked PRs get no CI, and `Closes #N` fires only on merge to `main`.
 - Keep closing words (close, fix, resolve) off a line end when the next line starts with `#N`.
 - One session, one worktree of each conformance fork checkout (`conformance/NOTES.md`).

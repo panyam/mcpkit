@@ -4,49 +4,20 @@ Internal, never published. The rules in `CLAUDE.md` point here for their history
 lives in each package's `NOTES.md`; conformance lore in `conformance/NOTES.md`; releases in
 `RELEASING.md`.
 
-## GitHub credentials
+## GitHub token scopes
 
-There are two, and the one you want depends on the repo.
+**Creating a branch that carries workflow files needs `workflow` scope**, even when no commit on it
+touches `.github/`. Creating a ref counts every workflow on that ref as "created". Without the scope
+the push is rejected with "refusing to allow a Personal Access Token to create or update workflow
+… without `workflow` scope". Pushing to an existing branch works without it, and so does pushing
+tags. A release push therefore succeeds, and the *first* push of a new branch fails (#1405).
 
-`GH_TOKEN="$GH_PERSONAL_TOKEN"` is **fine-grained** and scoped to the owner's account. Use it for
-`panyam/*`, where the EMU account cannot reach. It can read `modelcontextprotocol/*` but never
-write it. `POST .../pulls`, `gh pr edit` and `PATCH .../pulls/N` all return 403, even on a PR we
-authored. No setting fixes it, because fine-grained PATs only scope to repos in the owner's account.
+A fine-grained token can only reach repos in its owner's account. It gets 403 on
+`modelcontextprotocol/*` writes, even on a PR you authored. `RELEASING.md` lists the permissions
+release work needs.
 
-**For upstream writes, use `gh`'s own stored login.** `env -u GH_TOKEN gh …` falls back to the
-`gho_` OAuth token in `~/.config/gh/hosts.yml`. It carries full `repo` scope, and it creates and
-edits PRs and posts review comments on `modelcontextprotocol/*`. Verified on conformance#504. An
-earlier version of this note said upstream edits need the web UI or a classic PAT; that holds only
-for the fine-grained token.
-
-Pushing to our fork branches is unaffected. `conformance/NOTES.md` covers the
-`panyam/mcpconformance` pre-push hook. It runs the full suite (~6 min), so never wrap that push in
-`timeout`. Push it over HTTPS with the `gho_` login, because an SSH connection idles out during the
-hook and the push fails after the hook passes.
-
-**The fine-grained PAT cannot create a branch carrying workflow files**, even when no commit on it
-touches `.github/`. Creating a ref counts every workflow on that ref as "created". The push is
-rejected with "refusing to allow a Personal Access Token to create or update workflow
-`.github/workflows/test.yml` without `workflow` scope". Pushing to an existing branch works on the
-PAT, and so does pushing tags. A release push therefore succeeds, and the *first* push of a new
-branch fails. The `gho_` login carries `workflow`, so hand that push to it:
-
-```
-env -u GH_TOKEN git -c credential.helper='!gh auth git-credential' push -u https://github.com/panyam/mcpkit.git <branch>
-```
-
-Cost a round-trip on #1405. Pushing to a URL leaves no remote-tracking ref, so a bare
-`--force-with-lease` after a rebase is refused. Name the sha you expect:
-`--force-with-lease=<branch>:<old-sha>`.
-
-**SSH pushes use the agent, not a key file.** `~/.ssh/id_github` does not exist in the container.
-Only `~/.ssh/agent.sock` exists, and it holds the right key. Use
-`SSH_AUTH_SOCK=~/.ssh/agent.sock git push …`. The `-i ~/.ssh/id_github` form fails with "Identity
-file not accessible", then "Permission denied (publickey)".
-
-Releases behave the same way. `env -u GH_TOKEN gh release create` publishes, and the fine-grained
-PAT returns 403 on Contents: write. Reading Dependabot alerts also returns 403 on the PAT. See
-`RELEASING.md`.
+Pushing to a URL leaves no remote-tracking ref, so a bare `--force-with-lease` after a rebase is
+refused. Name the sha you expect: `--force-with-lease=<branch>:<old-sha>`.
 
 ## Stacked PRs
 
@@ -147,10 +118,10 @@ and the map or slice grows anyway. Size from one operand.
 
 ## Grading chakra's host exercise against your tree
 
-Mission #1580's exercise is chakra's `make host-exercise`. It runs against `../mcpkit/main` through
-chakra's replaces. That shared checkout is often stale, or carries another session's edits. To grade
-your own tree, `git clone --local` chakra into your scratch directory. Then rewrite every
-`=> (../)+mcpkit/main` replace in its `go.mod` files to your checkout's absolute path.
+Mission #1580's exercise is chakra's `make host-exercise`. chakra's `go.mod` files `replace` mcpkit
+with a sibling checkout, and that checkout may not be the tree you changed. To grade your own tree,
+clone chakra somewhere temporary and point every mcpkit `replace` in its `go.mod` files at your
+checkout.
 
 ## The wire exercise outlived its mission
 

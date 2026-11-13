@@ -9,7 +9,7 @@
 #   1. check_release_workflows.py --wait: every tag-triggered workflow ran
 #      green against V. It polls while one is pending or not registered yet.
 #   2. check-install.sh: every command installs from the proxy at V.
-#   3. gh release create, with gh's own login (RELEASING.md § GitHub Release).
+#   3. gh release create (RELEASING.md § GitHub Release).
 #
 # RELEASING.md used to list steps 1 and 2 as checklist lines before step 3.
 # v0.4.0 to v0.6.0 shipped with publish-images.yml never having run, and a
@@ -59,4 +59,4 @@ $CHECK_INSTALL "$V" || {
 }
 
 echo "==> gh release create $V"
-env -u GH_TOKEN $GH release create "$V" "${args[@]}"
+$GH release create "$V" "${args[@]}"

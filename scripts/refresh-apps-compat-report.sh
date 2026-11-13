@@ -14,9 +14,7 @@
 #   UMBRELLA_NUMBER  — GitHub issue number (default 533)
 #   UMBRELLA_REPO    — owner/repo for the umbrella (default panyam/mcpkit)
 #   REFRESH_OUT      — output path (default conformance/apps/COMPAT.md)
-#   GH_TOKEN         — required for gh CLI; GH_PERSONAL_TOKEN takes
-#                      precedence (EMU accounts can't read personal
-#                      repos with the org token).
+#   GH_TOKEN         — optional; gh uses it, or its own login (gh auth login)
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"

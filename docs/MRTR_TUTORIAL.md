@@ -109,7 +109,7 @@ A **root** is a URI the client tells the server represents "where the user is cu
 
 Examples:
 
-- An IDE host might expose `file:///Users/sri/projects/mcpkit/` when that project is open.
+- An IDE host might expose `file:///home/alice/projects/mcpkit/` when that project is open.
 - A multi-project workspace might expose two roots: `file:///work/repo-a/`, `file:///work/repo-b/`.
 - A browser-style host might expose `https://github.com/panyam/mcpkit` when the user has that repo focused.
 
@@ -123,7 +123,7 @@ Roots gives the server a structured, programmatic way to ask the client *"what i
 
 **How it's used in practice.**
 
-- A code-search server calls `roots/list` once, gets `[file:///Users/sri/projects/mcpkit/]`, and scopes all its searches to that path. No tool argument needed.
+- A code-search server calls `roots/list` once, gets `[file:///home/alice/projects/mcpkit/]`, and scopes all its searches to that path. No tool argument needed.
 - A diagnostics server reads `roots/list` to know which file tree to type-check.
 - A docs server scopes its lookup index to the project root.
 
