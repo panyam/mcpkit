@@ -105,7 +105,7 @@ the tree.
 
 ## Issues and missions
 
-Work is queued by mission, per `~/.claude/skills/retriage/CONVENTIONS.md`. Two missions are active,
+Work is queued by mission, per `~/.claude/skills/retriage/CONVENTIONS.md`. Three missions are active,
 each worked in its own worktree:
 
 - **#1683** (`mission_ai_inside_ui`): a user asks an agent from inside a custom web app, and the
@@ -120,6 +120,9 @@ each worked in its own worktree:
 - **#1553** (`mission_release_installable`): every tagged module installs from the proxy at release.
   Exercise in the issue. #1488 (`go install …/cmd/mcpskills@<tag>` failing on in-repo `replace`
   directives) closed with #1624, which tags a tree without them.
+- **#1701** (`mission_progressive_disclosure`): an agent sees groups first, opens one, and loads
+  only its tools and skills (`ext/skills`, groups in `experimental/ext/groups`). Exercise
+  `make exercise-disclosure`, which #1700 adds.
 
 #1554 (`mission_apps_host`) is queued behind #1683. Its tickets and every MCP Apps ticket carry the
 `mcpapps` label, and `proposals/mcp-apps-wg/CURRENT_GAPS.md` in mcpcontrib tracks upstream against them.
