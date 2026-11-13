@@ -149,7 +149,7 @@ flowchart TD
     staging --> rollback
 ```
 
-The draft asks servers to keep the graph shallow. Each level costs one round trip.
+The draft asks servers to keep the graph shallow, because each level adds one round trip.
 
 ## Q7. What can I run in mcpkit today?
 
@@ -176,7 +176,7 @@ Once mcpkit serves groups, the last row will print the size of one group next to
 
 ## End-state
 
-- You can say why a flat `tools/list` costs context, and what skills leave unsolved.
+- You can say how much a flat `tools/list` puts into the model's context, and what skills leave unsolved.
 - You know the two group methods, what each returns, and that `groups/get` changes no server state.
 - You know a group lists a skill by URI, and the host still verifies the skill through the skills extension.
 - You know the four per-caller rules: one placement, flatten for plain clients, caches keyed on capabilities, and scoping that is not access control.

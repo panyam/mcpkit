@@ -32,7 +32,7 @@ func runDemo() {
 
 	demo := demokit.New("Progressive disclosure: 200 tools and two skills").
 		Dir("disclosure").
-		Description("A server with 200 tools sends all 200 in `tools/list`, and a client puts every schema into the model's context. This walkthrough measures that cost on a fixture server, then loads a skill, which a client reads only when the model needs it.").
+		Description("A server with 200 tools sends all 200 in `tools/list`, and a client puts every schema into the model's context. This walkthrough counts those bytes on a fixture server, then loads a skill, which a client reads only when the model needs it.").
 		Actors(
 			demokit.Actor("Host", "MCP Host (this client)"),
 			demokit.Actor("Server", "MCP Server (just serve, 200 tools + 2 skills)"),

@@ -1,6 +1,6 @@
 # Progressive disclosure: 200 tools and two skills
 
-A server with 200 tools sends all 200 in `tools/list`, and a client puts every schema into the model's context. This walkthrough measures that cost on a fixture server, then loads a skill, which a client reads only when the model needs it.
+A server with 200 tools sends all 200 in `tools/list`, and a client puts every schema into the model's context. This walkthrough counts those bytes on a fixture server, then loads a skill, which a client reads only when the model needs it.
 
 ## What you'll learn
 
