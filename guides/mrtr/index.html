@@ -341,7 +341,7 @@
 <p>A <strong>root</strong> is a URI the client tells the server represents &ldquo;where the user is currently working.&rdquo; Each root is a <code>{uri, name?}</code> pair, typically <code>file://</code>, <code>https://</code>, or some scheme-prefixed location.</p>
 <p>Examples:</p>
 <ul>
-<li>An IDE host might expose <code>file:///Users/sri/projects/mcpkit/</code> when that project is open.</li>
+<li>An IDE host might expose <code>file:///home/alice/projects/mcpkit/</code> when that project is open.</li>
 <li>A multi-project workspace might expose two roots: <code>file:///work/repo-a/</code>, <code>file:///work/repo-b/</code>.</li>
 <li>A browser-style host might expose <code>https://github.com/panyam/mcpkit</code> when the user has that repo focused.</li>
 </ul>
@@ -354,7 +354,7 @@
 <p>Roots gives the server a structured, programmatic way to ask the client <em>&ldquo;what is the user working on right now?&rdquo;</em> and get back a list it can scope its operations against. It&rsquo;s the protocol-level answer to &ldquo;current working directory&rdquo; in a multi-host, sandboxed world.</p>
 <p><strong>How it&rsquo;s used in practice.</strong></p>
 <ul>
-<li>A code-search server calls <code>roots/list</code> once, gets <code>[file:///Users/sri/projects/mcpkit/]</code>, and scopes all its searches to that path. No tool argument needed.</li>
+<li>A code-search server calls <code>roots/list</code> once, gets <code>[file:///home/alice/projects/mcpkit/]</code>, and scopes all its searches to that path. No tool argument needed.</li>
 <li>A diagnostics server reads <code>roots/list</code> to know which file tree to type-check.</li>
 <li>A docs server scopes its lookup index to the project root.</li>
 </ul>

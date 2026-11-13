@@ -392,7 +392,7 @@ prefix-segment routing is uniform.</li>
 <p>This server also doubles as the fixture for the SEP-2640 conformance<br />
 suite:</p>
 <pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#998;font-style:italic"># from repo root</span>
-</span></span><span style="display:flex;"><span><span style="color:#008080">MCPCONFORMANCE_SKILLS_PATH</span><span style="color:#000;font-weight:bold">=</span><span style="color:#008080">$HOME</span>/newstack/mcpkit/conf-skills just testconf-skills
+</span></span><span style="display:flex;"><span><span style="color:#008080">MCPCONFORMANCE_SKILLS_PATH</span><span style="color:#000;font-weight:bold">=</span>/path/to/conformance make testconf-skills
 </span></span></code></pre><p>The Makefile target spawns this binary in <code>--serve</code> mode on <code>:18099</code><br />
 before invoking the fork-side scenario runner. The fork-side Scenario<br />
 classes are tracked under mcpkit#567.</p>
