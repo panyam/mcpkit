@@ -12,9 +12,7 @@ import (
 )
 
 // TestChecksOnBothWires runs the exercise's checks against the fixture on
-// each wire. The plain-client rows must pass. The groups rows only have to be
-// present: they fail until the groups extension exists, and the exercise
-// reports them rather than this test.
+// each wire. Every row must pass, and the size row must be present.
 func TestChecksOnBothWires(t *testing.T) {
 	wires := []struct {
 		name   string
@@ -38,15 +36,13 @@ func TestChecksOnBothWires(t *testing.T) {
 			for _, r := range rows {
 				got[r.Name] = r
 			}
-			for _, name := range []string{rowPlainTools, rowPlainSkill} {
+			for _, name := range []string{rowPlainTools, rowPlainSkill, rowGroupsList, rowGroupsGet, rowGroupsTools} {
 				if r, ok := got[name]; !ok || !r.OK {
 					t.Errorf("%s: %+v", name, r)
 				}
 			}
-			for _, name := range []string{rowGroupsList, rowGroupsGet, rowGroupsTools, rowSizes} {
-				if _, ok := got[name]; !ok {
-					t.Errorf("row %q missing from the report", name)
-				}
+			if _, ok := got[rowSizes]; !ok {
+				t.Errorf("row %q missing from the report", rowSizes)
 			}
 		})
 	}

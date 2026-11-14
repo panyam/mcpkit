@@ -150,6 +150,11 @@ type Dispatcher struct {
 	readTTLMs      *int
 	readCacheScope string
 
+	// listScope hides primitives from a caller's base lists (SetListScope).
+	// Shared with every session dispatcher, so a later SetListScope reaches
+	// sessions that already exist.
+	listScope *listScopeRef
+
 	// toolTimeout is the server-wide WithToolTimeout, applied to every
 	// tools/call on both wires before any per-tool Timeout.
 	toolTimeout time.Duration
@@ -321,6 +326,7 @@ func NewDispatcher(info core.Implementation) *Dispatcher {
 		serverInfo: info,
 		mrtr:       &mrtrRuntime{},
 		closeHooks: &sessionCloseHooks{},
+		listScope:  &listScopeRef{},
 	}
 }
 
@@ -349,6 +355,7 @@ func (d *Dispatcher) newSession() *Dispatcher {
 		mrtr:                 d.mrtr,
 		listTTLMs:            d.listTTLMs,
 		listCacheScope:       d.listCacheScope,
+		listScope:            d.listScope,
 		readTTLMs:            d.readTTLMs,
 		readCacheScope:       d.readCacheScope,
 		toolTimeout:          d.toolTimeout,
@@ -520,13 +527,13 @@ func (d *Dispatcher) route(ctx context.Context, wire wireKind, id json.RawMessag
 	case "tools/call":
 		return d.handleToolsCall(ctx, wire, id, params)
 	case "resources/list":
-		return d.handleResourcesList(wire, id, params)
+		return d.handleResourcesList(ctx, wire, id, params)
 	case "resources/read":
 		return d.handleResourcesRead(ctx, wire, id, params)
 	case "resources/templates/list":
 		return d.handleResourcesTemplatesList(wire, id, params)
 	case "prompts/list":
-		return d.handlePromptsList(wire, id, params)
+		return d.handlePromptsList(ctx, wire, id, params)
 	case "prompts/get":
 		return d.handlePromptsGet(ctx, id, params)
 	case "completion/complete":
@@ -653,8 +660,12 @@ func (d *Dispatcher) handleToolsList(ctx context.Context, wire wireKind, id json
 	if wire == wireStateless {
 		fileInputs = core.HasFileInputs(ctx)
 	}
-	ttlMs, scope := d.listCacheHints(wire)
-	result, err := toolsListResult(d.Reg, params, d.pageSize, fileInputs, ttlMs, scope)
+	ttlMs, scope := d.scopedListHints(wire)
+	var hide func(core.ToolDef) bool
+	if ls := d.listScope.get(); ls != nil {
+		hide = func(t core.ToolDef) bool { return ls.HideTool(ctx, t.Name) }
+	}
+	result, err := toolsListResult(d.Reg, params, d.pageSize, fileInputs, hide, ttlMs, scope)
 	if err != nil {
 		return core.NewErrorResponse(id, core.ErrCodeInvalidParams, err.Error())
 	}
@@ -662,8 +673,9 @@ func (d *Dispatcher) handleToolsList(ctx context.Context, wire wireKind, id json
 }
 
 // toolsListResult builds the tools/list result for both wires, which differ
-// only in where the caller's fileInputs declaration comes from.
-func toolsListResult(reg *Registry, params json.RawMessage, pageSize int, fileInputs bool, ttlMs *int, cacheScope string) (core.ToolsListResult, error) {
+// only in where the caller's fileInputs declaration comes from. hide, when
+// set, drops tools before paging, so every page a caller gets is full.
+func toolsListResult(reg *Registry, params json.RawMessage, pageSize int, fileInputs bool, hide func(core.ToolDef) bool, ttlMs *int, cacheScope string) (core.ToolsListResult, error) {
 	cursor := parseCursor(params)
 
 	reg.mu.RLock()
@@ -675,7 +687,7 @@ func toolsListResult(reg *Registry, params json.RawMessage, pageSize int, fileIn
 	}
 	reg.mu.RUnlock()
 
-	page, nextCursor, err := paginate(tools, cursor, pageSize)
+	page, nextCursor, err := paginate(visible(tools, hide), cursor, pageSize)
 	if err != nil {
 		return core.ToolsListResult{}, err
 	}
@@ -879,7 +891,7 @@ func toolValidationErrorResult(toolName string, ve *ValidationErrors) core.ToolR
 
 // --- Resources ---
 
-func (d *Dispatcher) handleResourcesList(wire wireKind, id json.RawMessage, params json.RawMessage) *core.Response {
+func (d *Dispatcher) handleResourcesList(ctx context.Context, wire wireKind, id json.RawMessage, params json.RawMessage) *core.Response {
 	cursor := parseCursor(params)
 
 	d.Reg.mu.RLock()
@@ -891,11 +903,15 @@ func (d *Dispatcher) handleResourcesList(wire wireKind, id json.RawMessage, para
 	}
 	d.Reg.mu.RUnlock()
 
-	page, nextCursor, err := paginate(resources, cursor, d.pageSize)
+	var hide func(core.ResourceDef) bool
+	if ls := d.listScope.get(); ls != nil {
+		hide = func(r core.ResourceDef) bool { return ls.HideResource(ctx, r.URI) }
+	}
+	page, nextCursor, err := paginate(visible(resources, hide), cursor, d.pageSize)
 	if err != nil {
 		return core.NewErrorResponse(id, core.ErrCodeInvalidParams, err.Error())
 	}
-	ttlMs, scope := d.listCacheHints(wire)
+	ttlMs, scope := d.scopedListHints(wire)
 	return core.NewResponse(id, core.ResourcesListResult{Resources: page, NextCursor: nextCursor, TTLMs: ttlMs, CacheScope: scope})
 }
 
@@ -1040,7 +1056,7 @@ func (d *Dispatcher) handleResourcesUnsubscribe(id json.RawMessage, params json.
 
 // --- Prompts ---
 
-func (d *Dispatcher) handlePromptsList(wire wireKind, id json.RawMessage, params json.RawMessage) *core.Response {
+func (d *Dispatcher) handlePromptsList(ctx context.Context, wire wireKind, id json.RawMessage, params json.RawMessage) *core.Response {
 	cursor := parseCursor(params)
 
 	d.Reg.mu.RLock()
@@ -1052,11 +1068,15 @@ func (d *Dispatcher) handlePromptsList(wire wireKind, id json.RawMessage, params
 	}
 	d.Reg.mu.RUnlock()
 
-	page, nextCursor, err := paginate(prompts, cursor, d.pageSize)
+	var hide func(core.PromptDef) bool
+	if ls := d.listScope.get(); ls != nil {
+		hide = func(p core.PromptDef) bool { return ls.HidePrompt(ctx, p.Name) }
+	}
+	page, nextCursor, err := paginate(visible(prompts, hide), cursor, d.pageSize)
 	if err != nil {
 		return core.NewErrorResponse(id, core.ErrCodeInvalidParams, err.Error())
 	}
-	ttlMs, scope := d.listCacheHints(wire)
+	ttlMs, scope := d.scopedListHints(wire)
 	return core.NewResponse(id, core.PromptsListResult{Prompts: page, NextCursor: nextCursor, TTLMs: ttlMs, CacheScope: scope})
 }
 

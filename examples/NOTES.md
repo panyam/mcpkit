@@ -152,3 +152,30 @@ A constellation of gotchas that bite together on the operator's first `make up`.
   duplicate what the operator's own windows already do. The walkthrough orchestrates prose between
   actions; the binaries are the actual MCP clients. Both `demo` and `test` therefore work without
   tokens.
+
+---
+
+## disclosure: interop with the WG's TypeScript prototype
+
+`examples/disclosure` and `experimental/ext/groups` were checked against
+[progressive-disclosure-wg PR 20](https://github.com/modelcontextprotocol/progressive-disclosure-wg/pull/20)
+at `9554415c` (2026-11-13). Both directions agree on negotiation, `groups/list`, `-32002` for an
+unknown group, and calling a grouped tool without fetching its group. Two differences remain, and
+both come from PR 20 predating the 2026-11-07 draft:
+
+- PR 20 nests `groups/get` results under `contents`. The draft dropped the wrapper, and so does
+  mcpkit, so each side's client finds no tools in the other side's result.
+- PR 20's server returns the same `tools/list` to every caller. The draft says a plain client
+  should get the flat list, and mcpkit's does.
+
+To rerun it, check PR 20 out next to this repo and build `sdk/typescript`, then
+`examples/groups-server/typescript` and `examples/groups-client/typescript`, with `npm install &&
+npm run build` in each.
+
+- **Their client, our server.** Serve the fixture with `go run . --serve --addr=127.0.0.1:18425`,
+  then connect their `GroupsClient` over `StreamableHTTPClientTransport`, once with
+  `capabilities.extensions["io.modelcontextprotocol/groups"]` and once without. Put the script
+  inside their client example, so `@modelcontextprotocol/ext-grouping` resolves.
+- **Our client, their server.** Their server speaks stdio. Pass
+  `client.WithCommandTransport("node", []string{"<pr20>/examples/groups-server/typescript/dist/index.js"})`
+  and `groups.ClientOption()` to `client.NewClient`, then call `groups.NewClient(c).List` and `.Get`.

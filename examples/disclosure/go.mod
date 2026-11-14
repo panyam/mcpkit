@@ -10,10 +10,13 @@ replace github.com/panyam/mcpkit/examples/common => ../common
 
 replace github.com/panyam/mcpkit/ext/otel => ../../ext/otel
 
+replace github.com/panyam/mcpkit/experimental/ext/groups => ../../experimental/ext/groups
+
 require (
 	github.com/panyam/demokit v0.0.33
 	github.com/panyam/mcpkit v0.8.21
 	github.com/panyam/mcpkit/examples/common v0.0.0-20260917230721-e154756d5e32
+	github.com/panyam/mcpkit/experimental/ext/groups v0.0.0-00010101000000-000000000000
 	github.com/panyam/mcpkit/ext/skills v0.6.0
 )
 

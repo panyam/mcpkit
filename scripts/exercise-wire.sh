@@ -5,7 +5,8 @@
 #   make exercise-wire                 # parity rows, then the three suites
 #   EXERCISE_WIRE_ROWS_ONLY=1 make exercise-wire   # parity rows only
 #
-# The parity rows are TestWireParity in server/ and in experimental/ext/agents.
+# The parity rows are TestWireParity in server/, experimental/ext/agents and
+# experimental/ext/groups.
 # Each sends the same requests over the session wire and the SEP-2575
 # stateless wire and checks one thing both must agree on; a row's name leads
 # with the ticket it guards. The suites (testconf, testconf-stateless,
@@ -40,6 +41,7 @@ echo "=== exercise-wire @ $(git -C "$ROOT" rev-parse --short HEAD) ==="
 echo "  parity rows (session vs stateless, 2026-07-28):"
 rows server . ./server
 rows agents experimental/ext/agents .
+rows groups experimental/ext/groups .
 
 if [ "${EXERCISE_WIRE_ROWS_ONLY:-}" = "1" ]; then
     echo "Full logs in $LOG"

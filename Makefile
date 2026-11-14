@@ -18,6 +18,7 @@ SUB_MODS_TO_TAG := \
 	ext/auth ext/otel ext/ui ext/tasks ext/skills \
 	stores/redis \
 	experimental/ext/agents experimental/ext/agents/clients/go \
+	experimental/ext/groups \
 	experimental/ext/events \
 	experimental/ext/events/stores/memory experimental/ext/events/stores/gorm experimental/ext/events/stores/redis \
 	experimental/ext/events/clients/go \

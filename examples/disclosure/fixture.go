@@ -4,16 +4,17 @@ import (
 	"embed"
 	"fmt"
 	"io/fs"
+	"strings"
 
 	"github.com/panyam/mcpkit/core"
+	"github.com/panyam/mcpkit/experimental/ext/groups"
 	"github.com/panyam/mcpkit/ext/skills"
 	"github.com/panyam/mcpkit/server"
 )
 
 // themes are the fixture's tool families. Each theme registers one tool per
 // verb and noun pair, so 8 themes of 5 nouns and 5 verbs give 200 tools.
-// Groups ask a server to sort tools like these, so the theme name is the
-// group name a groups-aware fixture would use.
+// Each theme is also a group, named after the theme.
 var themes = []struct {
 	name  string
 	nouns []string
@@ -69,7 +70,10 @@ func fixtureTools() []core.ToolDef {
 	return defs
 }
 
-// registerFixture registers the tools and the skills on srv. Every tool
+// billingSkill is the SKILL.md the billing group lists next to its tools.
+const billingSkill = "skill://billing-refunds/SKILL.md"
+
+// registerFixture registers the tools, the skills and the groups on srv. Every tool
 // answers with one line of text, since the exercise measures what a client
 // sees in the lists, not what the tools do.
 func registerFixture(srv *server.Server) error {
@@ -88,5 +92,40 @@ func registerFixture(srv *server.Server) error {
 		return fmt.Errorf("skills.NewProvider: %w", err)
 	}
 	provider.RegisterWith(srv)
-	return nil
+	return fixtureGroups().RegisterWith(srv)
+}
+
+// fixtureGroups puts each theme's 25 tools in a group named after the theme.
+// billing also lists the billing-refunds skill. incident-triage spans three
+// themes, so no group lists it, and every client sees it in
+// resources/list.
+func fixtureGroups() *groups.Catalog {
+	byTheme := map[string][]string{}
+	for _, def := range fixtureTools() {
+		theme := def.Name[:strings.IndexByte(def.Name, '_')]
+		byTheme[theme] = append(byTheme[theme], def.Name)
+	}
+	cat := groups.NewCatalog()
+	for _, t := range themes {
+		d := groups.Def{
+			Name:        t.name,
+			Description: fmt.Sprintf("Use for %s tasks, such as %s.", t.name, joinAnd(t.nouns)),
+			Tools:       byTheme[t.name],
+		}
+		if t.name == "billing" {
+			d.Instructions = "For a refund, follow the billing-refunds skill listed in this group's resources."
+			d.Resources = []string{billingSkill}
+		}
+		if err := cat.Add(d); err != nil {
+			panic(err) // the theme table is fixed, so this is a programming error
+		}
+	}
+	return cat
+}
+
+func joinAnd(words []string) string {
+	if len(words) < 2 {
+		return strings.Join(words, "")
+	}
+	return strings.Join(words[:len(words)-1], ", ") + " and " + words[len(words)-1]
 }
