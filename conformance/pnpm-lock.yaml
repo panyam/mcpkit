@@ -16,7 +16,7 @@ importers:
         version: 2.0.0-beta.2
       '@modelcontextprotocol/node':
         specifier: 2.0.0-beta.2
-        version: 2.0.0-beta.2(@modelcontextprotocol/server@2.0.0-beta.2)(hono@4.13.13)
+        version: 2.0.0-beta.2(@modelcontextprotocol/server@2.0.0-beta.2)(hono@4.13.18)
       '@modelcontextprotocol/server':
         specifier: 2.0.0-beta.2
         version: 2.0.0-beta.2
@@ -188,8 +188,8 @@ packages:
     cpu: [x64]
     os: [win32]
 
-  '@hono/node-server@1.19.18':
-    resolution: {integrity: sha512-609kppIP9GITS+EwPyB6Kiq8z2yXONaYD1VHpo7MMP9celRJYbkFr9KakJncHwK0EK/XYtlogqmrLchDv5HX5w==}
+  '@hono/node-server@1.19.19':
+    resolution: {integrity: sha512-Fy9R7PACOzHU9LDpfnuzVyuVYevKQRcEG2mZhmfc+DRdmayEd3RVfa2XOt2IgGcPNgA77Yk63KBszepcMFK5Ng==}
     engines: {node: '>=18.14.1'}
     peerDependencies:
       hono: ^4
@@ -400,8 +400,8 @@ packages:
     engines: {node: ^8.16.0 || ^10.6.0 || >=11.0.0}
     os: [darwin]
 
-  hono@4.13.13:
-    resolution: {integrity: sha512-CQ46U0ZkAGmbT/4UxdzzGJpacP2IeKgY4a5/tOI9AABbpOMfK739wfDXmv1usCk+3RkKj1hQy4/fjhiwa2xlrA==}
+  hono@4.13.18:
+    resolution: {integrity: sha512-H9q/E1XizaWstJxUW881dmLxEj+t/TrGGnyxINkm4+sK0qUwsMtFdo2BWI9Vs3cIS19MU6b6iCijoUoEf4f3DA==}
     engines: {node: '>=16.9.0'}
 
   isexe@2.0.0:
@@ -731,9 +731,9 @@ snapshots:
   '@esbuild/win32-x64@0.28.2':
     optional: true
 
-  '@hono/node-server@1.19.18(hono@4.13.13)':
+  '@hono/node-server@1.19.19(hono@4.13.18)':
     dependencies:
-      hono: 4.13.13
+      hono: 4.13.18
 
   '@jridgewell/resolve-uri@3.1.2': {}
 
@@ -753,12 +753,12 @@ snapshots:
       pkce-challenge: 5.0.1
       zod: 4.6.7
 
-  '@modelcontextprotocol/node@2.0.0-beta.2(@modelcontextprotocol/server@2.0.0-beta.2)(hono@4.13.13)':
+  '@modelcontextprotocol/node@2.0.0-beta.2(@modelcontextprotocol/server@2.0.0-beta.2)(hono@4.13.18)':
     dependencies:
-      '@hono/node-server': 1.19.18(hono@4.13.13)
+      '@hono/node-server': 1.19.19(hono@4.13.18)
       '@modelcontextprotocol/server': 2.0.0-beta.2
     optionalDependencies:
-      hono: 4.13.13
+      hono: 4.13.18
 
   '@modelcontextprotocol/server@2.0.0-beta.2':
     dependencies:
@@ -895,7 +895,7 @@ snapshots:
   fsevents@2.3.3:
     optional: true
 
-  hono@4.13.13: {}
+  hono@4.13.18: {}
 
   isexe@2.0.0: {}
 
