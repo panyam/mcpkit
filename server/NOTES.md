@@ -404,6 +404,20 @@ and `(*ScopeChallenge).AuthError` just stop each caller rebuilding it.
 - **Background goroutines use `core.DetachForBackground(ctx)`, never `context.WithoutCancel`.** It
   swaps the dead POST-scoped requestFunc and notifyFunc for the session-level persistent push.
 
+## `SetListScope` hides primitives per caller (#1685)
+
+An extension in its own module can't reach `toolsListResult`, so `server.SetListScope` is the seam.
+The groups extension uses it to leave grouped primitives out of a groups client's lists.
+
+- The filter runs before `paginate`. Filtering a page after the fact leaves short pages, and the
+  cursor then counts entries the caller never saw.
+- Session dispatchers copy fields when a session starts, so the scope lives in a `listScopeRef`
+  shared by every dispatcher. A scope installed later still reaches open sessions.
+- With a scope installed, the three filtered lists say `cacheScope: "private"`. A shared cache
+  keys on the URL, not on the caller's declared capabilities.
+- `resources/templates/list` is not filtered. The groups draft scopes resources by URI, and a
+  template has none.
+
 ## Testing
 
 - **The server requires initialization.** A direct `srv.Dispatch()` in a test fails. Use httptest

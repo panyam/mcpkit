@@ -734,6 +734,45 @@ func TestWireParity(t *testing.T) {
 			}
 		}
 	})
+
+	t.Run("1685 a ListScope hides primitives per caller, and they are still callable", func(t *testing.T) {
+		const ext = "test/scope"
+		for _, tc := range []struct {
+			name   string
+			caps   map[string]any
+			hidden bool
+		}{
+			{"plain client", map[string]any{}, false},
+			{"client that declares the extension", map[string]any{"extensions": map[string]any{ext: map[string]any{}}}, true},
+		} {
+			s := parityFixture(t)
+			s.SetListScope(scopeFor(ext, "upload_report", "greet", "test://static"))
+			for _, w := range parityWires(t, s, tc.caps) {
+				for _, c := range []struct{ method, key, item string }{
+					{"tools/list", "tools", `"upload_report"`},
+					{"prompts/list", "prompts", `"greet"`},
+					{"resources/list", "resources", `"test://static"`},
+				} {
+					res, rpcErr := w.call(t, c.method, nil)
+					if rpcErr != nil {
+						t.Fatalf("%s %s: %v", w.name, c.method, rpcErr)
+					}
+					if got := !strings.Contains(string(res[c.key]), c.item); got != tc.hidden {
+						t.Errorf("%s, %s wire, %s: %s hidden=%v, want %v", tc.name, w.name, c.method, c.item, got, tc.hidden)
+					}
+					if scope := string(res["cacheScope"]); scope != `"private"` {
+						t.Errorf("%s, %s wire, %s: cacheScope = %s, want \"private\" with a scope installed", tc.name, w.name, c.method, scope)
+					}
+				}
+				if _, rpcErr := w.call(t, "tools/call", map[string]any{"name": "upload_report", "arguments": map[string]any{}}); rpcErr != nil {
+					t.Errorf("%s, %s wire: hidden tool not callable: %v", tc.name, w.name, rpcErr)
+				}
+				if _, rpcErr := w.call(t, "prompts/get", map[string]any{"name": "greet", "arguments": map[string]any{"who": "w"}}); rpcErr != nil {
+					t.Errorf("%s, %s wire: hidden prompt not gettable: %v", tc.name, w.name, rpcErr)
+				}
+			}
+		}
+	})
 }
 
 // knownWireDifferences are the result keys that legitimately differ between
@@ -897,3 +936,23 @@ func stdioStatelessWire(t *testing.T, s *Server) func(t *testing.T, method strin
 type countingRelay struct{ n atomic.Int64 }
 
 func (r *countingRelay) Publish(context.Context, string, any) { r.n.Add(1) }
+
+// scopeFor hides the named tool, prompt and resource from callers that
+// declare ext.
+func scopeFor(ext, tool, prompt, uri string) ListScope {
+	return testScope{ext: ext, tool: tool, prompt: prompt, uri: uri}
+}
+
+type testScope struct{ ext, tool, prompt, uri string }
+
+func (s testScope) HideTool(ctx context.Context, name string) bool {
+	return name == s.tool && core.ClientSupportsExtension(ctx, s.ext)
+}
+
+func (s testScope) HidePrompt(ctx context.Context, name string) bool {
+	return name == s.prompt && core.ClientSupportsExtension(ctx, s.ext)
+}
+
+func (s testScope) HideResource(ctx context.Context, uri string) bool {
+	return uri == s.uri && core.ClientSupportsExtension(ctx, s.ext)
+}
