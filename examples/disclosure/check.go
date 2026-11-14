@@ -8,12 +8,9 @@ import (
 
 	"github.com/panyam/mcpkit/client"
 	"github.com/panyam/mcpkit/core"
+	"github.com/panyam/mcpkit/experimental/ext/groups"
 	"github.com/panyam/mcpkit/ext/skills"
 )
-
-// groupsExtensionID is the extension a groups-aware client declares. The
-// Progressive Disclosure WG drafts it; mcpkit does not serve it yet.
-const groupsExtensionID = "io.modelcontextprotocol/groups"
 
 // Row names. The tests look rows up by these, and the exercise script prints
 // them, so a rename shows up in both places.
@@ -51,25 +48,27 @@ func runChecks(ctx context.Context, url string, opts ...client.ClientOption) []c
 	rows = append(rows, countRow(rowPlainTools, flatCount, flatBytes, err, func(n int) bool { return n == toolCount }))
 	rows = append(rows, checkSkill(ctx, plain))
 
-	groupsOpts := append([]client.ClientOption{client.WithExtension(groupsExtensionID, core.ClientExtensionCap{})}, opts...)
+	groupsOpts := append([]client.ClientOption{groups.ClientOption()}, opts...)
 	grouped, err := connect(ctx, url, "disclosure-groups", groupsOpts...)
 	if err != nil {
 		return append(rows, checkRow{Name: rowGroupsList, Detail: "connect: " + err.Error()})
 	}
 	defer grouped.Close()
 
-	rows = append(rows, checkGroupsList(ctx, grouped))
+	listRow, listBytes := checkGroupsList(ctx, grouped)
+	rows = append(rows, listRow)
 	getRow, getBytes := checkGroupsGet(ctx, grouped)
 	rows = append(rows, getRow)
 
 	n, b, err := listAllTools(ctx, grouped)
-	rows = append(rows, countRow(rowGroupsTools, n, b, err, func(n int) bool { return n < toolCount }))
+	// Every fixture tool is in a group, so a groups client sees none of them.
+	rows = append(rows, countRow(rowGroupsTools, n, b, err, func(n int) bool { return n == 0 }))
 
-	size := checkRow{Name: rowSizes, Info: true, Detail: fmt.Sprintf("flat tools/list %d bytes", flatBytes)}
-	if getBytes > 0 {
-		size.Detail = fmt.Sprintf("groups/get billing %d bytes, flat tools/list %d bytes", getBytes, flatBytes)
-	} else {
-		size.Detail += ", groups/get n/a"
+	size := checkRow{Name: rowSizes, Info: true, Detail: fmt.Sprintf("flat tools/list %d bytes, groups/get n/a", flatBytes)}
+	if getBytes > 0 && flatBytes > 0 {
+		path := listBytes + getBytes + b
+		size.Detail = fmt.Sprintf("groups/list %d + groups/get billing %d + tools/list %d = %d bytes, flat tools/list %d bytes (%d%%)",
+			listBytes, getBytes, b, path, flatBytes, 100*path/flatBytes)
 	}
 	return append(rows, size)
 }
@@ -143,36 +142,38 @@ func checkSkill(ctx context.Context, c *client.Client) checkRow {
 	return row
 }
 
-func checkGroupsList(ctx context.Context, c *client.Client) checkRow {
+// checkGroupsList returns the row and the size of the groups/list result, or
+// 0 when the call failed.
+func checkGroupsList(ctx context.Context, c *client.Client) (checkRow, int) {
 	row := checkRow{Name: rowGroupsList}
-	res, err := c.Call(ctx, "groups/list", map[string]any{})
+	res, err := c.Call(ctx, groups.MethodList, map[string]any{})
 	if err != nil {
 		row.Detail = err.Error()
-		return row
+		return row, 0
 	}
 	var lr struct {
 		Groups []map[string]any `json:"groups"`
 	}
 	if err := json.Unmarshal(res.Raw, &lr); err != nil {
 		row.Detail = err.Error()
-		return row
+		return row, len(res.Raw)
 	}
 	for _, g := range lr.Groups {
 		if _, isTool := g["inputSchema"]; isTool {
 			row.Detail = fmt.Sprintf("entry %v carries an inputSchema, so it is a tool", g["name"])
-			return row
+			return row, len(res.Raw)
 		}
 	}
 	row.OK = len(lr.Groups) == len(themes)
 	row.Detail = fmt.Sprintf("%d groups, want %d, %d bytes", len(lr.Groups), len(themes), len(res.Raw))
-	return row
+	return row, len(res.Raw)
 }
 
 // checkGroupsGet returns the row and the size of the groups/get result, or 0
 // when the call failed.
 func checkGroupsGet(ctx context.Context, c *client.Client) (checkRow, int) {
 	row := checkRow{Name: rowGroupsGet}
-	res, err := c.Call(ctx, "groups/get", map[string]any{"name": "billing"})
+	res, err := c.Call(ctx, groups.MethodGet, map[string]any{"name": "billing"})
 	if err != nil {
 		row.Detail = err.Error()
 		return row, 0
@@ -190,7 +191,7 @@ func checkGroupsGet(ctx context.Context, c *client.Client) (checkRow, int) {
 			return row, len(res.Raw)
 		}
 	}
-	hasSkill := strings.Contains(string(res.Raw), "billing-refunds/SKILL.md")
+	hasSkill := strings.Contains(string(res.Raw), billingSkill)
 	want := toolCount / len(themes)
 	row.OK = len(gr.Tools) == want && hasSkill
 	row.Detail = fmt.Sprintf("%d tools, want %d, SKILL.md listed %v", len(gr.Tools), want, hasSkill)
