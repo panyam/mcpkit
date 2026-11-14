@@ -242,16 +242,16 @@
     <div class="content-body">
         
 <h1 id="progressive-disclosure">Progressive disclosure <a class="anchor" href="#progressive-disclosure">¶</a></h1>
-<p>How a server with hundreds of tools shows a model only the ones it needs. The groups extension is a working-group draft, and mcpkit does not serve it yet. This page explains the draft as we read it, how it fits with skills, and what you can run today.</p>
+<p>How a server with hundreds of tools shows a model only the ones it needs. The groups extension is a working-group draft, and mcpkit serves it from <code>experimental/ext/groups</code>. This page explains the draft as we read it, how it fits with skills, and what you can run today.</p>
 <blockquote>
 <p><strong>Kind:</strong> root <em>(FAQ-style)</em> · <strong>Prerequisites:</strong> <a href="/mcpkit/concepts/bringup/">bring-up</a>, <a href="/mcpkit/concepts/extension-mechanisms/">extension-mechanisms</a><br />
 <strong>Reachable from:</strong> <a href="https://github.com/panyam/mcpkit/blob/main/tutorials/walkthrough/README.md">README</a>, <a href="/mcpkit/concepts/extension-mechanisms/">extension-mechanisms</a><br />
 <strong>Branches into:</strong> none yet<br />
-<strong>Spec:</strong> <a href="https://github.com/modelcontextprotocol/progressive-disclosure-wg/blob/15b2a5cf919702ae95a591856525486c857b3ea5/seps/0000-progressive-disclosure-groups.md">groups draft</a> (progressive-disclosure-wg PR 19, pinned at <code>15b2a5cf</code>, 2026-11-07) · <a href="https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2640">SEP-2640 skills</a> · <strong>Code:</strong> <a href="https://github.com/panyam/mcpkit/tree/main/examples/disclosure"><code>examples/disclosure/</code></a> · <a href="https://github.com/panyam/mcpkit/tree/main/ext/skills"><code>ext/skills/</code></a></p>
+<strong>Spec:</strong> <a href="https://github.com/modelcontextprotocol/progressive-disclosure-wg/blob/15b2a5cf919702ae95a591856525486c857b3ea5/seps/0000-progressive-disclosure-groups.md">groups draft</a> (progressive-disclosure-wg PR 19, pinned at <code>15b2a5cf</code>, 2026-11-07) · <a href="https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2640">SEP-2640 skills</a> · <strong>Code:</strong> <a href="https://github.com/panyam/mcpkit/tree/main/experimental/ext/groups"><code>experimental/ext/groups/</code></a> · <a href="https://github.com/panyam/mcpkit/blob/main/server/list_scope.go"><code>server/list_scope.go</code></a> · <a href="https://github.com/panyam/mcpkit/tree/main/examples/disclosure"><code>examples/disclosure/</code></a> · <a href="https://github.com/panyam/mcpkit/tree/main/ext/skills"><code>ext/skills/</code></a></p>
 </blockquote>
 <blockquote>
 <p>[!CAUTION]<br />
-<strong>Experimental, and not implemented.</strong> The groups extension is an Extensions Track draft with no sponsor. Method names, params and result shapes can change. mcpkit has a fixture and an exercise for it, and nothing that answers <code>groups/list</code> yet. Everything below describes the draft at the pinned commit.</p>
+<strong>Experimental.</strong> The groups extension is an Extensions Track draft with no sponsor. Method names, params and result shapes can change, and <code>experimental/ext/groups</code> will change with them. Everything below describes the draft at the pinned commit.</p>
 </blockquote>
 <h2 id="prerequisites">Prerequisites <a class="anchor" href="#prerequisites">¶</a></h2>
 <ul>
@@ -368,10 +368,7 @@ The working group has not settled how the two relate long term. The <a href="htt
     gl -.-&gt; gg[&quot;groups/get name&quot;]
     gg -.-&gt; scoped[&quot;that group's tools&quot;]
 </code></pre>
-<blockquote>
-<p>[!WARNING]<br />
-<strong>Target-shape gap.</strong> For now mcpkit&rsquo;s <code>tools/list</code> returns pretty much the same list to every caller, and the one exception is the <code>x-mcp-file</code> strip. Serving groups means adding a per-caller filter at that point, and keying <code>listCacheHints</code> on the caller&rsquo;s capabilities.</p>
-</blockquote>
+<p>In mcpkit, <code>server.SetListScope</code> installs the per-caller filter. <code>groups.Catalog.RegisterWith</code> installs one that hides grouped tools, prompts and resources from callers that declared the extension. The filter runs before paging, so every page a caller gets is full. With a filter installed, the base lists carry <code>cacheScope: &quot;private&quot;</code>, because a shared cache would hand one caller&rsquo;s list to another.</p>
 <h2 id="q6-how-do-nested-groups-work">Q6. How do nested groups work? <a class="anchor" href="#q6-how-do-nested-groups-work">¶</a></h2>
 <p>A group may list child groups in its <code>groups</code> field. A server uses this to keep <code>groups/list</code> short. For example, <code>deploy</code> might hold <code>deploy-staging</code> and <code>deploy-prod</code>.</p>
 <ul>
@@ -401,16 +398,16 @@ The working group has not settled how the two relate long term. The <a href="htt
 <td>Implemented. SEP-2640 Final. 45 server checks and 4 client scenarios pass.</td>
 </tr>
 <tr>
-<td>Groups methods</td>
-<td>Not implemented. <code>groups/list</code> returns <code>-32601</code>.</td>
+<td>Groups (<code>experimental/ext/groups</code>)</td>
+<td><code>groups/list</code>, <code>groups/get</code>, nested groups, <code>-32002</code> for unknown names, and a client with <code>List</code>, <code>Get</code> and a cycle-safe <code>Walk</code>.</td>
 </tr>
 <tr>
-<td>Per-caller <code>tools/list</code> filter</td>
-<td>Not implemented.</td>
+<td>Per-caller list filter</td>
+<td><code>server.SetListScope</code>, applied to <code>tools/list</code>, <code>prompts/list</code> and <code>resources/list</code> on both wires.</td>
 </tr>
 <tr>
 <td>Fixture</td>
-<td><a href="https://github.com/panyam/mcpkit/tree/main/examples/disclosure"><code>examples/disclosure</code></a>: 200 tools, two skills, a <code>--check</code> mode.</td>
+<td><a href="https://github.com/panyam/mcpkit/tree/main/examples/disclosure"><code>examples/disclosure</code></a>: 200 tools in eight groups, two skills, a <code>--check</code> mode.</td>
 </tr>
 <tr>
 <td>Exercise</td>
@@ -418,15 +415,19 @@ The working group has not settled how the two relate long term. The <a href="htt
 </tr>
 </tbody>
 </table>
-<p>We wrote the fixture and its checks before any groups code, so the mission has something to fail against today. The exercise runs the skills suites, then connects two clients to the fixture on each wire. The plain client must get the flat list and a verified skill. The groups client must get groups instead. Today the groups rows fail:</p>
-<pre><code>  PASS stateless plain client: tools/list returns every tool: 200 of 200 tools, 82054 bytes
+<p>We wrote the fixture and its checks before any groups code, so the exercise failed first and then passed. It runs the skills suites, then connects two clients to the fixture on each wire. The plain client must get the flat list and a verified skill. The groups client must get groups instead:</p>
+<pre><code>  PASS stateless plain client: tools/list returns every tool: 200 of 200 tools, 82055 bytes
   PASS stateless plain client: SKILL.md reads and verifies: skill://billing-refunds/SKILL.md, 424 bytes, digest verified true
-  FAIL stateless groups client: groups/list returns one group per theme: RPC error -32601: method not found: groups/list
-  FAIL stateless groups client: groups/get billing returns its tools and SKILL.md: RPC error -32601: method not found: groups/get
-  FAIL stateless groups client: tools/list leaves out grouped tools: 200 of 200 tools, 82054 bytes
-  INFO stateless sizes: groups/get billing vs flat tools/list: flat tools/list 82054 bytes, groups/get n/a
+  PASS stateless groups client: groups/list returns one group per theme: 8 groups, want 8, 1030 bytes
+  PASS stateless groups client: groups/get billing returns its tools and SKILL.md: 25 tools, want 25, SKILL.md listed true
+  PASS stateless groups client: tools/list leaves out grouped tools: 0 of 200 tools, 156 bytes
+  INFO stateless sizes: groups/get billing vs flat tools/list: groups/list 1030 + groups/get billing 10702 + tools/list 156 = 11888 bytes, flat tools/list 82055 bytes (14%)
 </code></pre>
-<p>Once mcpkit serves groups, the last row will print the size of one group next to the flat list.</p>
+<p>The last row adds up what the groups client reads to reach the billing tools: <code>groups/list</code>, one <code>groups/get</code> and its empty <code>tools/list</code>. That&rsquo;s about 12 KB against 82 KB for the flat list.</p>
+<blockquote>
+<p>[!NOTE]<br />
+The WG&rsquo;s TypeScript prototype (<a href="https://github.com/modelcontextprotocol/progressive-disclosure-wg/pull/20">PR 20</a>, at <code>9554415c</code>) agrees with mcpkit on negotiation, <code>groups/list</code> and <code>-32002</code>. It still nests <code>groups/get</code> contents under a <code>contents</code> key, which the draft dropped on 2026-11-07. It also returns the same <code>tools/list</code> to every caller.</p>
+</blockquote>
 <h2 id="end-state">End-state <a class="anchor" href="#end-state">¶</a></h2>
 <ul>
 <li>You can say how much a flat <code>tools/list</code> puts into the model&rsquo;s context, and what skills leave unsolved.</li>
@@ -434,7 +435,7 @@ The working group has not settled how the two relate long term. The <a href="htt
 <li>You know a group lists a skill by URI, and the host still verifies the skill through the skills extension.</li>
 <li>You know the four per-caller rules: one placement, flatten for plain clients, caches keyed on capabilities, and scoping that is not access control.</li>
 <li>You know nested groups form a graph, and how a client stops on cycles.</li>
-<li>You know mcpkit serves skills today and groups not yet, and how to run the exercise.</li>
+<li>You know where mcpkit serves groups and the list filter, and how to run the exercise.</li>
 </ul>
 <h2 id="next-to-read">Next to read <a class="anchor" href="#next-to-read">¶</a></h2>
 <ul>

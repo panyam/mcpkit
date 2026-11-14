@@ -241,34 +241,42 @@
 
     <div class="content-body">
         
-<h1 id="disclosure-200-tools-and-two-skills">disclosure: 200 tools and two skills <a class="anchor" href="#disclosure-200-tools-and-two-skills">¶</a></h1>
+<h1 id="disclosure-200-tools-eight-groups-and-two-skills">disclosure: 200 tools, eight groups and two skills <a class="anchor" href="#disclosure-200-tools-eight-groups-and-two-skills">¶</a></h1>
 <p>An agent connects to a server with 200 tools. <code>tools/list</code> sends every schema, and the host puts<br />
 all of them into the model&rsquo;s context, about 82 KB of JSON here. The model may need one billing<br />
 tool.</p>
-<p>This example serves that situation so you can measure it. The server has 200 tools in eight<br />
-themes (billing, deploy, search, users, storage, metrics, alerts, docs) and two SEP-2640 skills.<br />
-<code>billing-refunds</code> uses billing tools. <code>incident-triage</code> uses alerts, metrics and deploy tools.</p>
+<p>This example serves that situation so you can measure it, and then serves the fix. The server<br />
+has 200 tools in eight themes (billing, deploy, search, users, storage, metrics, alerts, docs) and<br />
+two SEP-2640 skills. <code>billing-refunds</code> uses billing tools. <code>incident-triage</code> uses alerts, metrics<br />
+and deploy tools.</p>
+<p>Each theme is also a group, served by the experimental groups extension in<br />
+<code>experimental/ext/groups</code>. A client that declares the extension sees eight one-line groups<br />
+instead of 200 tools, and fetches one group&rsquo;s tools with <code>groups/get</code> when it needs them. The<br />
+billing group lists the <code>billing-refunds</code> skill next to its tools. A client that doesn&rsquo;t declare<br />
+the extension still gets the flat list.</p>
 <h2 id="run-it">Run it <a class="anchor" href="#run-it">¶</a></h2>
 <pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span>just serve          <span style="color:#998;font-style:italic"># terminal 1: the fixture on :8080</span>
 </span></span><span style="display:flex;"><span>just demo           <span style="color:#998;font-style:italic"># terminal 2: the walkthrough</span>
 </span></span></code></pre><p>Both sides take <code>--wire=legacy</code> or <code>--wire=stateless</code>.</p>
-<p>The walkthrough connects, counts the bytes of the flat <code>tools/list</code>, lists the skills, and reads<br />
-<code>billing-refunds</code> with its digest checked. See <a href="https://github.com/panyam/mcpkit/blob/main/examples/disclosure/WALKTHROUGH.md">WALKTHROUGH.md</a> for the steps.</p>
+<p>The walkthrough connects a plain client, counts the bytes of the flat <code>tools/list</code>, lists the<br />
+skills, and reads <code>billing-refunds</code> with its digest checked. Then it connects a groups client,<br />
+lists the groups and fetches billing. See <a href="https://github.com/panyam/mcpkit/blob/main/examples/disclosure/WALKTHROUGH.md">WALKTHROUGH.md</a> for the steps.</p>
 <h2 id="check-mode">Check mode <a class="anchor" href="#check-mode">¶</a></h2>
 <p><code>--check</code> connects two clients and prints one row per check:</p>
 <pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span>go run . --serve --addr<span style="color:#000;font-weight:bold">=</span>127.0.0.1:18420 --wire<span style="color:#000;font-weight:bold">=</span>stateless &amp;
 </span></span><span style="display:flex;"><span>go run . --check --url http://127.0.0.1:18420 --wire<span style="color:#000;font-weight:bold">=</span>stateless
-</span></span></code></pre><pre><code>  PASS stateless plain client: tools/list returns every tool: 200 of 200 tools, 82054 bytes
+</span></span></code></pre><pre><code>  PASS stateless plain client: tools/list returns every tool: 200 of 200 tools, 82055 bytes
   PASS stateless plain client: SKILL.md reads and verifies: skill://billing-refunds/SKILL.md, 424 bytes, digest verified true
-  FAIL stateless groups client: groups/list returns one group per theme: RPC error -32601: method not found: groups/list
-  FAIL stateless groups client: groups/get billing returns its tools and SKILL.md: RPC error -32601: method not found: groups/get
-  FAIL stateless groups client: tools/list leaves out grouped tools: 200 of 200 tools, 82054 bytes
-  INFO stateless sizes: groups/get billing vs flat tools/list: flat tools/list 82054 bytes, groups/get n/a
+  PASS stateless groups client: groups/list returns one group per theme: 8 groups, want 8, 1030 bytes
+  PASS stateless groups client: groups/get billing returns its tools and SKILL.md: 25 tools, want 25, SKILL.md listed true
+  PASS stateless groups client: tools/list leaves out grouped tools: 0 of 200 tools, 156 bytes
+  INFO stateless sizes: groups/get billing vs flat tools/list: groups/list 1030 + groups/get billing 10702 + tools/list 156 = 11888 bytes, flat tools/list 82055 bytes (14%)
 </code></pre>
 <p>The plain client declares no extensions and must get the flat list. The groups client declares<br />
 <code>io.modelcontextprotocol/groups</code>, an extension the Progressive Disclosure working group drafts.<br />
-mcpkit does not serve it yet, so the groups rows fail and the command exits 1. The last row<br />
-prints the size of one group next to the flat list.</p>
+It must get eight groups, the billing group&rsquo;s 25 tools and its skill, and an empty <code>tools/list</code>.<br />
+The command exits 1 if any row fails. The last row adds up what the groups client reads to reach<br />
+the billing tools, next to the flat list.</p>
 <h2 id="files">Files <a class="anchor" href="#files">¶</a></h2>
 <table>
 <thead>
@@ -280,7 +288,7 @@ prints the size of one group next to the flat list.</p>
 <tbody>
 <tr>
 <td><code>fixture.go</code></td>
-<td>The 200 tool definitions and the embedded <code>skills/</code> tree</td>
+<td>The 200 tool definitions, the eight groups and the embedded <code>skills/</code> tree</td>
 </tr>
 <tr>
 <td><code>check.go</code></td>
@@ -303,18 +311,20 @@ prints the size of one group next to the flat list.</p>
 <h2 id="walkthrough">Walkthrough</h2>
 <p class="source-link">Generated from the scripted demo — run it with <code>make serve</code> + <code>make demo</code>. Source: <a href="https://github.com/panyam/mcpkit/blob/main/examples/disclosure/WALKTHROUGH.md"><code>examples/disclosure/WALKTHROUGH.md</code></a></p>
 
-<h1 id="progressive-disclosure-200-tools-and-two-skills">Progressive disclosure: 200 tools and two skills <a class="anchor" href="#progressive-disclosure-200-tools-and-two-skills">¶</a></h1>
-<p>A server with 200 tools sends all 200 in <code>tools/list</code>, and a client puts every schema into the model&rsquo;s context. This walkthrough counts those bytes on a fixture server, then loads a skill, which a client reads only when the model needs it.</p>
+<h1 id="progressive-disclosure-200-tools-eight-groups-and-two-skills">Progressive disclosure: 200 tools, eight groups and two skills <a class="anchor" href="#progressive-disclosure-200-tools-eight-groups-and-two-skills">¶</a></h1>
+<p>A server with 200 tools sends all 200 in <code>tools/list</code>, and a client puts every schema into the model&rsquo;s context. This walkthrough counts those bytes on a fixture server and loads a skill. Then it connects a second client that declares the experimental groups extension. That client sees eight groups instead of 200 tools, and it fetches one group&rsquo;s tools and skill when the model picks it.</p>
 <h2 id="what-youll-learn">What you&rsquo;ll learn <a class="anchor" href="#what-youll-learn">¶</a></h2>
 <ul>
 <li><strong>tools/list returns all 200 tools</strong> - The tools come in eight themes: billing, deploy, search, users, storage, metrics, alerts and docs. A model that needs one billing tool still receives all 200 schemas. The host sends that many bytes to the model before the model does anything.</li>
 <li><strong>skills/list names the skills without their bodies</strong> - A skill is a <code>SKILL.md</code> with instructions, served under <code>skill://</code>. The listing carries each skill&rsquo;s name, description and file digests. The host reads a body only when the model picks that skill.</li>
-<li><strong>Read billing-refunds and verify its digest</strong> - <code>ReadFromEntry</code> checks the served bytes against the size and digest from the listing before the host uses them. The skill names the billing tools it needs. A groups-aware server makes that link explicit.</li>
+<li><strong>Read billing-refunds and verify its digest</strong> - <code>ReadFromEntry</code> checks the served bytes against the size and digest from the listing before the host uses them. The skill names the billing tools it needs, but it can&rsquo;t carry their schemas. Groups deliver those.</li>
+<li><strong>A groups client sees groups instead of tools</strong> - Every tool on this server sits in a group, so the groups client&rsquo;s <code>tools/list</code> comes back empty. <code>groups/list</code> carries a name and a one-line description per group, which is what the model picks from.</li>
+<li><strong>Fetch the billing group</strong> - The model picked billing, so the host fetches it. The result carries 25 complete tool definitions, the group&rsquo;s instructions, and the skill&rsquo;s URI in <code>resources</code>. The host still verifies the skill through the skills extension, as in the step above.</li>
 </ul>
 <h2 id="flow">Flow <a class="anchor" href="#flow">¶</a></h2>
 <pre><code class="language-mermaid">sequenceDiagram
     participant Host as MCP Host (this client)
-    participant Server as MCP Server (just serve, 200 tools + 2 skills)
+    participant Server as MCP Server (just serve, 200 tools in 8 groups + 2 skills)
 
     Note over Host,Server: Step 1: Connect
     Host-&gt;&gt;Server: initialize
@@ -331,11 +341,21 @@ prints the size of one group next to the flat list.</p>
     Note over Host,Server: Step 4: Read billing-refunds and verify its digest
     Host-&gt;&gt;Server: resources/read skill://billing-refunds/SKILL.md
     Server--&gt;&gt;Host: SKILL.md body
+
+    Note over Host,Server: Step 5: A groups client sees groups instead of tools
+    Host-&gt;&gt;Server: tools/list  (_meta declares groups)
+    Server--&gt;&gt;Host: { tools: [] }
+    Host-&gt;&gt;Server: groups/list
+    Server--&gt;&gt;Host: { groups: [billing, deploy, ...] }
+
+    Note over Host,Server: Step 6: Fetch the billing group
+    Host-&gt;&gt;Server: groups/get {name: &quot;billing&quot;}
+    Server--&gt;&gt;Host: { instructions, tools: [25], resources: [SKILL.md] }
 </code></pre>
 <h2 id="steps">Steps <a class="anchor" href="#steps">¶</a></h2>
 <h3 id="setup">Setup <a class="anchor" href="#setup">¶</a></h3>
 <p>Start the server in a separate terminal first:</p>
-<pre><code>Terminal 1:  just serve         # 200 tools + 2 skills on :8080
+<pre><code>Terminal 1:  just serve         # 200 tools in 8 groups + 2 skills on :8080
 Terminal 2:  just demo          # this walkthrough (--tui for the interactive TUI)
 </code></pre>
 <p>Both sides take <code>--wire=legacy</code> or <code>--wire=stateless</code>. The results are the same on either wire.</p>
@@ -345,13 +365,20 @@ Terminal 2:  just demo          # this walkthrough (--tui for the interactive TU
 <h3 id="step-3-skillslist-names-the-skills-without-their-bodies">Step 3: skills/list names the skills without their bodies <a class="anchor" href="#step-3-skillslist-names-the-skills-without-their-bodies">¶</a></h3>
 <p>A skill is a <code>SKILL.md</code> with instructions, served under <code>skill://</code>. The listing carries each skill&rsquo;s name, description and file digests. The host reads a body only when the model picks that skill.</p>
 <h3 id="step-4-read-billing-refunds-and-verify-its-digest">Step 4: Read billing-refunds and verify its digest <a class="anchor" href="#step-4-read-billing-refunds-and-verify-its-digest">¶</a></h3>
-<p><code>ReadFromEntry</code> checks the served bytes against the size and digest from the listing before the host uses them. The skill names the billing tools it needs. A groups-aware server makes that link explicit.</p>
-<h3 id="where-groups-fit">Where groups fit <a class="anchor" href="#where-groups-fit">¶</a></h3>
-<p>The Progressive Disclosure working group drafts a groups extension, <code>io.modelcontextprotocol/groups</code>. A server that serves it shows one name and description per theme in <code>groups/list</code>. The client calls <code>groups/get</code> when the model picks a theme, and only then sees that theme&rsquo;s tools and skills. mcpkit does not serve groups yet. A groups server would need themes and skill links, and this fixture already has both.</p>
+<p><code>ReadFromEntry</code> checks the served bytes against the size and digest from the listing before the host uses them. The skill names the billing tools it needs, but it can&rsquo;t carry their schemas. Groups deliver those.</p>
+<h3 id="groups-experimental">Groups (experimental) <a class="anchor" href="#groups-experimental">¶</a></h3>
+<p>The Progressive Disclosure working group drafts a groups extension, <code>io.modelcontextprotocol/groups</code>. The draft has no sponsor yet, and mcpkit serves it from <code>experimental/ext/groups</code>. This server puts each theme&rsquo;s 25 tools in a group named after the theme. The billing group also lists the billing-refunds skill.</p>
+<p>A client opts in by declaring the extension, with <code>groups.ClientOption()</code>. The plain client above declared nothing, so it keeps the flat list.</p>
+<h3 id="step-5-a-groups-client-sees-groups-instead-of-tools">Step 5: A groups client sees groups instead of tools <a class="anchor" href="#step-5-a-groups-client-sees-groups-instead-of-tools">¶</a></h3>
+<p>Every tool on this server sits in a group, so the groups client&rsquo;s <code>tools/list</code> comes back empty. <code>groups/list</code> carries a name and a one-line description per group, which is what the model picks from.</p>
+<h3 id="step-6-fetch-the-billing-group">Step 6: Fetch the billing group <a class="anchor" href="#step-6-fetch-the-billing-group">¶</a></h3>
+<p>The model picked billing, so the host fetches it. The result carries 25 complete tool definitions, the group&rsquo;s instructions, and the skill&rsquo;s URI in <code>resources</code>. The host still verifies the skill through the skills extension, as in the step above.</p>
 <h3 id="where-to-look-in-the-code">Where to look in the code <a class="anchor" href="#where-to-look-in-the-code">¶</a></h3>
 <ul>
 <li>The fixture: <code>fixture.go</code> in this directory</li>
 <li>Skills provider and client: <a href="https://github.com/panyam/mcpkit/blob/main/ext/skills/provider.go"><code>ext/skills/provider.go</code></a>, <a href="https://github.com/panyam/mcpkit/blob/main/ext/skills/client_methods.go"><code>ext/skills/client_methods.go</code></a></li>
+<li>Groups catalog, list filter and client: <a href="https://github.com/panyam/mcpkit/blob/main/experimental/ext/groups/catalog.go"><code>experimental/ext/groups/catalog.go</code></a>, <a href="https://github.com/panyam/mcpkit/blob/main/experimental/ext/groups/client.go"><code>experimental/ext/groups/client.go</code></a></li>
+<li>The seam that lets an extension hide primitives per caller: <a href="https://github.com/panyam/mcpkit/blob/main/server/list_scope.go"><code>server/list_scope.go</code></a></li>
 <li>The checks <code>make exercise-disclosure</code> runs: <code>check.go</code> in this directory</li>
 </ul>
 <h2 id="run-it">Run it <a class="anchor" href="#run-it">¶</a></h2>
