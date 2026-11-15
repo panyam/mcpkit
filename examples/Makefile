@@ -21,13 +21,13 @@ EXAMPLES_DIR := $(abspath $(dir $(lastword $(MAKEFILE_LIST))))
   test-common test-otel-stdout test-protogen \
   test-events-kitchen-sink test-events-discord test-events-telegram \
   test-whole-enchilada-event-server test-whole-enchilada-gen-compose \
-  test-agents-discovery test-disclosure
+  test-agents-discovery test-disclosure test-getting-started
 
 test: test-skills \
       test-common test-otel-stdout test-protogen \
       test-events-kitchen-sink test-events-discord test-events-telegram \
       test-whole-enchilada-event-server test-whole-enchilada-gen-compose \
-      test-agents-discovery test-disclosure ## Run every infra-free example test
+      test-agents-discovery test-disclosure test-getting-started ## Run every infra-free example test
 
 
 
@@ -45,6 +45,10 @@ test-protogen: ## protogen/bookservice
 
 test-disclosure: ## disclosure (200-tool fixture, plain-client checks on both wires)
 	cd $(EXAMPLES_DIR)/disclosure && go test ./... -count=1 -timeout 60s
+
+test-getting-started: ## getting-started (Get Started scenario on each wire, natively and under js/wasm)
+	cd $(EXAMPLES_DIR)/getting-started && go test ./... -count=1 -timeout 60s
+	@bash $(EXAMPLES_DIR)/../scripts/go-test-wasm.sh $(EXAMPLES_DIR)/getting-started -timeout 120s ./server
 
 test-agents-discovery: ## agents/discovery (walkthrough claims, both wires)
 	cd $(EXAMPLES_DIR)/agents/discovery && go test ./... -count=1 -timeout 60s

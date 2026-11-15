@@ -20,6 +20,28 @@ just client
 # → Hello, world!
 ```
 
+## Run it in your browser
+
+```bash
+just serve-web   # or: make serve-web
+# open http://localhost:8788/
+```
+
+This compiles `server/` to WebAssembly and runs it in a Web Worker on the page,
+with no backend. The page lists the server's tools and calls them, and it shows
+the raw JSON-RPC going each way. In a wasm build `srv.Run` serves the page over
+`postMessage` instead of listening on a port, so `server/main.go` has no
+browser-specific code.
+
+![The inspector page after calling greet](screenshots/web.png)
+
+## Tests
+
+`just test` runs one scenario against `newServer()`: initialize, list the
+tools, call `greet`. It runs in-process, over Streamable HTTP and over a stdio
+pipe, then again under `GOOS=js GOARCH=wasm` with node. That second run covers
+the browser build. It needs node on your `PATH`.
+
 ## What it demonstrates
 
 - `server.NewServer` + `srv.Run(":8787")` — a Streamable HTTP MCP server in a
@@ -33,6 +55,8 @@ just client
 ## Where to look in the code
 
 - `server/main.go:greetInput` — the typed input struct that becomes the schema.
+- `server/main.go:newServer` — builds the server without starting it, so the
+  tests and the browser build run the same server.
 - `server/main.go` `srv.Register(core.TextTool[...])` — typed registration.
 - `client/main.go` `c.ToolCall("greet", …)` — the one-line client call.
 

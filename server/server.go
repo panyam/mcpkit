@@ -1377,7 +1377,13 @@ func (w *statusCapture) Flush() {
 //	srv.RegisterTool(def, handler)
 //	go srv.Run(":8787")
 //	<-srv.Ready() // the port is accepting; safe to connect
+//
+// In a js/wasm build, Run ignores addr and opts and calls RunWorker. The
+// server then talks to the page that started its Web Worker.
 func (s *Server) Run(addr string, opts ...TransportOption) error {
+	if runOverride != nil {
+		return runOverride(s)
+	}
 	if addr != "" {
 		s.options.listen = addr
 	}
@@ -2073,3 +2079,7 @@ func (s *Server) NotifyResourceUpdatedLocal(uri string) {
 		s.subRegistry.notifyLocal(uri)
 	}
 }
+
+// runOverride replaces Run's HTTP listener in builds that can't listen.
+// worker_js.go sets it to RunWorker.
+var runOverride func(*Server) error

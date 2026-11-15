@@ -93,3 +93,9 @@ c := client.NewClient("memory://", info, client.WithTransport(transport))
 The in-process transport passes `*core.Request`/`*core.Response` directly, with no JSON envelope serialization. This catches logic bugs; HTTP transport tests catch wire format bugs.
 
 Notifications reach the client too, so per-call progress (`client.WithProgress`) works in-process. A handler given with `WithNotificationHandler` keeps seeing every notification as well.
+
+## Running in a browser
+
+Build the server with `GOOS=js GOARCH=wasm` and load it in a Web Worker. `srv.Run` then ignores its address and calls `srv.RunWorker`. Each JSON-RPC message travels as one `postMessage` string in each direction. The worker hosts one session, and it never opens a socket.
+
+Features that need HTTP don't work there. That covers auth, Origin checks, SSE and webhooks. `examples/getting-started/web/` has a worker script and an inspector page that drive it.
