@@ -1,0 +1,13 @@
+{
+  "name": "mcpkit-web-examples",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Loads every browser-ready mcpkit example page in Chromium and calls a tool (#1712)",
+  "type": "module",
+  "scripts": {
+    "test": "playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.63.0"
+  }
+}

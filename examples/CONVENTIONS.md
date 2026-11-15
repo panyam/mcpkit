@@ -23,7 +23,10 @@ page can copy the code into their own project verbatim. `/example-audit` should
 skip it (no `--serve` dispatch, no `runDemo`, no `WALKTHROUGH.md`, no
 `common.RunServer`). It does have a scenario test (`server/main_test.go`) and a
 browser build (`web/`, #1711), which `make -C examples test-getting-started`
-runs. Every other non-UI example follows the full convention below.
+runs. Any example with `web/worker.js` and a `server/` package gets published at
+`/try/<example>/` on the docs site and loaded in Chromium by
+`make test-web-examples` (#1712). Its page must show "Connected to" in `#status`
+and give each tool a `.tool` block whose form calls it with default inputs. Every other non-UI example follows the full convention below.
 
 ---
 

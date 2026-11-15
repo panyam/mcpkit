@@ -6,7 +6,9 @@
 #
 # For each wasm-ready example: its scenario test natively, the same test under
 # GOOS=js GOARCH=wasm with node, then the browser page build. Before that, the
-# server package's RunWorker test under wasm. Exits 1 if any step failed.
+# server package's RunWorker test under wasm. After them, every page loads in
+# Chromium and calls a tool, the way the docs site serves it under /try/.
+# Exits 1 if any step failed.
 #
 # To look at a page by hand: make -C examples/getting-started serve-web
 set -u
@@ -30,4 +32,6 @@ for ex in "${EXAMPLES[@]}"; do
   row "$ex page build" "$LOG/$ex-build.log" "$ROOT/scripts/build-example-wasm.sh" "$dir" ./server
   grep -h '^built ' "$LOG/$ex-build.log" | sed 's/^/    /' || true
 done
+row "every page in Chromium" "$LOG/pages.log" make -C "$ROOT" test-web-examples
+grep -hE '^ +[0-9]+ (passed|failed)' "$LOG/pages.log" | sed 's/^ */    /' || true
 exit $fail
