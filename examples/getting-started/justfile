@@ -13,4 +13,16 @@ client:
 build:
     go build ./...
 
+# Run the scenario natively and under js/wasm (needs node)
+test:
+    make -C .. test-getting-started
+
+# Build the server for the browser into web/dist/
+web:
+    bash ../../scripts/build-example-wasm.sh . ./server
+
+# Build the browser page and serve it on http://localhost:8788/
+serve-web:
+    bash ../../scripts/serve-example-wasm.sh . ./server 8788
+
 default: server

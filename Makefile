@@ -44,6 +44,9 @@ build: ## Build all packages
 test: ## Run unit tests
 	go test ./... -count=1 -timeout 30s
 
+test-wasm: ## Run the js/wasm-only server tests under node (RunWorker, #1711)
+	@bash scripts/go-test-wasm.sh server -run 'TestRunWorker' .
+
 test-race: ## Run unit tests with race detector
 	go test -race ./... -count=1 -timeout 60s
 
@@ -137,6 +140,9 @@ exercise-disclosure: ## Mission #1701 exercise: testconf-skills, the SEP-2640 cl
 
 exercise-aipage: ## Mission #1683 exercise: an agent drives a player's page in examples/rooms/lanternfall
 	@bash scripts/exercise-aipage.sh
+
+exercise-web-examples: ## Mission #1710 exercise: each wasm-ready example's scenario natively and under wasm, then its browser page build
+	@bash scripts/exercise-web-examples.sh
 
 exercise-events: ## Mission #1508 exercise: events server + Go client against the SEP-3415 suites, one table
 	@bash scripts/exercise-events.sh
@@ -505,5 +511,5 @@ setup: setup-tools setup-hooks ## Full development setup
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-18s\033[0m %s\n", $$1, $$2}'
 
-.PHONY: build test test-examples test-race test-v cover cover-html cover-func cover-all test-auth test-ui test-skills test-mcpskills build-mcpskills test-mcpskills-walkthrough test-protogen test-e2e test-experimental test-apps-playwright test-apps-playwright-docker test-apps-playwright-all test-apps-playwright-docker-all refresh-visual-gallery release-audit-apps demo-app demo-upstream testkcl testkcl-auto testall test-report smoke smoke-wire verify-dual testconfall testconf testconfauth testconf-client testconf-tasks testconf-tasks-v2 testconf-mrtr testconf-file-inputs testconf-auth-server testconf-elicitation testconf-skills testconf-events testconf-events-client conf-events-setup conf-pending-setup testconf-agents conf-agents-setup exercise-aipage exercise-events exercise-wire exercise-disclosure conf-events-remote testconf-stateless testconf-upstream-audit testconf-external-checker refresh-conformance check-conformance-stale check-local-suites-stale check-conf-fixture-guards check-kcl-guards check-rooms-ts-version check-snippets check-examples-build check-example-tests-listed check-dep-consistency check-tagged-modules check-tag-set check-dependabot-dirs update-dep-baseline dep-sweep check-auth-markers refresh-apps-compat-report check-apps-compat-stale vet lint vulncheck seccheck secrets verify-submodule-deps verify-submodule-deps-resolve audit ci ci-full serve serve-streamable serve-both tidy tidy-all bump-root collect-walkthroughs ghbuild ghserve ghdeploy tag tag-push check-install release-publish rehearse-release setup-tools setup-hooks setup upkcl downkcl kcllogs build-bridge help
+.PHONY: build test test-wasm test-examples test-race test-v cover cover-html cover-func cover-all test-auth test-ui test-skills test-mcpskills build-mcpskills test-mcpskills-walkthrough test-protogen test-e2e test-experimental test-apps-playwright test-apps-playwright-docker test-apps-playwright-all test-apps-playwright-docker-all refresh-visual-gallery release-audit-apps demo-app demo-upstream testkcl testkcl-auto testall test-report smoke smoke-wire verify-dual testconfall testconf testconfauth testconf-client testconf-tasks testconf-tasks-v2 testconf-mrtr testconf-file-inputs testconf-auth-server testconf-elicitation testconf-skills testconf-events testconf-events-client conf-events-setup conf-pending-setup testconf-agents conf-agents-setup exercise-aipage exercise-events exercise-web-examples exercise-wire exercise-disclosure conf-events-remote testconf-stateless testconf-upstream-audit testconf-external-checker refresh-conformance check-conformance-stale check-local-suites-stale check-conf-fixture-guards check-kcl-guards check-rooms-ts-version check-snippets check-examples-build check-example-tests-listed check-dep-consistency check-tagged-modules check-tag-set check-dependabot-dirs update-dep-baseline dep-sweep check-auth-markers refresh-apps-compat-report check-apps-compat-stale vet lint vulncheck seccheck secrets verify-submodule-deps verify-submodule-deps-resolve audit ci ci-full serve serve-streamable serve-both tidy tidy-all bump-root collect-walkthroughs ghbuild ghserve ghdeploy tag tag-push check-install release-publish rehearse-release setup-tools setup-hooks setup upkcl downkcl kcllogs build-bridge help
 .DEFAULT_GOAL := help

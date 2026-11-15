@@ -9,13 +9,18 @@
 EXAMPLES_DIR := justfile_directory()
 
 # Run every infra-free example test
-test: test-skills test-common test-otel-stdout test-protogen test-events-kitchen-sink test-events-discord test-events-telegram test-whole-enchilada-event-server test-whole-enchilada-gen-compose test-agents-discovery test-disclosure
+test: test-skills test-common test-otel-stdout test-protogen test-events-kitchen-sink test-events-discord test-events-telegram test-whole-enchilada-event-server test-whole-enchilada-gen-compose test-agents-discovery test-disclosure test-getting-started
 
 
 
 # skills (SEP-2640 security harness)
 test-skills:
     cd {{EXAMPLES_DIR}}/skills && go test ./... -count=1 -timeout 60s
+
+# getting-started (Get Started scenario on each wire, natively and under js/wasm)
+test-getting-started:
+    cd {{EXAMPLES_DIR}}/getting-started && go test ./... -count=1 -timeout 60s
+    bash {{EXAMPLES_DIR}}/../scripts/go-test-wasm.sh {{EXAMPLES_DIR}}/getting-started -timeout 120s ./server
 
 # disclosure (200-tool fixture, plain-client checks on both wires)
 test-disclosure:

@@ -18,7 +18,9 @@ type greetInput struct {
 	Name string `json:"name" jsonschema:"description=Who to greet,required"`
 }
 
-func main() {
+// newServer builds the server without starting it, so the tests and the
+// browser build run exactly this server.
+func newServer() *server.Server {
 	srv := server.NewServer(
 		core.ServerInfo{Name: "getting-started", Version: "0.1.0"},
 		server.WithToolTimeout(30*time.Second),
@@ -32,9 +34,15 @@ func main() {
 			return "Hello, " + input.Name + "!", nil
 		},
 	))
+	return srv
+}
 
+// main serves Streamable HTTP on :8787. Built with GOOS=js GOARCH=wasm, the
+// same Run call serves the page that started its Web Worker instead (../web).
+func main() {
+	srv := newServer()
 	log.Println("getting-started server listening on http://localhost:8787/mcp")
-	if err := srv.Run(":8787"); err != nil {
+	if err := srv.Run(":8787"); err != nil { // Streamable HTTP
 		log.Fatal(err)
 	}
 }

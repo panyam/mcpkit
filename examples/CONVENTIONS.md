@@ -21,8 +21,9 @@ deliberately **not** a demokit walkthrough and does **not** use
 dependency is `github.com/panyam/mcpkit`, so a newcomer reading the Get Started
 page can copy the code into their own project verbatim. `/example-audit` should
 skip it (no `--serve` dispatch, no `runDemo`, no `WALKTHROUGH.md`, no
-`common.RunServer`). Every other non-UI example follows the full convention
-below.
+`common.RunServer`). It does have a scenario test (`server/main_test.go`) and a
+browser build (`web/`, #1711), which `make -C examples test-getting-started`
+runs. Every other non-UI example follows the full convention below.
 
 ---
 

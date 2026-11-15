@@ -418,6 +418,14 @@ The groups extension uses it to leave grouped primitives out of a groups client'
 - `resources/templates/list` is not filtered. The groups draft scopes resources by URI, and a
   template has none.
 
+## `Run` under js/wasm serves a Web Worker (#1711)
+
+A wasm build of an example calls the same `srv.Run(":8787")` as the CLI build. The Get Started docs quote `examples/getting-started/server/main.go` whole, and `check-snippets` compares them. A build-tagged second `main` would split that file. So `worker_js.go` sets `runOverride` in `init`, and `Run` calls `RunWorker` instead of listening.
+
+`RunWorker` is `RunIO` with a pipe on the input side and a line-splitting writer on the output side. The `onmessage` callback queues into a channel and never writes the pipe itself. A blocked JS callback stalls the event loop, and the server's reader would never run. `json.Compact` runs on every inbound message, because newline framing can't carry a pretty-printed one.
+
+Go's node runner fails on a large environment ("total length of command line and environment variables exceeds limit"). `scripts/go-test-wasm.sh` runs `go test` with a minimal one.
+
 ## Testing
 
 - **The server requires initialization.** A direct `srv.Dispatch()` in a test fails. Use httptest

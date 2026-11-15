@@ -43,7 +43,9 @@ type greetInput struct {
 	Name string `json:"name" jsonschema:"description=Who to greet,required"`
 }
 
-func main() {
+// newServer builds the server without starting it, so tests can run it on
+// any transport.
+func newServer() *server.Server {
 	srv := server.NewServer(
 		core.ServerInfo{Name: "getting-started", Version: "0.1.0"},
 		server.WithToolTimeout(30*time.Second),
@@ -56,7 +58,11 @@ func main() {
 			return "Hello, " + input.Name + "!", nil
 		},
 	))
+	return srv
+}
 
+func main() {
+	srv := newServer()
 	log.Println("getting-started server listening on http://localhost:8787/mcp")
 	if err := srv.Run(":8787"); err != nil { // Streamable HTTP
 		log.Fatal(err)
@@ -119,6 +125,11 @@ go run ./server
 go run ./client
 # → Hello, world!
 ```
+
+The same server also runs in a browser tab. `make serve-web` in
+`examples/getting-started` compiles it to WebAssembly and serves a page on
+`http://localhost:8788/`. The page runs the server in a Web Worker, lists its
+tools, calls `greet`, and shows each JSON-RPC message going each way.
 
 ## Connect a real MCP host
 
