@@ -30,6 +30,7 @@ on:
       - 'server/worker_js.go'
       - 'scripts/collect_web_examples.sh'
       - 'scripts/build-example-wasm.sh'
+      - 'scripts/web_examples_index.py'
       # Tutorials / concepts track.
       - 'tutorials/**/*.md'
       - '.github/workflows/pages.yml'

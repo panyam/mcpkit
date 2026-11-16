@@ -19,6 +19,7 @@ cp "$(go env GOROOT)/lib/wasm/wasm_exec.js" "$out/"
 page="$dir/web"
 [ -f "$page/index.html" ] || page="$(cd "$(dirname "${BASH_SOURCE[0]}")/../examples/common/web" && pwd)"
 cp "$page/index.html" "$page/worker.js" "$out/"
+[ -f "$dir/web/playground.json" ] && cp "$dir/web/playground.json" "$out/"
 size=$(wc -c <"$out/server.wasm" | tr -d ' ')
 gz=$(gzip -9 -c "$out/server.wasm" | wc -c | tr -d ' ')
 echo "built $out (server.wasm $((size / 1024 / 1024)) MB, $((gz / 1024 / 1024)) MB gzipped)"

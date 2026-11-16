@@ -4,6 +4,10 @@
     "url": "get-started/"
   },
   {
+    "name": "Try it",
+    "url": "try/"
+  },
+  {
     "name": "Guides",
     "url": "guides/transports/",
     "children": [

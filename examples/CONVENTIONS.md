@@ -1128,8 +1128,11 @@ examples/<name>/
 - `web/main.go` stays about ten lines, and it uses the defaults the CLI's flags use.
 - Data the server reads from disk gets embedded in `mcp/`, as `skills-core` and `disclosure`
   do with `mcp/skills/`.
-- Add `serve-web` to the Makefile and justfile, a "Try it in your browser" README section, and
-  a smoke call in `tests/web-examples/tests/web-examples.spec.ts`.
+- Add `web/playground.json` with `title`, `summary`, `docs` (the site path of its README page)
+  and `smoke` (`tool`, plus optional `args`, `group` and `replies`, and the `expect` text). The
+  landing page at `/try/` makes its card from it, and `tests/web-examples` makes its smoke call,
+  so the spec needs no edit. The collector stops if the file is missing.
+- Add `serve-web` to the Makefile and justfile, and a "Try it in your browser" README section.
 
 The docs site publishes it at `/try/<name>/` with the shared playground page from
 `examples/common/web/`. `examples/NOTES.md` § Which examples run in the browser lists the

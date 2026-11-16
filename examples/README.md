@@ -4,6 +4,8 @@ Runnable examples covering authentication, async tasks, MCP Apps, and proto-base
 
 > **Most examples ship a guided walkthrough.** Each walkthrough is a scripted MCP host that drives the server through every wire-format detail of the feature. Two terminals: `just serve` (real MCP server, also works with VS Code/MCPJam/Claude Desktop) + `just demo` (the walkthrough). External MCP hosts are only needed when there is no `just demo`.
 
+> **Try some of them in your browser.** [panyam.github.io/mcpkit/try/](https://panyam.github.io/mcpkit/try/) runs getting-started, tasks-v2, mrtr, list-ttl, skills-core and disclosure as playgrounds in your tab, with nothing to install.
+
 > **Adding or auditing an example?** See [CONVENTIONS.md](CONVENTIONS.md) for the canonical structure (layout, server setup, walkthrough, Makefile). The `/example-new`, `/example-audit`, and `/example-upgrade` skills under `.claude/commands/` apply and enforce these conventions.
 
 ## Walkthrough-driven examples
