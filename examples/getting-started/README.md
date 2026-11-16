@@ -22,6 +22,10 @@ just client
 
 ## Run it in your browser
 
+The docs site hosts this page at
+[panyam.github.io/mcpkit/try/getting-started](https://panyam.github.io/mcpkit/try/getting-started/).
+To build and serve it yourself:
+
 ```bash
 just serve-web   # or: make serve-web
 # open http://localhost:8788/
@@ -41,6 +45,9 @@ browser-specific code.
 tools, call `greet`. It runs in-process, over Streamable HTTP and over a stdio
 pipe, then again under `GOOS=js GOARCH=wasm` with node. That second run covers
 the browser build. It needs node on your `PATH`.
+
+`make test-web-examples` at the repo root goes one step further. It builds the
+page the way the docs site does, loads it in Chromium and calls `greet`.
 
 ## What it demonstrates
 

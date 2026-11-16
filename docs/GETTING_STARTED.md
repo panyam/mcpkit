@@ -126,10 +126,12 @@ go run ./client
 # → Hello, world!
 ```
 
-The same server also runs in a browser tab. `make serve-web` in
-`examples/getting-started` compiles it to WebAssembly and serves a page on
-`http://localhost:8788/`. The page runs the server in a Web Worker, lists its
-tools, calls `greet`, and shows each JSON-RPC message going each way.
+The same server also runs in a browser tab. [Try it
+here](https://panyam.github.io/mcpkit/try/getting-started/), with nothing to
+install. The page runs the server, compiled to WebAssembly, in a Web Worker. It
+lists the tools, calls `greet`, and shows each JSON-RPC message going each way.
+`make serve-web` in `examples/getting-started` builds and serves the same page
+on `http://localhost:8788/`.
 
 ## Connect a real MCP host
 

@@ -8,3 +8,4 @@ rm -rf dist
 MCPKIT_DOCS_ENV=production go run . -build
 cp -R static dist/docs/static
 (cd ../.. && uv run scripts/collect_walkthroughs.py)
+bash ../../scripts/collect_web_examples.sh "$DIR/dist/docs/try"

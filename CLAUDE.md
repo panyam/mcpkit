@@ -58,7 +58,7 @@ missions, one worktree each:
 - **#1553** `mission_release_installable`: `make check-install V=<tag>`.
 - **#1701** `mission_progressive_disclosure`: `make exercise-disclosure`. The groups rows fail until #1685.
 - **#1710** `mission_web_examples`: `make exercise-web-examples`. A wasm-ready example has
-  `newServer()`, a scenario test, and a `web/` page.
+  `newServer()`, a scenario test, and a `web/` page, published at `/try/<example>/`.
 
 #1554 (`mission_apps_host`, label `mcpapps`) is queued behind #1683.
 

@@ -23,6 +23,11 @@ on:
       # by collect_walkthroughs.py on every build.
       - 'examples/**/*.md'
       - 'examples/**/bundle/**'
+      # Browser builds of the examples, published under /try/ (#1712).
+      - 'examples/**/web/**'
+      - 'server/worker_js.go'
+      - 'scripts/collect_web_examples.sh'
+      - 'scripts/build-example-wasm.sh'
       # Tutorials / concepts track.
       - 'tutorials/**/*.md'
       - '.github/workflows/pages.yml'
