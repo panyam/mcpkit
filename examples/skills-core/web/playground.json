@@ -1,0 +1,6 @@
+{
+  "title": "Skills",
+  "summary": "One skill served as MCP resources (SEP-2640), plus the format_commit tool it tells the model to call. Read the skill, then call the tool.",
+  "docs": "examples/skills-core/",
+  "smoke": { "tool": "format_commit", "args": { "type": "feat", "summary": "add the playground" }, "expect": "feat: add the playground" }
+}

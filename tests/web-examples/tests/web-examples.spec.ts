@@ -1,8 +1,9 @@
 import { test, expect, type Page, type Locator } from "@playwright/test";
-import { readdirSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 
-// One test per page that scripts/collect_web_examples.sh produced, so a new
-// browser-ready example is loaded and connected with no edit here.
+// One test per page that scripts/collect_web_examples.sh produced. Each page's
+// smoke call comes from its web/playground.json, which the collector publishes
+// next to the page, so a new browser-ready example needs no edit here.
 
 type Smoke = {
   tool: string;
@@ -12,27 +13,29 @@ type Smoke = {
   expect: string; // text the result must contain
 };
 
-// A known call per example. An example missing here still has to connect
-// cleanly and list at least one tool, resource or group.
-const smokes: Record<string, Smoke> = {
-  "getting-started": { tool: "greet", args: { name: "world" }, expect: "Hello, world!" },
-  "tasks-v2": { tool: "confirm_delete", args: { filename: "a.txt" }, replies: ["Send to task"], expect: "deleted 'a.txt'" },
-  mrtr: {
-    tool: "test_incomplete_result_multi_round",
-    replies: ["Send responses", "Send responses"],
-    expect: "your favorite color is",
-  },
-  "list-ttl": { tool: "ping", expect: "pong" },
-  "skills-core": { tool: "format_commit", args: { type: "feat", summary: "add the playground" }, expect: "feat: add the playground" },
-  disclosure: { tool: "billing_invoice_list", group: "billing", expect: "billing_invoice_list: ok" },
-};
-
 const examples = readdirSync(new URL("../.site/try/", import.meta.url), { withFileTypes: true })
   .filter((d) => d.isDirectory())
   .map((d) => d.name);
 
+type Manifest = { title: string; summary: string; docs?: string; smoke?: Smoke };
+const manifest = (name: string): Manifest =>
+  JSON.parse(readFileSync(new URL(`../.site/try/${name}/playground.json`, import.meta.url), "utf8"));
+
 test("at least one example page was collected", () => {
   expect(examples.length).toBeGreaterThan(0);
+});
+
+test("the landing page has a card for every example, and each card opens its page", async ({ page }) => {
+  await page.goto("/try/");
+  const cards = page.locator(".card");
+  await expect(cards).toHaveCount(examples.length);
+  for (const name of examples) {
+    const card = page.locator(`.card[data-example="${name}"]`);
+    await expect(card.locator("h2")).toHaveText(manifest(name).title);
+  }
+  await page.locator('.card[data-example="getting-started"] a.open').click();
+  await expect(page).toHaveURL(/\/try\/getting-started\/$/);
+  await expect(page.locator("#status")).toContainText("Connected to", { timeout: 30_000 });
 });
 
 async function openTool(page: Page, smoke: Smoke): Promise<Locator> {
@@ -56,7 +59,7 @@ for (const name of examples) {
     await page.goto(`/try/${name}/`);
     await expect(page.locator("#status")).toContainText("Connected to", { timeout: 30_000 });
 
-    const smoke = smokes[name];
+    const smoke = manifest(name).smoke;
     if (!smoke) {
       await expect(page.locator(".tool, .item, .group").first()).toBeAttached();
       expect(errors).toEqual([]);

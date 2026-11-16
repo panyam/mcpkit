@@ -103,9 +103,9 @@ that. The download halves too: `tasks-v2` went from 8.4 MB to 4.2 MB gzipped.
 | apps/* (25 modules) | needs a host | the UI resources need an Apps host page (#1554, #1483) |
 | host/* | not a server | terminal Apps hosts, and they still import the clipboard package |
 
-To convert a candidate, move its registration into `mcp/`, add the ten-line `web/main.go`, and add
-a smoke call to `tests/web-examples/tests/web-examples.spec.ts`. The collector and the docs site
-pick it up from `web/main.go`.
+To convert a candidate, move its registration into `mcp/`, then add the ten-line `web/main.go` and
+a `web/playground.json` (`CONVENTIONS.md` § Browser playground). The collector, the `/try/`
+landing page and the Playwright spec pick it up from those two files.
 
 ## demokit
 

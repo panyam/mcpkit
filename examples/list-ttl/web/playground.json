@@ -1,0 +1,6 @@
+{
+  "title": "List caching hints",
+  "summary": "A tool, a resource, a resource template and a prompt, so you can see the ttlMs and cacheScope hints (SEP-2549) on every list and read response.",
+  "docs": "examples/list-ttl/",
+  "smoke": { "tool": "ping", "expect": "pong" }
+}

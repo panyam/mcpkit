@@ -9,6 +9,9 @@
 #     the shared playground page serves it (examples/tasks-v2, #1714).
 #   - web/worker.js plus a server/ package, with the example's own page
 #     (examples/getting-started, #1712).
+# Each one needs web/playground.json: the landing page's title and summary,
+# a docs link, and the smoke call tests/web-examples makes. The landing page
+# at <DEST>/index.html comes from those manifests.
 # Runs as a tail step of docs/site/scripts/build.sh.
 #
 #   scripts/collect_web_examples.sh [DEST]
@@ -28,6 +31,10 @@ for web in "$ROOT"/examples/*/web; do
     echo "collect-web-examples: $name has web/ but neither web/main.go nor web/worker.js + server/, skipping" >&2
     continue
   fi
+  if [ ! -f "$web/playground.json" ]; then
+    echo "collect-web-examples: $name has no web/playground.json (title, summary, docs, smoke)" >&2
+    exit 1
+  fi
   "$ROOT/scripts/build-example-wasm.sh" "$dir" "$pkg"
   rm -rf "${DEST:?}/$name"
   mkdir -p "$DEST/$name"
@@ -36,3 +43,4 @@ for web in "$ROOT"/examples/*/web; do
   n=$((n + 1))
 done
 echo "collect-web-examples: $n example(s) collected"
+python3 "$ROOT/scripts/web_examples_index.py" "$DEST"

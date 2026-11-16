@@ -1,0 +1,6 @@
+{
+  "title": "Multi-round-trip requests",
+  "summary": "Tools that stop and ask the client for input (SEP-2322): elicitation, sampling and roots, answered by you in the page, across one or more rounds.",
+  "docs": "examples/mrtr/",
+  "smoke": { "tool": "test_incomplete_result_multi_round", "replies": ["Send responses", "Send responses"], "expect": "your favorite color is" }
+}
