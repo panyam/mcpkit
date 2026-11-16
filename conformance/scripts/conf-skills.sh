@@ -2,6 +2,11 @@
 # SEP-2640 skills conformance — drives examples/skills through the three
 # upstream `sep-2640-skills-*` server scenarios. Requires zero FAILURE rows.
 #
+# Since #1357 it points at the panyam/mcpconformance branch
+# feat/sep-2640-coverage, which adds the nested-skill, error and directory
+# checks and the hosting client scenarios. It moves back to upstream main when
+# that branch merges upstream.
+#
 # Until PR 330 merged this pointed at the panyam/mcpconformance fork branch
 # chore/sep-2640-yaml and was INFO-only, exiting 0 regardless of results while
 # the WG iterated sep-2640.yaml. The scenarios are now on upstream main
@@ -47,9 +52,9 @@ require_fixture_alive "$PID" "$OUT/server.log"
 # `sep-2640-skills-index` was renamed to `sep-2640-skills-enumeration` when the
 # 2026-08-21 SEP revision retired skill://index.json in favour of skills/list.
 #
-# Upstream also registers five client-side scenarios (sep-2640-client-no-prefetch
-# and sep-2640-client-verify-{digest,size,frontmatter}). They need a client
-# driver rather than this fixture and are not run here.
+# The same checkout registers eight client-side scenarios (sep-2640-client-*).
+# They drive cmd/testclient rather than this fixture, so `make
+# exercise-disclosure` runs them in its step 2, not here.
 SKILLS_SCENARIOS="sep-2640-skills-enumeration sep-2640-skills-manifest sep-2640-skills-directory"
 
 for scenario in ${SKILLS_SCENARIOS}; do

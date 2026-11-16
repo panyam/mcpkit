@@ -156,6 +156,9 @@ testconf-groups:
     just -f conformance/justfile testconf-groups
 
 # Create the groups suite checkout if missing
+conf-skills-setup:
+    just -f conformance/justfile conf-skills-setup
+
 conf-groups-setup:
     just -f conformance/justfile conf-groups-setup
 

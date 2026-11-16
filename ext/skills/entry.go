@@ -3,7 +3,6 @@ package skills
 import (
 	"encoding/json"
 	"errors"
-	"fmt"
 )
 
 // ResourcesDynamic is the sentinel a server publishes in place of a resource
@@ -94,25 +93,24 @@ func (r SkillResources) MarshalJSON() ([]byte, error) {
 }
 
 // UnmarshalJSON accepts the array form or the exact string "dynamic".
-// Anything else, including null and any other string, is ErrInvalidResources:
-// the SEP makes such an entry invalid rather than merely unpinned.
+// Anything else, including null and any other string, decodes to the zero
+// value, the same as an absent field. The SEP makes such an entry invalid, and
+// ReadFromEntry refuses it with ErrInvalidResources. Decoding still succeeds,
+// so one invalid entry leaves the rest of a skills/list page loadable.
 func (r *SkillResources) UnmarshalJSON(b []byte) error {
+	*r = SkillResources{}
 	var s string
 	if err := json.Unmarshal(b, &s); err == nil {
-		if s != ResourcesDynamic {
-			return fmt.Errorf("%w: got %q", ErrInvalidResources, s)
+		if s == ResourcesDynamic {
+			r.Dynamic = true
 		}
-		*r = SkillResources{Dynamic: true}
 		return nil
 	}
 	var files []SkillResource
 	if err := json.Unmarshal(b, &files); err != nil {
-		return fmt.Errorf("%w: %v", ErrInvalidResources, err)
+		return nil
 	}
-	if files == nil {
-		return ErrInvalidResources
-	}
-	*r = SkillResources{Files: files}
+	r.Files = files
 	return nil
 }
 

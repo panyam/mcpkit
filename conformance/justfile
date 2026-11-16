@@ -121,6 +121,9 @@ testconf-groups:
     @bash {{CONFORMANCE_DIR}}/scripts/conf-groups.sh
 
 # Create the groups suite checkout if missing
+conf-skills-setup:
+    @bash {{CONFORMANCE_DIR}}/scripts/conf-skills-setup.sh
+
 conf-groups-setup:
     @bash {{CONFORMANCE_DIR}}/scripts/conf-groups-setup.sh
 

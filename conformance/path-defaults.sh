@@ -18,6 +18,6 @@
 : "${MCPCONFORMANCE_GROUPS_PATH:="$REPO_ROOT/../conf-groups"}"
 : "${MCPCONFORMANCE_MRTR_PATH:="$REPO_ROOT/../conf-upstream-main"}"
 : "${MCPCONFORMANCE_SCOPE_CHALLENGE_PATH:="$REPO_ROOT/../conf-481"}"
-: "${MCPCONFORMANCE_SKILLS_PATH:="$REPO_ROOT/../conf-upstream-main"}"
+: "${MCPCONFORMANCE_SKILLS_PATH:="$REPO_ROOT/../conf-skills"}"
 : "${MCPCONFORMANCE_STATELESS_PATH:="$REPO_ROOT/../conf-upstream-main"}"
 : "${MCPCONFORMANCE_TASKS_V2_PATH:="$REPO_ROOT/../conf-upstream-main"}"
