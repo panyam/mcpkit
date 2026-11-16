@@ -79,6 +79,7 @@ for (const name of examples) {
 
       await page.goto(`/try/${name}/?wire=${wire}`);
       await expect(page.locator("#status")).toContainText(`${wire} wire`, { timeout: 30_000 });
+      await expect(page.locator("#title")).toHaveText(manifest(name).title);
 
       const log = page.locator("#log");
       if (wire === "stateless") {
