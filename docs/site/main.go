@@ -25,6 +25,7 @@ import (
 	"strings"
 	"sync"
 
+	chromahtml "github.com/alecthomas/chroma/formatters/html"
 	s3 "github.com/panyam/s3gen"
 	"github.com/yuin/goldmark"
 	highlighting "github.com/yuin/goldmark-highlighting"
@@ -325,7 +326,10 @@ var markdown = goldmark.New(
 		extension.GFM,
 		extension.Strikethrough,
 		extension.Typographer,
-		highlighting.NewHighlighting(highlighting.WithStyle("github")),
+		highlighting.NewHighlighting(
+			highlighting.WithStyle(codeStyleLight),
+			highlighting.WithFormatOptions(chromahtml.WithClasses(true)),
+		),
 		&anchor.Extender{},
 	),
 	goldmark.WithParserOptions(parser.WithAutoHeadingID()),
@@ -356,6 +360,7 @@ var Site = &s3.Site{
 		"includeFile":        includeFile,
 		"renderMarkdownFile": renderMarkdownFile,
 		"gitfile":            gitfile,
+		"codeThemeCSS":       codeThemeCSS,
 	},
 }
 
