@@ -31,13 +31,14 @@ just serve-web   # or: make serve-web
 # open http://localhost:8788/
 ```
 
-This compiles `server/` to WebAssembly and runs it in a Web Worker on the page,
-with no backend. The page lists the server's tools and calls them, and it shows
-the raw JSON-RPC going each way. In a wasm build `srv.Run` serves the page over
-`postMessage` instead of listening on a port, so `server/main.go` has no
-browser-specific code.
+This compiles `server/` to WebAssembly and runs it in a Web Worker under the
+shared playground page, with no backend. The page lists the server's tools and
+calls them, and it shows the raw JSON-RPC going each way. It opens on the
+stateless wire, and the Session button switches to the older wire. In a wasm
+build `srv.Run` serves the page over `postMessage` instead of listening on a
+port, so `server/main.go` has no browser-specific code.
 
-![The inspector page after calling greet](screenshots/web.png)
+![The playground after calling greet on the stateless wire](screenshots/web.png)
 
 ## Tests
 

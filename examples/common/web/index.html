@@ -66,6 +66,11 @@
   .ask h3 { margin: 0; font-size: 13px; color: var(--warn); }
   .task { border: 1px solid var(--border); border-radius: 6px; padding: 8px; margin-top: 8px; }
   .task .state { font-weight: 600; }
+  .wires { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: -4px 0 12px; font-size: 13px; }
+  .wires[hidden] { display: none; }
+  .wires button { margin: 0; padding: 3px 10px; background: none; color: var(--muted); border: 1px solid var(--border); }
+  .wires button.on { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .wires .note { flex-basis: 100%; }
   #asks:empty { display: none; }
   #asks { margin-bottom: 12px; }
   #log { display: flex; flex-direction: column; gap: 8px; max-height: 75vh; overflow: auto; }
@@ -86,6 +91,12 @@
   <div class="grid">
     <section>
       <div id="status" class="status">Loading server.wasm…</div>
+      <div class="wires" id="wires" hidden>
+        <span>Wire:</span>
+        <button data-wire="stateless">Stateless (2026-07-28)</button>
+        <button data-wire="session">Session (2025-11-25)</button>
+        <span class="note" id="wire-note"></span>
+      </div>
       <div id="asks"></div>
       <div class="tabs" role="tablist">
         <button class="on" data-pane="tools">Tools <span id="n-tools"></span></button>
@@ -105,8 +116,9 @@
       </div>
       <details class="cfg">
         <summary>Client capabilities</summary>
-        <p class="note">The page sends these in initialize. Edit them and reconnect to see how the server
-          behaves for a client without, say, the tasks extension.</p>
+        <p class="note">On the session wire the page sends these once, in initialize. On the stateless wire
+          it sends them in every request's _meta. Edit them and reconnect to see how the server behaves for a
+          client without, say, the tasks extension.</p>
         <textarea id="caps" rows="9"></textarea>
         <button id="reconnect">Reconnect</button>
       </details>
@@ -134,12 +146,20 @@ const DEFAULT_CAPS = {
   },
 };
 const TERMINAL = new Set(["completed", "failed", "cancelled"]);
+const STATELESS_VERSION = "2026-07-28";
+const SESSION_VERSION = "2025-11-25";
+const CLIENT_INFO = { name: "mcpkit-playground", version: "0.1.0" };
+const WIRE_NOTES = {
+  stateless: "No initialize and no session. Every request carries the protocol version and the client capabilities in _meta. The server can't send requests back, so a tool that needs input returns input_required.",
+  session: "The older wire. initialize opens a session, and the server can send requests and notifications back to the page in the middle of a call.",
+};
 
 const $ = (id) => document.getElementById(id);
 const statusEl = $("status"), logEl = $("log"), asksEl = $("asks");
 $("caps").value = JSON.stringify(DEFAULT_CAPS, null, 2);
 
 let worker, pending, progressSinks, nextId;
+let wires = ["stateless", "session"], wire = "stateless";
 
 function el(tag, attrs = {}, ...kids) {
   const e = document.createElement(tag);
@@ -170,8 +190,23 @@ function post(msg) {
   worker.postMessage(text);
 }
 
+// withStatelessMeta adds the SEP-2575 envelope a stateless request must carry,
+// next to anything already in _meta such as a progress token.
+function withStatelessMeta(params) {
+  return {
+    ...(params || {}),
+    _meta: {
+      ...((params || {})._meta || {}),
+      "io.modelcontextprotocol/protocolVersion": STATELESS_VERSION,
+      "io.modelcontextprotocol/clientCapabilities": JSON.parse($("caps").value),
+      "io.modelcontextprotocol/clientInfo": CLIENT_INFO,
+    },
+  };
+}
+
 function request(method, params) {
   const id = nextId++;
+  if (wire === "stateless") params = withStatelessMeta(params);
   post({ jsonrpc: "2.0", id, method, params });
   return new Promise((resolve, reject) => pending.set(id, { resolve, reject }));
 }
@@ -183,6 +218,14 @@ function connect() {
   $("tab-groups").hidden = true;
   for (const id of ["tools", "resources", "prompts", "groups"]) { $(id).replaceChildren(); $("n-" + id).textContent = ""; }
   $("sendRaw").disabled = true;
+  for (const b of document.querySelectorAll("#wires button")) b.classList.toggle("on", b.dataset.wire === wire);
+  $("wire-note").textContent = WIRE_NOTES[wire];
+  $("raw").value = JSON.stringify(wire === "stateless"
+    ? { jsonrpc: "2.0", id: 9000, method: "tools/list", params: withStatelessMeta({}) }
+    : { jsonrpc: "2.0", id: 9000, method: "ping" }, null, 2);
+  const url = new URL(location.href);
+  url.searchParams.set("wire", wire);
+  history.replaceState(null, "", url);
   setStatus("Loading server.wasm…");
   worker = new Worker("worker.js");
   worker.onmessage = onMessage;
@@ -214,21 +257,29 @@ function onNotification(msg) {
 }
 
 async function handshake() {
-  let caps;
-  try { caps = JSON.parse($("caps").value); } catch (err) { setStatus("Client capabilities are not valid JSON", "bad"); return; }
+  try { JSON.parse($("caps").value); } catch (err) { setStatus("Client capabilities are not valid JSON", "bad"); return; }
   try {
-    const init = await request("initialize", {
-      protocolVersion: "2025-11-25",
-      capabilities: caps,
-      clientInfo: { name: "mcpkit-playground", version: "0.1.0" },
-    });
-    post({ jsonrpc: "2.0", method: "notifications/initialized" });
-    const info = init.serverInfo || {};
+    let info, served, version;
+    if (wire === "stateless") {
+      const res = await request("server/discover", {});
+      info = (res._meta || {})["io.modelcontextprotocol/serverInfo"] || res.serverInfo || {};
+      served = res.capabilities || {};
+      version = STATELESS_VERSION;
+    } else {
+      const init = await request("initialize", {
+        protocolVersion: SESSION_VERSION,
+        capabilities: JSON.parse($("caps").value),
+        clientInfo: CLIENT_INFO,
+      });
+      post({ jsonrpc: "2.0", method: "notifications/initialized" });
+      info = init.serverInfo || {};
+      served = init.capabilities || {};
+      version = init.protocolVersion;
+    }
     $("title").textContent = info.name + " playground";
     document.title = info.name + " · mcpkit playground";
-    setStatus("Connected to " + info.name + " " + info.version + ", protocol " + init.protocolVersion, "ok");
+    setStatus("Connected to " + info.name + " " + info.version + " · " + wire + " wire, protocol " + version, "ok");
     $("sendRaw").disabled = false;
-    const served = init.capabilities || {};
     if (served.tools) renderTools(await listAll("tools/list", "tools"));
     if (served.resources) {
       const resources = await listAll("resources/list", "resources");
@@ -550,6 +601,9 @@ for (const b of document.querySelectorAll(".tabs button")) {
   };
 }
 $("reconnect").onclick = connect;
+for (const b of document.querySelectorAll("#wires button")) {
+  b.onclick = () => { if (b.dataset.wire !== wire) { wire = b.dataset.wire; connect(); } };
+}
 $("clearLog").onclick = () => logEl.replaceChildren();
 $("sendRaw").onclick = () => {
   const text = $("raw").value;
@@ -557,7 +611,16 @@ $("sendRaw").onclick = () => {
   log("out", text);
   worker.postMessage(text);
 };
-connect();
+// The manifest says which wires this example offers. The first one is the
+// default, and ?wire= picks another.
+fetch("playground.json").then((r) => (r.ok ? r.json() : {})).catch(() => ({})).then((m) => {
+  if (Array.isArray(m.wires) && m.wires.length) wires = m.wires;
+  const asked = new URLSearchParams(location.search).get("wire");
+  wire = wires.includes(asked) ? asked : wires[0];
+  for (const b of document.querySelectorAll("#wires button")) b.hidden = !wires.includes(b.dataset.wire);
+  $("wires").hidden = wires.length < 2;
+  connect();
+});
 </script>
 </body>
 </html>

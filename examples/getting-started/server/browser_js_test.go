@@ -10,8 +10,9 @@ import (
 )
 
 // TestBrowserBuild drives this example's main path, newServer then Run, the
-// way ../web/worker.js does: JSON-RPC strings in through onmessage, out
-// through postMessage. Node stands in for the Web Worker.
+// way the shared playground's worker.js (examples/common/web) does. JSON-RPC
+// strings go in through onmessage and come out through postMessage. Node
+// stands in for the Web Worker.
 func TestBrowserBuild(t *testing.T) {
 	posted := make(chan string, 16)
 	post := js.FuncOf(func(_ js.Value, args []js.Value) any {

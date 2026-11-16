@@ -130,6 +130,8 @@ The same server also runs in a browser tab. [Try it
 here](https://panyam.github.io/mcpkit/try/getting-started/), with nothing to
 install. The page runs the server, compiled to WebAssembly, in a Web Worker. It
 lists the tools, calls `greet`, and shows each JSON-RPC message going each way.
+It starts on the stateless wire (2026-07-28), and a button switches to the older
+session wire.
 `make serve-web` in `examples/getting-started` builds and serves the same page
 on `http://localhost:8788/`.
 

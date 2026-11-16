@@ -86,7 +86,7 @@ that. The download halves too: `tasks-v2` went from 8.4 MB to 4.2 MB gzipped.
 
 | Example | Status | Why |
 |---|---|---|
-| getting-started | runs | its own page, `server/` package (#1711) |
+| getting-started | runs | the shared page, building `server/` (#1711, #1719) |
 | tasks-v2, mrtr, list-ttl, skills-core, disclosure | runs | `mcp/` + `web/main.go`, shared playground page |
 | tasks | candidate | v1 is frozen, so it's low value next to tasks-v2 |
 | elicitation | candidate | check its `exec.Command` use first |
@@ -106,6 +106,18 @@ that. The download halves too: `tasks-v2` went from 8.4 MB to 4.2 MB gzipped.
 To convert a candidate, move its registration into `mcp/`, then add the ten-line `web/main.go` and
 a `web/playground.json` (`CONVENTIONS.md` § Browser playground). The collector, the `/try/`
 landing page and the Playwright spec pick it up from those two files.
+
+### The wire switch (#1719)
+
+The playground opens on the stateless wire (2026-07-28) and offers the session wire (2025-11-25)
+as the older one. The server needs nothing for this. `RunWorker` serves stdio, and stdio routes
+each request by its shape (`server/stateless_detect.go`).
+- On the stateless wire, the page calls `server/discover` instead of `initialize`.
+- Every stateless request carries `protocolVersion`, `clientCapabilities` and `clientInfo` in
+  `_meta`, and `serverInfo` comes back in each result's `_meta`.
+- The stateless wire has no `ping`, no progress notifications, and no requests from the server
+  to the page. So the elicitation in `tasks-v2` and `mrtr` arrives as `input_required` there,
+  never as the session wire's "The server asks" panel.
 
 ## demokit
 

@@ -22,11 +22,10 @@ dependency is `github.com/panyam/mcpkit`, so a newcomer reading the Get Started
 page can copy the code into their own project verbatim. `/example-audit` should
 skip it (no `--serve` dispatch, no `runDemo`, no `WALKTHROUGH.md`, no
 `common.RunServer`). It does have a scenario test (`server/main_test.go`) and a
-browser build (`web/`, #1711), which `make -C examples test-getting-started`
-runs. Any example with `web/worker.js` and a `server/` package gets published at
-`/try/<example>/` on the docs site and loaded in Chromium by
-`make test-web-examples` (#1712). Its page must show "Connected to" in `#status`
-and give each tool a `.tool[data-tool=<name>]` block whose form calls it. Every other non-UI example follows the full convention below.
+browser build, which `make -C examples test-getting-started` runs (#1711). Its
+`web/playground.json` builds `./server` for the shared playground, as
+§ Browser playground describes. Every other non-UI example follows the full
+convention below.
 
 ---
 
@@ -1128,12 +1127,19 @@ examples/<name>/
 - `web/main.go` stays about ten lines, and it uses the defaults the CLI's flags use.
 - Data the server reads from disk gets embedded in `mcp/`, as `skills-core` and `disclosure`
   do with `mcp/skills/`.
-- Add `web/playground.json` with `title`, `summary`, `docs` (the site path of its README page)
-  and `smoke` (`tool`, plus optional `args`, `group` and `replies`, and the `expect` text). The
-  landing page at `/try/` makes its card from it, and `tests/web-examples` makes its smoke call,
-  so the spec needs no edit. The collector stops if the file is missing.
-- Add `serve-web` to the Makefile and justfile, and a "Try it in your browser" README section.
+- Add `web/playground.json`. Having one makes the example browser-ready.
+  - `title`, `summary`: the card on the `/try/` landing page.
+  - `docs`: the site path of its README page, such as `examples/tasks-v2/`.
+  - `smoke`: `tool`, the `expect` text, and optionally `args`, `group` and `replies`.
+    `tests/web-examples` makes this call on every wire, so the spec needs no edit.
+  - `wires` (optional): the wires the playground offers, first one default. It defaults to
+    `["stateless", "session"]`. List one wire when the example only makes sense on it.
+  - `package` (optional): what to build, default `./web`. getting-started uses `./server`.
+- Add `include ../common/playground.mk` to the Makefile and `import '../common/playground.just'`
+  to the justfile for `serve-web`, plus a "Try it in your browser" README section.
 
 The docs site publishes it at `/try/<name>/` with the shared playground page from
-`examples/common/web/`. `examples/NOTES.md` § Which examples run in the browser lists the
+`examples/common/web/`. `?wire=session` or `?wire=stateless` picks the wire. Over `postMessage`
+the server serves both wires, and the page chooses per request: `initialize` and a session, or
+`server/discover` and the SEP-2575 `_meta` envelope on every request (#1719). `examples/NOTES.md` § Which examples run in the browser lists the
 candidates and the examples that can't run there.
