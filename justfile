@@ -151,6 +151,14 @@ testconf-agents:
 conf-agents-setup:
     just -f conformance/justfile conf-agents-setup
 
+# Run groups extension conformance (progressive-disclosure-wg PR 19), fork-based
+testconf-groups:
+    just -f conformance/justfile testconf-groups
+
+# Create the groups suite checkout if missing
+conf-groups-setup:
+    just -f conformance/justfile conf-groups-setup
+
 # Create the two events suite checkouts if missing (delegates to conformance/justfile)
 conf-events-setup:
     just -f conformance/justfile conf-events-setup

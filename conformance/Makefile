@@ -39,6 +39,7 @@ MCPCONFORMANCE_BASE_PATH        ?= $(abspath $(REPO_ROOT)/../conf-upstream-main)
         testconf-file-inputs testconf-auth-server \
         testconf-stateless testconf-skills testconf-events \
         testconf-events-client conf-events-setup conf-pending-setup testconf-agents conf-agents-setup \
+        testconf-groups conf-groups-setup \
         testconf-elicitation testconf-upstream-audit \
         testconf-external-checker \
         refresh-conformance check-conformance-stale \
@@ -49,7 +50,7 @@ MCPCONFORMANCE_BASE_PATH        ?= $(abspath $(REPO_ROOT)/../conf-upstream-main)
 # exist (each target fail-fasts with a remediation message if missing). Fair
 # game: contributors should have all conf-* sibling clones before pushing
 # anything that touches conformance surfaces.
-test: testconf testconfauth testconf-client testconf-tasks testconf-tasks-v2 testconf-mrtr testconf-file-inputs testconf-auth-server testconf-stateless testconf-skills testconf-events testconf-events-client testconf-agents testconf-upstream-audit refresh-conformance ## Run all conformance suites (needs fork worktrees + conf-upstream-main)
+test: testconf testconfauth testconf-client testconf-tasks testconf-tasks-v2 testconf-mrtr testconf-file-inputs testconf-auth-server testconf-stateless testconf-skills testconf-events testconf-events-client testconf-agents testconf-groups testconf-upstream-audit refresh-conformance ## Run all conformance suites (needs fork worktrees + conf-upstream-main)
 
 testconf: ## Run MCP conformance test suite (requires Node.js/npx)
 	cd $(REPO_ROOT) && bash scripts/conformance-test.sh
@@ -100,6 +101,12 @@ testconf-agents: ## Run agent discovery conformance (agents-wg#22), informationa
 
 conf-agents-setup: ## Create the agents suite checkout (MCPCONFORMANCE_AGENTS_PATH) if missing. Safe to re-run.
 	@bash $(CONFORMANCE_DIR)/scripts/conf-agents-setup.sh
+
+testconf-groups: ## Run groups extension conformance (progressive-disclosure-wg PR 19), fork-based. Drives examples/disclosure through the fork's groups scenario on both wires; exits 1 on any FAILURE row.
+	@bash $(CONFORMANCE_DIR)/scripts/conf-groups.sh
+
+conf-groups-setup: ## Create the groups suite checkout (MCPCONFORMANCE_GROUPS_PATH) if missing. Safe to re-run.
+	@bash $(CONFORMANCE_DIR)/scripts/conf-groups-setup.sh
 
 conf-pending-setup: ## Create the file-inputs and auth-server suite checkout (MCPCONFORMANCE_FILE_INPUTS_PATH, MCPCONFORMANCE_AUTH_PATH) if missing. Safe to re-run.
 	@bash $(CONFORMANCE_DIR)/scripts/conf-pending-setup.sh

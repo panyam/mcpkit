@@ -15,6 +15,10 @@ instead of 200 tools, and fetches one group's tools with `groups/get` when it ne
 billing group lists the `billing-refunds` skill next to its tools. A client that doesn't declare
 the extension still gets the flat list.
 
+Groups nest. billing and users both list `disputes`, a child group with its own instructions.
+`groups/list` leaves `disputes` out, since it sits under a parent, and `groups/get disputes`
+resolves it by name. The groups conformance suite (`make testconf-groups`) grades this nesting.
+
 ## Try it in your browser
 
 [panyam.github.io/mcpkit/try/disclosure](https://panyam.github.io/mcpkit/try/disclosure/) runs this server in a browser tab,
@@ -53,7 +57,7 @@ go run . --check --url http://127.0.0.1:18420 --wire=stateless
   PASS stateless groups client: groups/list returns one group per theme: 8 groups, want 8, 1030 bytes
   PASS stateless groups client: groups/get billing returns its tools and SKILL.md: 25 tools, want 25, SKILL.md listed true
   PASS stateless groups client: tools/list leaves out grouped tools: 0 of 200 tools, 156 bytes
-  INFO stateless sizes: groups/get billing vs flat tools/list: groups/list 1030 + groups/get billing 10702 + tools/list 156 = 11888 bytes, flat tools/list 82055 bytes (14%)
+  INFO stateless sizes: groups/get billing vs flat tools/list: groups/list 1030 + groups/get billing 10802 + tools/list 156 = 11988 bytes, flat tools/list 82055 bytes (14%)
 ```
 
 The plain client declares no extensions and must get the flat list. The groups client declares

@@ -1138,6 +1138,9 @@ examples/<name>/
     this call on every wire, so the spec needs no edit.
   - `complete` (optional): `prompt`, `argument`, `value` and `expect`. The spec types `value` into
     the prompt argument and waits for `expect` among the server's completions.
+  - `nested` (optional): `parents`, `child` and `expect`. The spec opens each parent group, opens
+    `child` inside it, and waits for `expect` in the child's `groups/get` result. It also checks
+    that `child` is absent from the top level.
   - `wires` (optional): the wires the playground offers, first one default. It defaults to
     `["stateless", "session"]`. List one wire when the example only makes sense on it.
   - `package` (optional): what to build, default `./web`. getting-started uses `./server`. A

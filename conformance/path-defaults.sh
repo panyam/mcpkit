@@ -15,6 +15,7 @@
 : "${MCPCONFORMANCE_EVENTS_CLIENT_PATH:="$REPO_ROOT/../conf-events-client"}"
 : "${MCPCONFORMANCE_EVENTS_PATH:="$REPO_ROOT/../conf-events"}"
 : "${MCPCONFORMANCE_FILE_INPUTS_PATH:="$REPO_ROOT/../conf-pending"}"
+: "${MCPCONFORMANCE_GROUPS_PATH:="$REPO_ROOT/../conf-groups"}"
 : "${MCPCONFORMANCE_MRTR_PATH:="$REPO_ROOT/../conf-upstream-main"}"
 : "${MCPCONFORMANCE_SCOPE_CHALLENGE_PATH:="$REPO_ROOT/../conf-481"}"
 : "${MCPCONFORMANCE_SKILLS_PATH:="$REPO_ROOT/../conf-upstream-main"}"

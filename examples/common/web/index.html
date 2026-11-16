@@ -578,10 +578,11 @@ function groupItem(g) {
     request("groups/get", { name: g.name }).then((res) => {
       body.replaceChildren();
       if (res.instructions) body.append(el("div", { class: "note", text: res.instructions }));
+      if ((res.groups || []).length) body.append(el("div", { class: "note", text: "Groups inside " + g.name + ":" }));
+      for (const sub of res.groups || []) body.append(groupItem(sub));
       for (const t of res.tools || []) body.append(toolItem(t));
       for (const r of res.resources || []) body.append(el("div", { class: "note", text: "resource: " + r.uri }));
       for (const p of res.prompts || []) body.append(el("div", { class: "note", text: "prompt: " + p.name }));
-      for (const sub of res.groups || []) body.append(groupItem(sub));
     }, (err) => body.replaceChildren(el("div", { class: "error-text", text: JSON.stringify(err) })));
     return body;
   });

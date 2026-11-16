@@ -46,6 +46,7 @@ resolve_script() {
         testconf-events)                       echo "conformance/scripts/conf-events.sh" ;;
         testconf-events-client)                echo "conformance/scripts/conf-events-client.sh" ;;
         testconf-agents)                       echo "conformance/scripts/conf-agents.sh" ;;
+        testconf-groups)                       echo "conformance/scripts/conf-groups.sh" ;;
         testkcl-auto)                          echo "scripts/testkcl-auto.sh" ;;
         *) echo "resolve_script: unknown stage token '$1'" >&2; return 1 ;;
     esac
@@ -128,6 +129,7 @@ run_stage 8h 9 skills-conformance testconf-skills
 run_stage 8i 9 events-conformance testconf-events info
 run_stage 8j 9 events-client-conformance testconf-events-client info
 run_stage 8k 9 agents-conformance testconf-agents info
+run_stage 8l 9 groups-conformance testconf-groups info
 run_stage 9 9 keycloak testkcl-auto
 echo "" | tee -a "$REPORT_DIR/run.log"
 echo "=== Results: $PASS passed, $FAIL failed, $INFO informational ===" | tee -a "$REPORT_DIR/run.log"

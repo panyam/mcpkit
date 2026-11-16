@@ -7,6 +7,7 @@ import (
 	"embed"
 	"fmt"
 	"io/fs"
+	"slices"
 	"strings"
 
 	"github.com/panyam/mcpkit/core"
@@ -101,10 +102,18 @@ func Register(srv *server.Server) error {
 	return fixtureGroups().RegisterWith(srv)
 }
 
+// NestedGroup is a child group listed under both billing and users. It is
+// absent from groups/list, and groups/get resolves it by name.
+const NestedGroup = "disputes"
+
+// NestedGroupParents are the groups that list NestedGroup.
+var NestedGroupParents = []string{"billing", "users"}
+
 // fixtureGroups puts each theme's 25 tools in a group named after the theme.
 // billing also lists the billing-refunds skill. incident-triage spans three
 // themes, so no group lists it, and every client sees it in
-// resources/list.
+// resources/list. disputes nests under billing and users, so a client meets
+// one child group under two parents.
 func fixtureGroups() *groups.Catalog {
 	byTheme := map[string][]string{}
 	for _, def := range Tools() {
@@ -122,9 +131,19 @@ func fixtureGroups() *groups.Catalog {
 			d.Instructions = "For a refund, follow the billing-refunds skill listed in this group's resources."
 			d.Resources = []string{BillingSkill}
 		}
+		if slices.Contains(NestedGroupParents, t.name) {
+			d.Groups = []string{NestedGroup}
+		}
 		if err := cat.Add(d); err != nil {
 			panic(err) // the theme table is fixed, so this is a programming error
 		}
+	}
+	if err := cat.Add(groups.Def{
+		Name:         NestedGroup,
+		Description:  "Use when a customer disputes a charge on an invoice.",
+		Instructions: "Look the invoice up with billing_invoice_get, then check the account with users_account_get.",
+	}); err != nil {
+		panic(err)
 	}
 	return cat
 }
