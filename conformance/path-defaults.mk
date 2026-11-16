@@ -13,6 +13,7 @@ MCPCONFORMANCE_CLIENT_PATH          ?= $(abspath $(REPO_ROOT)/../conf-upstream-m
 MCPCONFORMANCE_EVENTS_CLIENT_PATH   ?= $(abspath $(REPO_ROOT)/../conf-events-client)
 MCPCONFORMANCE_EVENTS_PATH          ?= $(abspath $(REPO_ROOT)/../conf-events)
 MCPCONFORMANCE_FILE_INPUTS_PATH     ?= $(abspath $(REPO_ROOT)/../conf-pending)
+MCPCONFORMANCE_GROUPS_PATH          ?= $(abspath $(REPO_ROOT)/../conf-groups)
 MCPCONFORMANCE_MRTR_PATH            ?= $(abspath $(REPO_ROOT)/../conf-upstream-main)
 MCPCONFORMANCE_SCOPE_CHALLENGE_PATH ?= $(abspath $(REPO_ROOT)/../conf-481)
 MCPCONFORMANCE_SKILLS_PATH          ?= $(abspath $(REPO_ROOT)/../conf-upstream-main)

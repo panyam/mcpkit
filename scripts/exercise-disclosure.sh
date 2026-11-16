@@ -4,15 +4,16 @@
 #
 #   make exercise-disclosure
 #
-# Three steps, one table:
+# Four steps, one table:
 #   1. testconf-skills, the SEP-2640 server suite against examples/skills.
 #   2. The sep-2640-client-* scenarios, each driving cmd/testclient. The names
 #      come from conformance/client-check-counts.json.
 #   3. examples/disclosure on each wire, checked by its own --check mode. It
 #      connects a plain client and a groups client, and prints the size of
 #      groups/get next to the flat tools/list.
+#   4. testconf-groups, the fork's groups scenario against
+#      examples/disclosure --conformance-groups on both wires (#1708).
 #
-# Step 3's groups rows fail until mcpkit serves the groups extension (#1685).
 # Exits 1 if any step failed.
 set -u
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -76,6 +77,11 @@ for wire in legacy stateless; do
     kill "$pid" 2>/dev/null
     wait "$pid" 2>/dev/null
 done
+
+echo "  4. groups conformance scenario:"
+make -C "$ROOT" testconf-groups >"$LOG/groups.log" 2>&1 || fail=1
+echo "    $(grep -E '^testconf-groups: ' "$LOG/groups.log" | tail -1 | sed 's/ (artifacts.*//' || true)"
+grep -q '^testconf-groups: ' "$LOG/groups.log" || echo "    testconf-groups: no summary, see $LOG/groups.log"
 
 echo "Full logs in $LOG"
 exit "$fail"

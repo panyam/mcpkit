@@ -255,3 +255,23 @@ suites:
       The -32021 refusal of an undeclared client (1673) has no row yet,
       because the proposal text does not state it.
     tracking: "mcpkit 1673"
+
+  - suite: testconf-groups
+    sep: Groups extension, progressive-disclosure-wg PR 19 (draft, no SEP number)
+    stage: 8l
+    status: INFO
+    source:
+      repo: panyam/mcpconformance
+      branch: feat/groups-conformance
+      path_var: MCPCONFORMANCE_GROUPS_PATH
+      default_path: ../conf-groups
+    note: >-
+      One server scenario, groups, with 13 checks, run on both wires against
+      examples/disclosure --conformance-groups: 14 of 14 on each (the 13 checks plus the harness's wire-schema-valid), measured
+      2026-11-16 at fork ee08a69. Rows quote the WG draft at 15b2a5cf. The fixture
+      flag nests a disputes group under billing and users, so the nesting checks
+      have something to grade. Each check has a negative control in the fork's
+      negative.test.ts. Check IDs use a groups- prefix until the SEP is numbered,
+      and INFO for the same reason as agents. Client scenarios (no groups/* to a
+      server without the extension, stopping on a cycle) are not written yet.
+    tracking: "mcpkit 1708"
