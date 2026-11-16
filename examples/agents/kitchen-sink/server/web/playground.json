@@ -1,0 +1,8 @@
+{
+  "title": "Agent kitchen sink tools",
+  "summary": "The three tools the agent kitchen-sink drives: greet, a large report for testing output offloading, and summary statistics over a list of numbers.",
+  "docs": "https://github.com/panyam/mcpkit/tree/main/examples/agents/kitchen-sink",
+  "slug": "kitchen-sink",
+  "package": ".",
+  "smoke": { "tool": "analyze", "args": { "numbers": "[1, 2, 3, 4]" }, "expect": "mean" }
+}

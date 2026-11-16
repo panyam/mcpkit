@@ -22,3 +22,5 @@ help:
 
 # Default: generate, test, and run
 all: generate test run
+
+import '../../common/playground.just'

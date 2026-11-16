@@ -19,3 +19,5 @@ build:
     go build -o file-inputs-demo .
 
 default: demo
+
+import '../common/playground.just'

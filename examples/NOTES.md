@@ -88,11 +88,10 @@ that. The download halves too: `tasks-v2` went from 8.4 MB to 4.2 MB gzipped.
 |---|---|---|
 | getting-started | runs | the shared page, building `server/` (#1711, #1719) |
 | tasks-v2, mrtr, list-ttl, skills-core, disclosure | runs | `mcp/` + `web/main.go`, shared playground page |
-| tasks | candidate | v1 is frozen, so it's low value next to tasks-v2 |
-| elicitation | candidate | check its `exec.Command` use first |
-| file-inputs | candidate | uploads travel in-band, so it should work |
-| protogen/bookservice | candidate | generated tools on a plain server |
-| agents/kitchen-sink/server | candidate | plain server; check the agents extension's client side |
+| file-inputs | runs | `mcp/` + `web/main.go`. Files arrive as data URIs, and the browser build saves none (#1716) |
+| protogen/bookservice, agents/kitchen-sink/server | runs | already plain servers, so `"package": "."` (#1716) |
+| tasks | skipped | v1 is frozen, and tasks-v2 shows the same flows |
+| elicitation | no | its consent URL points at an `/approve` endpoint on the server's own HTTP mux. The `exec.Command` only opens a browser for the walkthrough |
 | stateless | runs, but shows little | the point is the stateless wire's HTTP headers, and `postMessage` has none |
 | otel/stdout | not useful | the point is the exported spans, which go to the console |
 | skills | no | watches a directory with fsnotify |

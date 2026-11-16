@@ -10,11 +10,16 @@ type Smoke = {
   tool: string;
   group?: string; // open this group first, for servers that list the tool only under groups/get
   args?: Record<string, string>;
+  files?: Record<string, { name: string; mimeType: string; text: string }>; // attached to file inputs (SEP-2356)
   replies?: string[]; // buttons to press in order after the call, e.g. "Send responses"
   expect: string; // text the result must contain
 };
 type Wire = "stateless" | "session";
-type Manifest = { title: string; summary: string; docs?: string; package?: string; wires?: Wire[]; smoke?: Smoke };
+// Complete types into a prompt argument and expects a completion/complete suggestion.
+type Complete = { prompt: string; argument: string; value: string; expect: string };
+type Manifest = {
+  title: string; summary: string; docs?: string; package?: string; wires?: Wire[]; smoke?: Smoke; complete?: Complete;
+};
 
 const examples = readdirSync(new URL("../.site/try/", import.meta.url), { withFileTypes: true })
   .filter((d) => d.isDirectory())
@@ -23,8 +28,13 @@ const manifest = (name: string): Manifest =>
   JSON.parse(readFileSync(new URL(`../.site/try/${name}/playground.json`, import.meta.url), "utf8"));
 const wiresOf = (name: string): Wire[] => manifest(name).wires ?? ["stateless", "session"];
 
-test("at least one example page was collected", () => {
-  expect(examples.length).toBeGreaterThan(0);
+test("every example with a web/playground.json was collected", () => {
+  const root = new URL("../../../examples/", import.meta.url);
+  const manifests = (readdirSync(root, { recursive: true }) as string[]).filter(
+    (p) => p.endsWith("/web/playground.json") && !p.includes("node_modules") && !p.includes("/dist/"),
+  );
+  expect(manifests.length).toBeGreaterThan(0);
+  expect(examples.length).toBe(manifests.length);
 });
 
 test("the landing page has a card for every example, and each card opens its page", async ({ page }) => {
@@ -93,12 +103,25 @@ for (const name of examples) {
       for (const [field, value] of Object.entries(smoke.args ?? {})) {
         await tool.locator(`[name="${field}"]`).fill(value);
       }
+      for (const [field, f] of Object.entries(smoke.files ?? {})) {
+        await tool.locator(`[name="${field}"]`).setInputFiles({ name: f.name, mimeType: f.mimeType, buffer: Buffer.from(f.text) });
+      }
       await tool.getByRole("button", { name: /^Call / }).click();
       for (const label of smoke.replies ?? []) {
         await tool.getByRole("button", { name: label }).click();
       }
       await expect(tool.locator(".result").first()).toContainText(smoke.expect, { timeout: 15_000 });
       await expect(log).toContainText('"method": "tools/call"');
+
+      const complete = manifest(name).complete;
+      if (complete) {
+        await page.locator('.tabs button[data-pane="prompts"]').click();
+        const prompt = page.locator("#prompts .item").filter({ has: page.locator("summary b", { hasText: complete.prompt }) });
+        await prompt.locator(":scope > summary").click();
+        await prompt.locator(`input[name="${complete.argument}"]`).fill(complete.value);
+        await expect(prompt.locator(`datalist option[value="${complete.expect}"]`)).toBeAttached({ timeout: 5_000 });
+        await expect(log).toContainText('"method": "completion/complete"');
+      }
       expect(errors).toEqual([]);
     });
   }

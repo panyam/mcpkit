@@ -69,6 +69,15 @@ are down — it never boots or kills them. Having the agent spawn them from the
 config (`ServerConfig.command`, stdio) is a deferred follow-up; the client
 already owns stdio subprocess lifecycle, only the config surface is missing.
 
+## Try it in your browser
+
+[panyam.github.io/mcpkit/try/kitchen-sink](https://panyam.github.io/mcpkit/try/kitchen-sink/) runs this server in a
+browser tab, with nothing to install. That page serves the three tools in `server/` on their own,
+without the agent. Use it to see what the agent's tool calls return, including `report`'s large
+output.
+It opens on the stateless wire, and a button switches to the older session wire.
+`just serve-web` here builds and serves the same page on `http://localhost:8788/`.
+
 ## Prerequisites
 
 - Docker (for the backend + observability stacks).

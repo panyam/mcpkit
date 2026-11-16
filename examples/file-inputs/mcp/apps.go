@@ -1,4 +1,4 @@
-package main
+package mcp
 
 import (
 	"bytes"
@@ -27,7 +27,7 @@ var analyzeDocumentsAppHTML string
 // regular SEP-2356 demo tools. Each app exposes a ui:// resource whose HTML
 // hosts a button that calls mcp.selectFile / mcp.selectFiles, then routes
 // the resulting data URI(s) through mcp.callTool to the underlying tool.
-func registerAppsTools(srv *server.Server, uploadDir string) {
+func registerAppsTools(srv *server.Server, opts Options) {
 	const fiveMB = 5 * 1024 * 1024
 
 	imageMax := fiveMB
@@ -58,7 +58,7 @@ func registerAppsTools(srv *server.Server, uploadDir string) {
 			// clicking the in-app button (which round-trips back as
 			// mcp.callTool("upload_image", ...)), this branch is also fine —
 			// the host treats it as the same tool.
-			return uploadImageHandler(ctx, req, uploadDir)
+			return uploadImageHandler(ctx, req, opts)
 		},
 		ResourceHandler: func(ctx core.ResourceContext, req core.ResourceRequest) (core.ResourceResult, error) {
 			return core.ResourceResult{Contents: []core.ResourceReadContent{{
@@ -84,7 +84,7 @@ func registerAppsTools(srv *server.Server, uploadDir string) {
 		ResourceURI: "ui://file-inputs/analyze-documents",
 		Visibility:  []core.UIVisibility{core.UIVisibilityModel, core.UIVisibilityApp},
 		ToolHandler: func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
-			return analyzeDocumentsHandler(ctx, req, uploadDir)
+			return analyzeDocumentsHandler(ctx, req, opts)
 		},
 		ResourceHandler: func(ctx core.ResourceContext, req core.ResourceRequest) (core.ResourceResult, error) {
 			return core.ResourceResult{Contents: []core.ResourceReadContent{{

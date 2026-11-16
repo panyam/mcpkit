@@ -18,6 +18,16 @@ Spec: modelcontextprotocol/specification PR 2356.
 | `analyze_documents` | `documents: FileInputArrayProperty(application/pdf, .pdf)` | array of files (`items.x-mcp-file`) |
 | `process_any_file` | `file: FileInputProperty({})` | empty descriptor - any file, any size |
 
+## Try it in your browser
+
+[panyam.github.io/mcpkit/try/file-inputs](https://panyam.github.io/mcpkit/try/file-inputs/) runs this server in a
+browser tab, with nothing to install. Each file field is a file picker, and the page sends what you
+pick as a data URI. The tools live in `mcp/`, which the CLI server and `web/main.go` both use.
+The browser build has no upload directory, so it reports "not saved" instead of a path.
+The two `apps_*` tools run as plain tools there, because their UI needs an Apps host.
+It opens on the stateless wire, and a button switches to the older session wire.
+`just serve-web` builds and serves the same page on `http://localhost:8788/`.
+
 ## Quick Start
 
 ```bash

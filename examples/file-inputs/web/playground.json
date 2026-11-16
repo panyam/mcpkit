@@ -1,0 +1,10 @@
+{
+  "title": "File inputs",
+  "summary": "Tools that take files (SEP-2356). Pick an image, PDFs or any file, and the page sends each one as a data URI the server decodes, checks against accept and maxSize, and describes.",
+  "docs": "examples/file-inputs/",
+  "smoke": {
+    "tool": "process_any_file",
+    "files": { "file": { "name": "hello.txt", "mimeType": "text/plain", "text": "hello from the playground" } },
+    "expect": "received hello.txt (text/plain, 25 bytes)"
+  }
+}

@@ -31,7 +31,7 @@ for ex in "${EXAMPLES[@]}"; do
   row "$ex scenario (wasm)" "$LOG/$ex-wasm.log" "$ROOT/scripts/go-test-wasm.sh" "$dir" -timeout 120s ./server
 done
 row "build every browser page" "$LOG/collect.log" "$ROOT/scripts/collect_web_examples.sh" "$LOG/try"
-grep -h '^built ' "$LOG/collect.log" | sed -E 's|^built .*/examples/([^/]+)/web/dist|    \1|' || true
+grep -h '^built ' "$LOG/collect.log" | sed -E 's|^built .*/examples/(.+)/web/dist|    \1|' || true
 row "every page in Chromium" "$LOG/pages.log" make -C "$ROOT" test-web-examples
 grep -hE '^ +[0-9]+ (passed|failed)' "$LOG/pages.log" | sed 's/^ */    /' || true
 exit $fail

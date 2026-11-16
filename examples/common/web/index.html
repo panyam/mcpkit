@@ -138,6 +138,7 @@
 const DEFAULT_CAPS = {
   elicitation: {},
   sampling: {},
+  fileInputs: {},
   roots: { listChanged: false },
   extensions: {
     "io.modelcontextprotocol/tasks": {},
@@ -159,6 +160,7 @@ const statusEl = $("status"), logEl = $("log"), asksEl = $("asks");
 $("caps").value = JSON.stringify(DEFAULT_CAPS, null, 2);
 
 let worker, pending, progressSinks, nextId;
+let served = {};
 let wires = ["stateless", "session"], wire = "stateless";
 
 function el(tag, attrs = {}, ...kids) {
@@ -259,7 +261,7 @@ function onNotification(msg) {
 async function handshake() {
   try { JSON.parse($("caps").value); } catch (err) { setStatus("Client capabilities are not valid JSON", "bad"); return; }
   try {
-    let info, served, version;
+    let info, version;
     if (wire === "stateless") {
       const res = await request("server/discover", {});
       info = (res._meta || {})["io.modelcontextprotocol/serverInfo"] || res.serverInfo || {};
@@ -309,8 +311,18 @@ function field(name, schema, required) {
   const label = el("label", {}, name, required ? el("span", { class: "req", text: " *" }) : null,
     schema.description ? " · " + schema.description : "");
   const type = Array.isArray(schema.type) ? schema.type.find((t) => t !== "null") : schema.type;
+  // SEP-2356 file inputs: a string or an array of strings marked x-mcp-file.
+  const fileDesc = schema["x-mcp-file"] || (type === "array" && (schema.items || {})["x-mcp-file"]);
   let input;
-  if (schema.enum) {
+  if (fileDesc) {
+    input = el("input", { type: "file", name });
+    if (type === "array") input.multiple = true;
+    if ((fileDesc.accept || []).length) input.accept = fileDesc.accept.join(",");
+    input.dataset.kind = type === "array" ? "files" : "file";
+    const limits = [(fileDesc.accept || []).length ? "accepts " + fileDesc.accept.join(", ") : "any type",
+      fileDesc.maxSize ? "up to " + formatBytes(fileDesc.maxSize) : "no size limit"];
+    label.append(" · " + limits.join(", "));
+  } else if (schema.enum) {
     input = el("select", { name });
     if (!required) input.append(el("option", { value: "", text: "" }));
     for (const v of schema.enum) input.append(el("option", { value: JSON.stringify(v), text: String(v) }));
@@ -345,9 +357,36 @@ function schemaFields(schema) {
   return Object.entries(props).flatMap(([n, s]) => field(n, s, req.has(n)));
 }
 
-function readForm(form) {
+function formatBytes(n) {
+  if (n >= 1 << 20) return +(n / (1 << 20)).toFixed(1) + " MB";
+  if (n >= 1 << 10) return +(n / (1 << 10)).toFixed(1) + " KB";
+  return n + " bytes";
+}
+
+// fileToDataURI reads a picked file into the RFC 2397 form the server's
+// core.DecodeDataURI expects, with the file name as a name= parameter.
+function fileToDataURI(file) {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onerror = () => reject(r.error);
+    r.onload = () => {
+      const b64 = String(r.result).split(",")[1] || "";
+      resolve("data:" + (file.type || "application/octet-stream") + ";name=" + encodeURIComponent(file.name) + ";base64," + b64);
+    };
+    r.readAsDataURL(file);
+  });
+}
+
+async function readForm(form) {
   const args = {};
   for (const input of form.querySelectorAll("[name]")) {
+    if (input.dataset.kind === "file" || input.dataset.kind === "files") {
+      const files = [...input.files];
+      if (!files.length) continue;
+      const uris = await Promise.all(files.map(fileToDataURI));
+      args[input.name] = input.dataset.kind === "files" ? uris : uris[0];
+      continue;
+    }
     const v = input.value;
     if (v === "" && !input.dataset.required) continue;
     switch (input.dataset.kind) {
@@ -513,10 +552,10 @@ function toolItem(tool) {
   const d = item(tool.name, tool.description, () => {
     const form = el("form", {}, ...schemaFields(tool.inputSchema), el("button", { text: "Call " + tool.name }));
     const out = el("div", { class: "result" });
-    form.onsubmit = (e) => {
+    form.onsubmit = async (e) => {
       e.preventDefault();
       let args;
-      try { args = readForm(form); } catch (err) { out.textContent = "Bad input: " + err.message; return; }
+      try { args = await readForm(form); } catch (err) { out.textContent = "Bad input: " + err.message; return; }
       call(out, "tools/call", { name: tool.name, arguments: args });
     };
     return el("div", { class: "body" }, form, out);
@@ -581,14 +620,41 @@ function renderResources(resources, templates) {
   $("resources").replaceChildren(...items);
 }
 
+// completeInto asks the server for argument completions as the tester types
+// and offers them through a datalist (completion/complete, ref/prompt).
+function completeInto(input, promptName) {
+  const list = el("datalist", { id: "complete-" + promptName + "-" + input.name });
+  input.setAttribute("list", list.id);
+  let timer;
+  input.addEventListener("input", () => {
+    clearTimeout(timer);
+    timer = setTimeout(async () => {
+      try {
+        const res = await request("completion/complete", {
+          ref: { type: "ref/prompt", name: promptName },
+          argument: { name: input.name, value: input.value },
+        });
+        list.replaceChildren(...((res.completion || {}).values || []).map((v) => el("option", { value: v })));
+      } catch {}
+    }, 250);
+  });
+  return list;
+}
+
 function renderPrompts(prompts) {
   $("n-prompts").textContent = "(" + prompts.length + ")";
   $("prompts").replaceChildren(...prompts.map((p) => item(p.name, p.description, () => {
     const fields = (p.arguments || []).flatMap((a) => field(a.name, { type: "string", description: a.description }, a.required));
-    const form = el("form", {}, ...fields, el("button", { text: "Get " + p.name }));
+    const extras = served.completions
+      ? fields.filter((f) => f.tagName === "INPUT").map((input) => completeInto(input, p.name))
+      : [];
+    const form = el("form", {}, ...fields, ...extras, el("button", { text: "Get " + p.name }));
     const out = el("div", { class: "result" });
-    form.onsubmit = (e) => { e.preventDefault(); call(out, "prompts/get", { name: p.name, arguments: readForm(form) }); };
-    return el("div", { class: "body" }, form, out);
+    form.onsubmit = async (e) => {
+      e.preventDefault();
+      call(out, "prompts/get", { name: p.name, arguments: await readForm(form) });
+    };
+    return el("div", { class: "body" }, served.completions ? el("div", { class: "note", text: "Start typing an argument to see the server's completions." }) : null, form, out);
   })));
 }
 

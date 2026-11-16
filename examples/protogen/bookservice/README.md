@@ -22,6 +22,14 @@ End-to-end example demonstrating all three MCP primitives generated from proto a
 | `mcp_prompt` | Prompt | `books_summarize`, `books_recommend_books` |
 | `mcp_service` | Namespace | All names prefixed with `books_` |
 
+## Try it in your browser
+
+[panyam.github.io/mcpkit/try/protogen-bookservice](https://panyam.github.io/mcpkit/try/protogen-bookservice/) runs this server in a
+browser tab, with nothing to install. Search the catalog, read a book resource, and fill in a prompt.
+The prompt's `book_id` argument offers completions from the server as you type.
+It opens on the stateless wire, and a button switches to the older session wire.
+`just serve-web` builds and serves the same page on `http://localhost:8788/`.
+
 ## Quick start
 
 ```bash
