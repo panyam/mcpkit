@@ -5,6 +5,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/panyam/mcpkit/examples/disclosure/mcp"
+
 	"github.com/panyam/mcpkit/client"
 	"github.com/panyam/mcpkit/core"
 	"github.com/panyam/mcpkit/server"
@@ -25,7 +27,7 @@ func TestChecksOnBothWires(t *testing.T) {
 	for _, w := range wires {
 		t.Run(w.name, func(t *testing.T) {
 			srv := server.NewServer(core.ServerInfo{Name: "disclosure", Version: "0.1.0"})
-			if err := registerFixture(srv); err != nil {
+			if err := mcp.Register(srv); err != nil {
 				t.Fatal(err)
 			}
 			ts := httptest.NewServer(srv.Handler(server.WithStreamableHTTP(true), server.WithStatelessMode(w.server)))
@@ -49,7 +51,7 @@ func TestChecksOnBothWires(t *testing.T) {
 }
 
 func TestFixtureServesTwoHundredTools(t *testing.T) {
-	if toolCount != 200 || len(fixtureTools()) != toolCount {
-		t.Fatalf("toolCount=%d, fixtureTools=%d, want 200", toolCount, len(fixtureTools()))
+	if mcp.ToolCount != 200 || len(mcp.Tools()) != mcp.ToolCount {
+		t.Fatalf("mcp.ToolCount=%d, mcp.Tools=%d, want 200", mcp.ToolCount, len(mcp.Tools()))
 	}
 }

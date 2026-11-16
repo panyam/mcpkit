@@ -20,6 +20,8 @@ import (
 	"os"
 	"strings"
 
+	"github.com/panyam/mcpkit/examples/disclosure/mcp"
+
 	"github.com/panyam/demokit"
 	"github.com/panyam/mcpkit/client"
 	"github.com/panyam/mcpkit/examples/common"
@@ -68,10 +70,10 @@ func serve() {
 		TracerProvider: tp,
 		Wire:           wire,
 		Register: func(srv *server.Server) {
-			if err := registerFixture(srv); err != nil {
+			if err := mcp.Register(srv); err != nil {
 				log.Fatalf("register: %v", err)
 			}
-			log.Printf("[disclosure] %d tools in %d themes, skills from the embedded skills/ tree", toolCount, len(themes))
+			log.Printf("[disclosure] %d tools in %d themes, skills from the embedded mcp/skills/ tree", mcp.ToolCount, mcp.ThemeCount)
 		},
 	}); err != nil {
 		log.Fatalf("ListenAndServe: %v", err)

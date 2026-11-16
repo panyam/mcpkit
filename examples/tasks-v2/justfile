@@ -23,3 +23,7 @@ readme:
 # Build the binary
 build:
 	go build -o tasks-v2-demo .
+
+# Serve the browser playground on http://localhost:8788/
+serve-web:
+	bash ../../scripts/serve-example-wasm.sh . ./web 8788

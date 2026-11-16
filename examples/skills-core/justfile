@@ -23,3 +23,7 @@ build:
     go build -o skills-core .
 
 default: serve
+
+# Serve the browser playground on http://localhost:8788/
+serve-web:
+    bash ../../scripts/serve-example-wasm.sh . ./web 8788

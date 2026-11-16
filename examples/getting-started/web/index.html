@@ -151,6 +151,7 @@ function renderTools(tools) {
   for (const tool of tools) {
     const div = document.createElement("div");
     div.className = "tool";
+    div.dataset.tool = tool.name;
     const props = (tool.inputSchema && tool.inputSchema.properties) || {};
     div.innerHTML = "<b></b><p></p><form></form><div class='result'></div>";
     div.querySelector("b").textContent = tool.name;

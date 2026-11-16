@@ -71,6 +71,42 @@ sweeps over the common path miss them.
 
 ---
 
+## Which examples run in the browser (#1714)
+
+Audited 2026-11-15 by building every example main package with `GOOS=js GOARCH=wasm`, then
+reading what each server needs. A browser build runs the server in a Web Worker and talks to
+it over `postMessage` (`server.RunWorker`). It has no socket, no file system and no child
+processes.
+
+The demokit examples couldn't compile for wasm at all at first. `examples/common` imports
+`demokit/notebookbridge`, which reaches `atotto/clipboard` through `bubbles/textinput`, and
+that package has no js build. The fix isn't a build tag in common. A browser-ready example keeps
+its tools in a `mcp/` package with no demokit or otel imports, and `web/main.go` serves only
+that. The download halves too: `tasks-v2` went from 8.4 MB to 4.2 MB gzipped.
+
+| Example | Status | Why |
+|---|---|---|
+| getting-started | runs | its own page, `server/` package (#1711) |
+| tasks-v2, mrtr, list-ttl, skills-core, disclosure | runs | `mcp/` + `web/main.go`, shared playground page |
+| tasks | candidate | v1 is frozen, so it's low value next to tasks-v2 |
+| elicitation | candidate | check its `exec.Command` use first |
+| file-inputs | candidate | uploads travel in-band, so it should work |
+| protogen/bookservice | candidate | generated tools on a plain server |
+| agents/kitchen-sink/server | candidate | plain server; check the agents extension's client side |
+| stateless | runs, but shows little | the point is the stateless wire's HTTP headers, and `postMessage` has none |
+| otel/stdout | not useful | the point is the exported spans, which go to the console |
+| skills | no | watches a directory with fsnotify |
+| mcpskills-walkthrough | no | runs the `mcpskills` CLI as a child process |
+| auth/*, fine-grained-auth, agents/discovery | no | OAuth, bearer tokens and `.well-known` discovery need HTTP |
+| events/*, whole-enchilada/* | no | webhooks, SSE delivery, several processes, a database |
+| rooms/lanternfall | no | the room bridge runs over WebSockets |
+| apps/* (25 modules) | needs a host | the UI resources need an Apps host page (#1554, #1483) |
+| host/* | not a server | terminal Apps hosts, and they still import the clipboard package |
+
+To convert a candidate, move its registration into `mcp/`, add the ten-line `web/main.go`, and add
+a smoke call to `tests/web-examples/tests/web-examples.spec.ts`. The collector and the docs site
+pick it up from `web/main.go`.
+
 ## demokit
 
 - **Non-interactive mode cannot do browser steps.** A step that opens a browser and expects user

@@ -29,9 +29,9 @@ for ex in "${EXAMPLES[@]}"; do
   dir="$ROOT/examples/$ex"
   row "$ex scenario (native)" "$LOG/$ex-native.log" bash -c "cd '$dir' && go test ./... -count=1 -timeout 60s"
   row "$ex scenario (wasm)" "$LOG/$ex-wasm.log" "$ROOT/scripts/go-test-wasm.sh" "$dir" -timeout 120s ./server
-  row "$ex page build" "$LOG/$ex-build.log" "$ROOT/scripts/build-example-wasm.sh" "$dir" ./server
-  grep -h '^built ' "$LOG/$ex-build.log" | sed 's/^/    /' || true
 done
+row "build every browser page" "$LOG/collect.log" "$ROOT/scripts/collect_web_examples.sh" "$LOG/try"
+grep -h '^built ' "$LOG/collect.log" | sed -E 's|^built .*/examples/([^/]+)/web/dist|    \1|' || true
 row "every page in Chromium" "$LOG/pages.log" make -C "$ROOT" test-web-examples
 grep -hE '^ +[0-9]+ (passed|failed)' "$LOG/pages.log" | sed 's/^ */    /' || true
 exit $fail

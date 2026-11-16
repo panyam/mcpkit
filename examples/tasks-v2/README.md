@@ -27,6 +27,16 @@ Server-side implementation of the v2 Tasks extension. v2 inverts v1's client-dri
 | `tasks/list` | exists | **removed** |
 | Mcp-Name HTTP header | not set | set on task-creating responses (SEP-2243) |
 
+## Try it in your browser
+
+[panyam.github.io/mcpkit/try/tasks-v2](https://panyam.github.io/mcpkit/try/tasks-v2/) runs this server in a browser tab,
+with nothing to install. It's a playground rather than the walkthrough. Call any tool with any
+input, answer the server when it asks for input, and watch the JSON-RPC go each way.
+`just serve-web` builds and serves the same page on `http://localhost:8788/`.
+
+The tools live in `mcp/`. The CLI server, the tests and `web/main.go` all register them from
+there, so the playground runs the same server without demokit or otel.
+
 ## Quick Start
 
 ```bash

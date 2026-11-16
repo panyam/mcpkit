@@ -28,16 +28,14 @@ package main
 import (
 	"context"
 	"flag"
-	"fmt"
 	"log"
 	"os"
 	"strings"
 
 	"github.com/panyam/demokit"
-	"github.com/panyam/mcpkit/core"
 	"github.com/panyam/mcpkit/examples/common"
 	commonotel "github.com/panyam/mcpkit/examples/common/otel"
-	"github.com/panyam/mcpkit/ext/skills"
+	"github.com/panyam/mcpkit/examples/skills-core/mcp"
 	"github.com/panyam/mcpkit/server"
 )
 
@@ -53,7 +51,7 @@ func main() {
 
 func serve() {
 	addr := flag.String("addr", ":8080", "listen address")
-	skillsDir := flag.String("skills", "skills", "directory of skills to serve (file mode)")
+	skillsDir := flag.String("skills", "", "directory of skills to serve (empty = the skills embedded in mcp/skills)")
 	tel := common.RegisterTelemetryFlags(flag.CommandLine)
 	wire := common.RegisterWireFlags(flag.CommandLine)
 	flag.CommandLine.Parse(demokit.FilterArgs(os.Args[1:],
@@ -75,12 +73,8 @@ func serve() {
 	// resource, and skill://index.json enumerates them with a SHA-256
 	// digest. This is the whole blessed minimal shape — no WithArchiveMode,
 	// no remote source adapters, no WithFSWatcher.
-	provider, err := skills.NewProvider(skills.WithDirectory(*skillsDir))
-	if err != nil {
-		log.Fatalf("skills.NewProvider: %v", err)
-	}
 
-	log.Printf("[skills-core] file mode, skills=%s", *skillsDir)
+	log.Printf("[skills-core] file mode, skills=%s", skillsSource(*skillsDir))
 	if err := common.RunServer(common.ServerConfig{
 		Name:           "skills-core",
 		Addr:           *addr,
@@ -88,39 +82,18 @@ func serve() {
 		TracerProvider: tp,
 		Wire:           wire,
 		Register: func(srv *server.Server) {
-			provider.RegisterWith(srv)
-			registerTools(srv)
+			if err := mcp.Register(srv, *skillsDir); err != nil {
+				log.Fatalf("register: %v", err)
+			}
 		},
 	}); err != nil {
 		log.Fatalf("ListenAndServe: %v", err)
 	}
 }
 
-// commitInput is the argument envelope for format_commit — the tool the
-// commit-helper skill tells the host to call. A skill is guidance; the tool
-// is the capability the guidance points at. Together they are the "skills
-// file + tool handling" minimal shape.
-type commitInput struct {
-	Type    string `json:"type"`
-	Scope   string `json:"scope,omitempty"`
-	Summary string `json:"summary"`
-}
-
-// registerTools registers the tool the bundled skill references. In a real
-// server these are the ordinary MCP tools you already expose; the skill just
-// teaches the host when and how to use them well.
-func registerTools(srv *server.Server) {
-	tool := core.TextTool[commitInput]("format_commit",
-		"Format a change description as a Conventional Commits subject line. The commit-helper skill instructs the host to call this.",
-		func(_ core.ToolContext, in commitInput) (string, error) {
-			if in.Type == "" || in.Summary == "" {
-				return "", fmt.Errorf("type and summary are required")
-			}
-			if in.Scope != "" {
-				return fmt.Sprintf("%s(%s): %s", in.Type, in.Scope, in.Summary), nil
-			}
-			return fmt.Sprintf("%s: %s", in.Type, in.Summary), nil
-		},
-	)
-	srv.RegisterTool(tool.ToolDef, tool.Handler)
+func skillsSource(dir string) string {
+	if dir == "" {
+		return "embedded mcp/skills"
+	}
+	return dir
 }
