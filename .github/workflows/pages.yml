@@ -69,6 +69,10 @@ jobs:
       - name: Sync Python tooling env
         run: uv sync
 
+      - name: Test the site generator
+        working-directory: docs/site
+        run: go test ./... -count=1
+
       - name: Build site
         working-directory: docs/site
         run: make build

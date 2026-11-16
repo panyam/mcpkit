@@ -21,6 +21,8 @@
     <title>{{ if .FrontMatter.title }}{{ .FrontMatter.title }} · {{ end }}{{ (json "SiteMetadata.json" "siteName") }}</title>
 
     <link rel="stylesheet" href="{{.Site.PathPrefix}}/static/css/main.css">
+    <style>{{ codeThemeCSS }}</style>
+    <link rel="icon" href="data:,">
 </head>
 <body>
     {{ template "Header" . }}
