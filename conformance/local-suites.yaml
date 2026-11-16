@@ -267,9 +267,9 @@ suites:
       default_path: ../conf-groups
     note: >-
       One server scenario, groups, with 13 checks, run on both wires against
-      examples/disclosure --conformance-groups: 14 of 14 on each (the 13 checks plus the harness's wire-schema-valid), measured
+      examples/disclosure: 14 of 14 on each (the 13 checks plus the harness's wire-schema-valid), measured
       2026-11-16 at fork ee08a69. Rows quote the WG draft at 15b2a5cf. The fixture
-      flag nests a disputes group under billing and users, so the nesting checks
+      nests a disputes group under billing and users, so the nesting checks
       have something to grade. Each check has a negative control in the fork's
       negative.test.ts. Check IDs use a groups- prefix until the SEP is numbered,
       and INFO for the same reason as agents. Client scenarios (no groups/* to a

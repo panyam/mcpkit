@@ -13,13 +13,13 @@ import (
 	"github.com/panyam/mcpkit/server"
 )
 
-// TestConformanceGroupsNestsDisputesUnderTwoParents checks the fixture the
-// groups conformance scenario needs: one child group, nested under two
-// parents, absent from groups/list, and resolvable by name.
-func TestConformanceGroupsNestsDisputesUnderTwoParents(t *testing.T) {
+// TestNestedGroupUnderTwoParents checks the fixture's nesting, which the
+// playground shows and the groups conformance scenario grades: one child
+// group, under two parents, absent from groups/list, resolvable by name.
+func TestNestedGroupUnderTwoParents(t *testing.T) {
 	ctx := context.Background()
 	srv := server.NewServer(core.ServerInfo{Name: "disclosure", Version: "0.1.0"})
-	if err := mcp.RegisterWith(srv, mcp.Options{ConformanceGroups: true}); err != nil {
+	if err := mcp.Register(srv); err != nil {
 		t.Fatal(err)
 	}
 	ts := httptest.NewServer(srv.Handler(server.WithStreamableHTTP(true)))
@@ -40,24 +40,24 @@ func TestConformanceGroupsNestsDisputesUnderTwoParents(t *testing.T) {
 		t.Fatalf("groups/list has %d groups, want the %d themes", len(top), mcp.ThemeCount)
 	}
 	for _, g := range top {
-		if g.Name == mcp.ConformanceChildGroup {
+		if g.Name == mcp.NestedGroup {
 			t.Fatalf("%s is nested, so groups/list must leave it out", g.Name)
 		}
 	}
-	for _, parent := range []string{"billing", "users"} {
+	for _, parent := range mcp.NestedGroupParents {
 		got, err := gc.Get(ctx, parent)
 		if err != nil {
 			t.Fatalf("groups/get %s: %v", parent, err)
 		}
-		if !slices.ContainsFunc(got.Groups, func(g groups.Group) bool { return g.Name == mcp.ConformanceChildGroup }) {
-			t.Errorf("groups/get %s does not list %s", parent, mcp.ConformanceChildGroup)
+		if !slices.ContainsFunc(got.Groups, func(g groups.Group) bool { return g.Name == mcp.NestedGroup }) {
+			t.Errorf("groups/get %s does not list %s", parent, mcp.NestedGroup)
 		}
 	}
-	child, err := gc.Get(ctx, mcp.ConformanceChildGroup)
+	child, err := gc.Get(ctx, mcp.NestedGroup)
 	if err != nil {
-		t.Fatalf("groups/get %s: %v", mcp.ConformanceChildGroup, err)
+		t.Fatalf("groups/get %s: %v", mcp.NestedGroup, err)
 	}
 	if child.Instructions == "" {
-		t.Errorf("groups/get %s returned no instructions", mcp.ConformanceChildGroup)
+		t.Errorf("groups/get %s returned no instructions", mcp.NestedGroup)
 	}
 }

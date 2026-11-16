@@ -7,6 +7,7 @@ import (
 	"embed"
 	"fmt"
 	"io/fs"
+	"slices"
 	"strings"
 
 	"github.com/panyam/mcpkit/core"
@@ -79,23 +80,10 @@ func Tools() []core.ToolDef {
 // BillingSkill is the SKILL.md the billing group lists next to its tools.
 const BillingSkill = "skill://billing-refunds/SKILL.md"
 
-// Options picks extras around the fixture. The zero value is the demo.
-type Options struct {
-	// ConformanceGroups adds a child group, disputes, nested under both
-	// billing and users, so the groups conformance scenario has a nested
-	// group to check and one that appears under two parents (#1708).
-	ConformanceGroups bool
-}
-
 // Register registers the tools, the skills and the groups on srv. Every tool
 // answers with one line of text, since the exercise measures what a client
 // sees in the lists, not what the tools do.
 func Register(srv *server.Server) error {
-	return RegisterWith(srv, Options{})
-}
-
-// RegisterWith is Register with the extras opts picks.
-func RegisterWith(srv *server.Server, opts Options) error {
 	for _, def := range Tools() {
 		name := def.Name
 		srv.RegisterTool(def, func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
@@ -111,17 +99,22 @@ func RegisterWith(srv *server.Server, opts Options) error {
 		return fmt.Errorf("skills.NewProvider: %w", err)
 	}
 	provider.RegisterWith(srv)
-	return fixtureGroups(opts).RegisterWith(srv)
+	return fixtureGroups().RegisterWith(srv)
 }
 
-// ConformanceChildGroup is the nested group Options.ConformanceGroups adds.
-const ConformanceChildGroup = "disputes"
+// NestedGroup is a child group listed under both billing and users. It is
+// absent from groups/list, and groups/get resolves it by name.
+const NestedGroup = "disputes"
+
+// NestedGroupParents are the groups that list NestedGroup.
+var NestedGroupParents = []string{"billing", "users"}
 
 // fixtureGroups puts each theme's 25 tools in a group named after the theme.
 // billing also lists the billing-refunds skill. incident-triage spans three
 // themes, so no group lists it, and every client sees it in
-// resources/list.
-func fixtureGroups(opts Options) *groups.Catalog {
+// resources/list. disputes nests under billing and users, so a client meets
+// one child group under two parents.
+func fixtureGroups() *groups.Catalog {
 	byTheme := map[string][]string{}
 	for _, def := range Tools() {
 		theme := def.Name[:strings.IndexByte(def.Name, '_')]
@@ -138,21 +131,19 @@ func fixtureGroups(opts Options) *groups.Catalog {
 			d.Instructions = "For a refund, follow the billing-refunds skill listed in this group's resources."
 			d.Resources = []string{BillingSkill}
 		}
-		if opts.ConformanceGroups && (t.name == "billing" || t.name == "users") {
-			d.Groups = []string{ConformanceChildGroup}
+		if slices.Contains(NestedGroupParents, t.name) {
+			d.Groups = []string{NestedGroup}
 		}
 		if err := cat.Add(d); err != nil {
 			panic(err) // the theme table is fixed, so this is a programming error
 		}
 	}
-	if opts.ConformanceGroups {
-		if err := cat.Add(groups.Def{
-			Name:         ConformanceChildGroup,
-			Description:  "Use when a customer disputes a charge on an invoice.",
-			Instructions: "Look the invoice up with billing_invoice_get, then check the account with users_account_get.",
-		}); err != nil {
-			panic(err)
-		}
+	if err := cat.Add(groups.Def{
+		Name:         NestedGroup,
+		Description:  "Use when a customer disputes a charge on an invoice.",
+		Instructions: "Look the invoice up with billing_invoice_get, then check the account with users_account_get.",
+	}); err != nil {
+		panic(err)
 	}
 	return cat
 }

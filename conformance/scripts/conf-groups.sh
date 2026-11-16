@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Groups extension conformance (progressive-disclosure-wg PR 19, #1708).
-# Drives examples/disclosure --conformance-groups through the fork's `groups`
+# Drives examples/disclosure through the fork's `groups`
 # server scenario on both wires: the draft (stateless) wire, which extension
 # scenarios run on by default, and 2025-11-25 (session) with --force.
 #
@@ -26,9 +26,9 @@ BIN_DIR=$(mktemp -d -t conf-groups-bin.XXXXXX)
 (cd "${REPO_ROOT}/examples/disclosure" && go build -o "${BIN_DIR}/disclosure" .) || exit 1
 
 OUT=$(mktemp -d -t conf-groups.XXXXXX)
-echo "Spawning examples/disclosure --conformance-groups on :${PORT}, scratch dir $OUT"
+echo "Spawning examples/disclosure on :${PORT}, scratch dir $OUT"
 require_port_free "${PORT}"
-"${BIN_DIR}/disclosure" --serve --addr=":${PORT}" --conformance-groups > "$OUT/server.log" 2>&1 &
+"${BIN_DIR}/disclosure" --serve --addr=":${PORT}" > "$OUT/server.log" 2>&1 &
 PID=$!
 trap 'kill $PID 2>/dev/null; wait $PID 2>/dev/null' EXIT
 

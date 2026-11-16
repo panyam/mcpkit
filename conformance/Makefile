@@ -102,7 +102,7 @@ testconf-agents: ## Run agent discovery conformance (agents-wg#22), informationa
 conf-agents-setup: ## Create the agents suite checkout (MCPCONFORMANCE_AGENTS_PATH) if missing. Safe to re-run.
 	@bash $(CONFORMANCE_DIR)/scripts/conf-agents-setup.sh
 
-testconf-groups: ## Run groups extension conformance (progressive-disclosure-wg PR 19), fork-based. Drives examples/disclosure --conformance-groups through the fork's groups scenario on both wires; exits 1 on any FAILURE row.
+testconf-groups: ## Run groups extension conformance (progressive-disclosure-wg PR 19), fork-based. Drives examples/disclosure through the fork's groups scenario on both wires; exits 1 on any FAILURE row.
 	@bash $(CONFORMANCE_DIR)/scripts/conf-groups.sh
 
 conf-groups-setup: ## Create the groups suite checkout (MCPCONFORMANCE_GROUPS_PATH) if missing. Safe to re-run.

@@ -70,7 +70,7 @@ func serve() {
 		TracerProvider: tp,
 		Wire:           wire,
 		Register: func(srv *server.Server) {
-			if err := mcp.RegisterWith(srv, mcp.Options{ConformanceGroups: *conformanceGroups}); err != nil {
+			if err := mcp.Register(srv); err != nil {
 				log.Fatalf("register: %v", err)
 			}
 			log.Printf("[disclosure] %d tools in %d themes, skills from the embedded mcp/skills/ tree", mcp.ToolCount, mcp.ThemeCount)

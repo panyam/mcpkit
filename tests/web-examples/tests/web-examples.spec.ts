@@ -17,8 +17,11 @@ type Smoke = {
 type Wire = "stateless" | "session";
 // Complete types into a prompt argument and expects a completion/complete suggestion.
 type Complete = { prompt: string; argument: string; value: string; expect: string };
+// Nested opens each parent group and expects the child inside it, with the child's own groups/get text.
+type Nested = { parents: string[]; child: string; expect: string };
 type Manifest = {
   title: string; summary: string; about: string[]; docs?: string; package?: string; wires?: Wire[]; smoke?: Smoke; complete?: Complete;
+  nested?: Nested;
 };
 
 const examples = readdirSync(new URL("../.site/try/", import.meta.url), { withFileTypes: true })
@@ -61,7 +64,8 @@ test("a playground opens on its manifest's first wire when the URL names none", 
 async function openTool(page: Page, smoke: Smoke): Promise<Locator> {
   if (smoke.group) {
     await page.locator("#tab-groups").click();
-    await page.locator(`.group[data-group="${smoke.group}"] > summary`).click();
+    const group = page.locator(`#groups > .group[data-group="${smoke.group}"]`);
+    if ((await group.getAttribute("open")) === null) await group.locator(":scope > summary").click();
   }
   const tool = page.locator(`.tool[data-tool="${smoke.tool}"]`).first();
   await expect(tool).toBeAttached();
@@ -99,6 +103,19 @@ for (const name of examples) {
         await expect(page.locator(".tool, .item, .group").first()).toBeAttached();
         expect(errors).toEqual([]);
         return;
+      }
+
+      const nested = manifest(name).nested;
+      if (nested) {
+        await page.locator("#tab-groups").click();
+        for (const parent of nested.parents) {
+          const p = page.locator(`#groups > .group[data-group="${parent}"]`);
+          await p.locator(":scope > summary").click();
+          const child = p.locator(`.group[data-group="${nested.child}"]`);
+          await child.locator(":scope > summary").click();
+          await expect(child).toContainText(nested.expect, { timeout: 15_000 });
+        }
+        await expect(page.locator(`#groups > .group[data-group="${nested.child}"]`)).toHaveCount(0);
       }
 
       const tool = await openTool(page, smoke);

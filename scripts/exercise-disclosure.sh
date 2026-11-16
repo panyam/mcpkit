@@ -12,7 +12,7 @@
 #      connects a plain client and a groups client, and prints the size of
 #      groups/get next to the flat tools/list.
 #   4. testconf-groups, the fork's groups scenario against
-#      examples/disclosure --conformance-groups on both wires (#1708).
+#      examples/disclosure on both wires (#1708).
 #
 # Exits 1 if any step failed.
 set -u
