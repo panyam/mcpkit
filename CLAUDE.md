@@ -16,6 +16,7 @@ make testall           # everything + Keycloak + HTML report; needs `make conf-p
 make audit             # govulncheck + gosec + gitleaks + race
 make tidy-all          # after touching core/ imports, or sub-module go.sum drifts
 make exercise-wire     # after any wire change: TestWireParity + testconf testconf-stateless testconf-agents
+make test-web-examples # the /try/ browser playgrounds in Chromium (examples/CONVENTIONS.md § Browser playground)
 make tag-push V=vX.Y.Z / make release-publish V=vX.Y.Z   # RELEASING.md
 ```
 
@@ -49,16 +50,14 @@ make tag-push V=vX.Y.Z / make release-publish V=vX.Y.Z   # RELEASING.md
 
 Work is queued by mission. A mission is an issue labelled `mission`, and its tickets block it.
 A new issue gets `P0`–`P3`, plus a mission link (blocked-by on the mission issue) or `waiting`
-with its trigger. Run a
-mission's exercise after each merged PR on it and log the result on the mission issue. Active
-missions, one worktree each:
+with its trigger. Run a mission's exercise after each merged PR on it and log the result on the
+mission issue. The `mission:active` label marks the active ones, one worktree each:
 
-- **#1683** `mission_ai_inside_ui`: `make exercise-aipage`, plus a by-hand Claude Code run through
-  `rooms-channel`.
-- **#1553** `mission_release_installable`: `make check-install V=<tag>`.
-- **#1701** `mission_progressive_disclosure`: `make exercise-disclosure`. The groups rows fail until #1685.
+- **#1701** `mission_progressive_disclosure`: `make exercise-disclosure`.
+- **#1554** `mission_apps_host` (label `mcpapps`): `make test-apps-playwright`.
 
-#1554 (`mission_apps_host`, label `mcpapps`) is queued behind #1683.
+#1683 `mission_ai_inside_ui` has all its tickets closed. It closes after a by-hand Claude Code run
+through `rooms-channel`, plus `make exercise-aipage`.
 
 ## Rules that cause wrong edits
 
@@ -79,7 +78,8 @@ Wire and server:
   `WithUnsafeSkipEndpointVerification()`.
 
 Build and CI:
-- Never commit compiled binaries. A bare `go build` leaves one (`scripts/check-no-binaries.sh`).
+- Never commit compiled binaries. A bare `go build` leaves one. `scripts/check-no-binaries.sh`
+  reads tracked files only, so run it after `git add`.
 - Never `gofmt -w` a glob. The tree isn't gofmt-clean. Format files by name.
 - Makefile and justfile recipes dispatch to `scripts/`; no inline logic (C8).
 - Generated files: `conformance/path-defaults.*` (`gen_conf_paths.py`), `CONFORMANCE.md` and the
