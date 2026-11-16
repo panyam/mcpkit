@@ -2,5 +2,12 @@
   "title": "Getting started",
   "summary": "The smallest mcpkit server: one typed tool, greet. Call it and watch the whole JSON-RPC exchange.",
   "docs": "get-started/",
-  "smoke": { "tool": "greet", "args": { "name": "world" }, "expect": "Hello, world!" }
+  "package": "./server",
+  "smoke": {
+    "tool": "greet",
+    "args": {
+      "name": "world"
+    },
+    "expect": "Hello, world!"
+  }
 }

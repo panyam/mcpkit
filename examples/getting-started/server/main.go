@@ -38,7 +38,8 @@ func newServer() *server.Server {
 }
 
 // main serves Streamable HTTP on :8787. Built with GOOS=js GOARCH=wasm, the
-// same Run call serves the page that started its Web Worker instead (../web).
+// same Run call serves the page that started its Web Worker instead (the
+// shared playground in examples/common/web).
 func main() {
 	srv := newServer()
 	log.Println("getting-started server listening on http://localhost:8787/mcp")
