@@ -67,9 +67,9 @@ PAGE = """<!doctype html>
 <main>
   <nav><a href="{root}">mcpkit docs</a></nav>
   <h1>Try mcpkit in your browser</h1>
-  <p class="lede">Each page runs a real mcpkit example server, compiled to WebAssembly, in a Web Worker
-    in your tab. There is nothing to install and no backend. Call the tools with any input, answer the
-    server when it asks you something, and watch every JSON-RPC message go back and forth.</p>
+  <p class="lede">Each page runs an example server right in your browser, without any backend.
+    Call the tools with any input, answer the server when it asks you something, and watch every
+    JSON-RPC message go back and forth.</p>
   <div class="cards">
 {cards}
   </div>
@@ -102,6 +102,9 @@ def load(try_dir: Path) -> list[tuple[str, dict]]:
         for key in ("title", "summary"):
             if not data.get(key):
                 sys.exit(f"web-examples-index: {d.name}/playground.json has no {key}")
+        about = data.get("about")
+        if not isinstance(about, list) or not 3 <= len(about) <= 5:
+            sys.exit(f"web-examples-index: {d.name}/playground.json needs 3 to 5 \"about\" bullets")
         out.append((d.name, data))
     # getting-started leads, the rest go by title.
     out.sort(key=lambda e: (e[0] != FIRST, e[1]["title"].lower()))

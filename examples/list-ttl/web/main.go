@@ -13,7 +13,8 @@ import (
 )
 
 func main() {
-	srv := server.NewServer(core.ServerInfo{Name: "list-ttl-demo", Version: "0.1.0"})
+	// The same 60-second TTL `make serve` uses, so every list carries a hint.
+	srv := server.NewServer(core.ServerInfo{Name: "list-ttl-demo", Version: "0.1.0"}, mcp.Options(60000, "")...)
 	mcp.Register(srv)
 	log.Fatal(srv.Run(":8080"))
 }

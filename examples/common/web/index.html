@@ -23,7 +23,9 @@
          font: 14px/1.5 system-ui, -apple-system, sans-serif; }
   main { max-width: 1200px; margin: 0 auto; padding: 24px 16px; }
   h1 { font-size: 20px; margin: 0 0 4px; }
-  .sub { color: var(--muted); margin: 0 0 16px; }
+  .sub { color: var(--muted); margin: 0 0 8px; }
+  .about { margin: 0 0 16px; padding-left: 20px; color: var(--fg); max-width: 820px; }
+  .about li { margin: 2px 0; }
   .grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; align-items: start; }
   @media (max-width: 860px) { .grid { grid-template-columns: minmax(0, 1fr); } }
   section { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 16px; min-width: 0; }
@@ -85,9 +87,9 @@
 <body>
 <main>
   <nav style="font-size:13px;margin-bottom:12px"><a href="../" style="color:var(--muted);text-decoration:none">← All playgrounds</a></nav>
-  <h1 id="title">mcpkit playground</h1>
-  <p class="sub">An mcpkit example server, compiled to WebAssembly and running in a Web Worker on this page.
-    Nothing talks to a backend. Call any tool with any input, and watch the JSON-RPC on the right.</p>
+  <h1 id="title">Playground</h1>
+  <p class="sub">Right here in the browser.</p>
+  <ul class="about" id="about" hidden></ul>
   <div class="grid">
     <section>
       <div id="status" class="status">Loading server.wasm…</div>
@@ -278,8 +280,6 @@ async function handshake() {
       served = init.capabilities || {};
       version = init.protocolVersion;
     }
-    $("title").textContent = info.name + " playground";
-    document.title = info.name + " · mcpkit playground";
     setStatus("Connected to " + info.name + " " + info.version + " · " + wire + " wire, protocol " + version, "ok");
     $("sendRaw").disabled = false;
     if (served.tools) renderTools(await listAll("tools/list", "tools"));
@@ -681,6 +681,14 @@ $("sendRaw").onclick = () => {
 // default, and ?wire= picks another.
 fetch("playground.json").then((r) => (r.ok ? r.json() : {})).catch(() => ({})).then((m) => {
   if (Array.isArray(m.wires) && m.wires.length) wires = m.wires;
+  if (m.title) {
+    $("title").textContent = m.title;
+    document.title = m.title + " · Playground";
+  }
+  if (Array.isArray(m.about) && m.about.length) {
+    $("about").replaceChildren(...m.about.map((t) => el("li", { text: t })));
+    $("about").hidden = false;
+  }
   const asked = new URLSearchParams(location.search).get("wire");
   wire = wires.includes(asked) ? asked : wires[0];
   for (const b of document.querySelectorAll("#wires button")) b.hidden = !wires.includes(b.dataset.wire);

@@ -1,6 +1,14 @@
 {
   "title": "List caching hints",
   "summary": "A tool, a resource, a resource template and a prompt, so you can see the ttlMs and cacheScope hints (SEP-2549) on every list and read response.",
+  "about": [
+    "Every list and read response carries a cache hint (SEP-2549): ttlMs, set to 60 seconds here.",
+    "There's one of each kind to list: a tool, a resource, a resource template and a prompt.",
+    "Look for ttlMs in each list response in the wire log."
+  ],
   "docs": "examples/list-ttl/",
-  "smoke": { "tool": "ping", "expect": "pong" }
+  "smoke": {
+    "tool": "ping",
+    "expect": "pong"
+  }
 }

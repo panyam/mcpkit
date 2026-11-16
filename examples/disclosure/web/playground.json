@@ -1,6 +1,15 @@
 {
   "title": "Progressive disclosure",
   "summary": "200 tools in eight groups. With the groups extension, the tool list starts empty and you open one group at a time. Turn it off and reconnect to get all 200.",
+  "about": [
+    "200 tools in eight groups, plus two skills.",
+    "With the groups extension declared, the tool list starts empty. The Groups tab lists the eight groups, and opening one loads its 25 tools with groups/get.",
+    "Remove the extension under Client capabilities and reconnect to get all 200 tools in one list."
+  ],
   "docs": "examples/disclosure/",
-  "smoke": { "tool": "billing_invoice_list", "group": "billing", "expect": "billing_invoice_list: ok" }
+  "smoke": {
+    "tool": "billing_invoice_list",
+    "group": "billing",
+    "expect": "billing_invoice_list: ok"
+  }
 }

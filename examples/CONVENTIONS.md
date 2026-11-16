@@ -1128,7 +1128,10 @@ examples/<name>/
 - Data the server reads from disk gets embedded in `mcp/`, as `skills-core` and `disclosure`
   do with `mcp/skills/`.
 - Add `web/playground.json`. Having one makes the example browser-ready.
-  - `title`, `summary`: the card on the `/try/` landing page.
+  - `title`, `summary`: the card on the `/try/` landing page. `title` is also the playground's
+    heading.
+  - `about`: 3 to 5 short bullets under the heading, saying what the playground shows and what to
+    try. The landing page build stops without them.
   - `docs`: the site path of its README page, such as `examples/tasks-v2/`.
   - `smoke`: `tool`, the `expect` text, and optionally `args`, `files` (attached to file inputs:
     `{"field": {"name", "mimeType", "text"}}`), `group` and `replies`. `tests/web-examples` makes
