@@ -18,7 +18,7 @@ type Wire = "stateless" | "session";
 // Complete types into a prompt argument and expects a completion/complete suggestion.
 type Complete = { prompt: string; argument: string; value: string; expect: string };
 type Manifest = {
-  title: string; summary: string; docs?: string; package?: string; wires?: Wire[]; smoke?: Smoke; complete?: Complete;
+  title: string; summary: string; about: string[]; docs?: string; package?: string; wires?: Wire[]; smoke?: Smoke; complete?: Complete;
 };
 
 const examples = readdirSync(new URL("../.site/try/", import.meta.url), { withFileTypes: true })
@@ -80,6 +80,7 @@ for (const name of examples) {
       await page.goto(`/try/${name}/?wire=${wire}`);
       await expect(page.locator("#status")).toContainText(`${wire} wire`, { timeout: 30_000 });
       await expect(page.locator("#title")).toHaveText(manifest(name).title);
+      await expect(page.locator("#about li")).toHaveText(manifest(name).about);
 
       const log = page.locator("#log");
       if (wire === "stateless") {

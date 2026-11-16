@@ -1,6 +1,11 @@
 {
   "title": "Proto-generated book service",
   "summary": "An MCP server generated from a .proto file by protogen: tools, resources, prompts and argument completion. Search the catalog, read a book resource, and watch book IDs complete as you type a prompt argument.",
+  "about": [
+    "An MCP server generated from a .proto file by protogen.",
+    "Search the catalog with books_search, and read a book through its book:// resource template.",
+    "The prompts take a book_id, and typing one shows completions from the server."
+  ],
   "docs": "examples/protogen/bookservice/",
   "package": ".",
   "smoke": {

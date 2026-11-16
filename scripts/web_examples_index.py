@@ -102,6 +102,9 @@ def load(try_dir: Path) -> list[tuple[str, dict]]:
         for key in ("title", "summary"):
             if not data.get(key):
                 sys.exit(f"web-examples-index: {d.name}/playground.json has no {key}")
+        about = data.get("about")
+        if not isinstance(about, list) or not 3 <= len(about) <= 5:
+            sys.exit(f"web-examples-index: {d.name}/playground.json needs 3 to 5 \"about\" bullets")
         out.append((d.name, data))
     # getting-started leads, the rest go by title.
     out.sort(key=lambda e: (e[0] != FIRST, e[1]["title"].lower()))
