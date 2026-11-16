@@ -4,7 +4,6 @@ import (
 	"context"
 	_ "embed"
 	"encoding/base64"
-	"encoding/json"
 	"fmt"
 	"log"
 	"os"
@@ -397,24 +396,6 @@ _, err := c.Call("tools/call", map[string]any{
 }
 
 // --- helpers used by both the server and the walkthrough ---
-
-func parseArgs(raw json.RawMessage) (map[string]any, error) {
-	if len(raw) == 0 {
-		return map[string]any{}, nil
-	}
-	var args map[string]any
-	if err := json.Unmarshal(raw, &args); err != nil {
-		return nil, err
-	}
-	return args, nil
-}
-
-func displayName(filename string) string {
-	if filename == "" {
-		return "<unnamed>"
-	}
-	return filename
-}
 
 // --- walkthrough-only helpers ---
 

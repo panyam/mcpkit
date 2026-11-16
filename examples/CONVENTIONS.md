@@ -1130,11 +1130,18 @@ examples/<name>/
 - Add `web/playground.json`. Having one makes the example browser-ready.
   - `title`, `summary`: the card on the `/try/` landing page.
   - `docs`: the site path of its README page, such as `examples/tasks-v2/`.
-  - `smoke`: `tool`, the `expect` text, and optionally `args`, `group` and `replies`.
-    `tests/web-examples` makes this call on every wire, so the spec needs no edit.
+  - `smoke`: `tool`, the `expect` text, and optionally `args`, `files` (attached to file inputs:
+    `{"field": {"name", "mimeType", "text"}}`), `group` and `replies`. `tests/web-examples` makes
+    this call on every wire, so the spec needs no edit.
+  - `complete` (optional): `prompt`, `argument`, `value` and `expect`. The spec types `value` into
+    the prompt argument and waits for `expect` among the server's completions.
   - `wires` (optional): the wires the playground offers, first one default. It defaults to
     `["stateless", "session"]`. List one wire when the example only makes sense on it.
-  - `package` (optional): what to build, default `./web`. getting-started uses `./server`.
+  - `package` (optional): what to build, default `./web`. getting-started uses `./server`. A
+    plain server with no demokit, like `protogen/bookservice`, can use `.` and skip the split.
+  - `slug` (optional): the page's name under `/try/`. It defaults to the path under `examples/`
+    with `/` turned into `-`, so `protogen/bookservice` becomes `protogen-bookservice`. Examples
+    can sit at any depth.
 - Add `include ../common/playground.mk` to the Makefile and `import '../common/playground.just'`
   to the justfile for `serve-web`, plus a "Try it in your browser" README section.
 

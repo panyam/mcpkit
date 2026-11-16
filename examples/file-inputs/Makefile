@@ -15,3 +15,5 @@ build: ## Build the binary
 
 .PHONY: demo note serve readme build
 .DEFAULT_GOAL := demo
+
+include ../common/playground.mk

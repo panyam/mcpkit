@@ -142,3 +142,7 @@ servers name="":
 # Build the demo server (compile check).
 build:
     cd server && go build ./...
+
+# Serve the tool server's browser playground on http://localhost:8788/
+serve-web port="8788":
+    bash ../../../scripts/serve-example-wasm.sh server {{port}}

@@ -87,6 +87,11 @@ CARD = """    <div class="card" data-example="{name}">
     </div>"""
 
 
+def docs_link(docs: str) -> str:
+    """A site path is relative to the docs root. A full URL is used as is."""
+    return docs if docs.startswith(("http://", "https://")) else SITE_ROOT + docs
+
+
 def load(try_dir: Path) -> list[tuple[str, dict]]:
     out = []
     for d in sorted(p for p in try_dir.iterdir() if p.is_dir()):
@@ -113,7 +118,7 @@ def main() -> None:
             name=html.escape(name),
             title=html.escape(m["title"]),
             summary=html.escape(m["summary"]),
-            docs=html.escape(SITE_ROOT + m.get("docs", "examples/")),
+            docs=html.escape(docs_link(m.get("docs", "examples/"))),
         )
         for name, m in examples
     )
