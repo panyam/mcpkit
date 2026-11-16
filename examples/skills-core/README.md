@@ -19,6 +19,16 @@ are the deferred / extended features and are deliberately left out here.
 3. Read a `SKILL.md`. A skill is data: YAML frontmatter (`name`, `description`) plus a markdown body of instructions. mcpkit delivers it over `resources/read`; it is never staged to disk and never executed.
 4. **Tool handling** - the bundled `commit-helper` skill instructs the host to call the `format_commit` tool. The walkthrough reads the skill, then calls the tool. Skills make ordinary tools easier to use well.
 
+## Try it in your browser
+
+[panyam.github.io/mcpkit/try/skills-core](https://panyam.github.io/mcpkit/try/skills-core/) runs this server in a browser tab,
+with nothing to install. It's a playground rather than the walkthrough. Call any tool with any
+input, answer the server when it asks for input, and watch the JSON-RPC go each way.
+`just serve-web` builds and serves the same page on `http://localhost:8788/`.
+
+The tools live in `mcp/`. The CLI server, the tests and `web/main.go` all register them from
+there, so the playground runs the same server without demokit or otel.
+
 ## Run it
 
 ```
@@ -39,7 +49,7 @@ lets you pick `adaptive` (probe `server/discover`, fall back to `initialize`),
 
 ## The skill
 
-`skills/commit-helper/SKILL.md` describes a task and points the host at a
+`mcp/skills/commit-helper/SKILL.md` describes a task and points the host at a
 tool:
 
 ```markdown
@@ -51,7 +61,7 @@ description: Turn a change description into a Conventional Commits subject line 
 ```
 
 The server registers `format_commit` alongside the skill provider
-(`main.go`). That pairing of a skills file plus the tool it references is the
+(`mcp/mcp.go`). That pairing of a skills file plus the tool it references is the
 minimal shape in one example.
 
 ## Safety posture

@@ -26,9 +26,9 @@ import (
 	"strings"
 
 	"github.com/panyam/demokit"
-	"github.com/panyam/mcpkit/core"
 	"github.com/panyam/mcpkit/examples/common"
 	commonotel "github.com/panyam/mcpkit/examples/common/otel"
+	"github.com/panyam/mcpkit/examples/list-ttl/mcp"
 	"github.com/panyam/mcpkit/server"
 )
 
@@ -67,13 +67,7 @@ func serve() {
 
 	// The same ttlMs / cacheScope applies to the four list endpoints and to
 	// resources/read — SEP-2549 added resources/read to the coverage list.
-	var extraOpts []server.Option
-	if *ttlMs >= 0 || *scope != "" {
-		extraOpts = append(extraOpts,
-			server.WithListCacheControl(*ttlMs, *scope),
-			server.WithReadResourceCacheControl(*ttlMs, *scope),
-		)
-	}
+	extraOpts := mcp.Options(*ttlMs, *scope)
 
 	mode := "unset"
 	if *ttlMs == 0 {
@@ -94,48 +88,7 @@ func serve() {
 		Options:        extraOpts,
 		Wire:           wire,
 		Register: func(srv *server.Server) {
-			srv.Register(core.TextTool[struct{}]("ping", "Returns 'pong'",
-				func(ctx core.ToolContext, _ struct{}) (string, error) {
-					return "pong", nil
-				},
-			))
-
-			srv.RegisterResource(
-				core.ResourceDef{
-					URI:      "file:///fixture",
-					Name:     "fixture",
-					MimeType: "text/plain",
-				},
-				func(ctx core.ResourceContext, req core.ResourceRequest) (core.ResourceResult, error) {
-					return core.ResourceResult{
-						Contents: []core.ResourceReadContent{{
-							URI:      req.URI,
-							MimeType: "text/plain",
-							Text:     "fixture",
-						}},
-					}, nil
-				},
-			)
-
-			srv.RegisterResourceTemplate(
-				core.ResourceTemplate{URITemplate: "file:///t/{name}", Name: "tmpl"},
-				func(ctx core.ResourceContext, uri string, params map[string]string) (core.ResourceResult, error) {
-					return core.ResourceResult{
-						Contents: []core.ResourceReadContent{{
-							URI:      uri,
-							MimeType: "text/plain",
-							Text:     "templated:" + params["name"],
-						}},
-					}, nil
-				},
-			)
-
-			srv.RegisterPrompt(
-				core.PromptDef{Name: "hello", Description: "Sample prompt"},
-				func(ctx core.PromptContext, req core.PromptRequest) (core.PromptResponse, error) {
-					return core.PromptResult{}, nil
-				},
-			)
+			mcp.Register(srv)
 		},
 	}); err != nil {
 		log.Fatalf("ListenAndServe: %v", err)

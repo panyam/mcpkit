@@ -16,5 +16,8 @@ readme: ## Regenerate WALKTHROUGH.md from the demo definitions.
 build: ## Build the binary to ./skills-core
 	go build -o skills-core .
 
-.PHONY: serve demo run note readme build
+serve-web: ## Serve the browser playground on http://localhost:8788/
+	@bash ../../scripts/serve-example-wasm.sh . ./web 8788
+
+.PHONY: serve demo run note readme build serve-web
 .DEFAULT_GOAL := serve

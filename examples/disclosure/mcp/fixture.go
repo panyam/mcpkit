@@ -1,4 +1,7 @@
-package main
+// Package mcp holds the disclosure fixture: 200 tools in eight themed groups
+// and two skills. It imports neither demokit nor otel, so the browser build in
+// ../web stays small (#1714).
+package mcp
 
 import (
 	"embed"
@@ -39,15 +42,18 @@ var verbs = []struct {
 	{"delete", "Deletes a %s from the %s system. This cannot be undone."},
 }
 
-// toolCount is how many tools the fixture serves. Tests and the check mode
+// ToolCount is how many tools the fixture serves. Tests and the check mode
 // compare against it.
-var toolCount = len(themes) * 5 * len(verbs)
+var ToolCount = len(themes) * 5 * len(verbs)
+
+// ThemeCount is how many themes, and so how many groups, the fixture has.
+var ThemeCount = len(themes)
 
 //go:embed skills
 var skillsFS embed.FS
 
-// fixtureTools returns the 200 tool definitions in registration order.
-func fixtureTools() []core.ToolDef {
+// Tools returns the 200 tool definitions in registration order.
+func Tools() []core.ToolDef {
 	var defs []core.ToolDef
 	for _, t := range themes {
 		for _, n := range t.nouns {
@@ -70,14 +76,14 @@ func fixtureTools() []core.ToolDef {
 	return defs
 }
 
-// billingSkill is the SKILL.md the billing group lists next to its tools.
-const billingSkill = "skill://billing-refunds/SKILL.md"
+// BillingSkill is the SKILL.md the billing group lists next to its tools.
+const BillingSkill = "skill://billing-refunds/SKILL.md"
 
-// registerFixture registers the tools, the skills and the groups on srv. Every tool
+// Register registers the tools, the skills and the groups on srv. Every tool
 // answers with one line of text, since the exercise measures what a client
 // sees in the lists, not what the tools do.
-func registerFixture(srv *server.Server) error {
-	for _, def := range fixtureTools() {
+func Register(srv *server.Server) error {
+	for _, def := range Tools() {
 		name := def.Name
 		srv.RegisterTool(def, func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
 			return core.TextResult(name + ": ok"), nil
@@ -101,7 +107,7 @@ func registerFixture(srv *server.Server) error {
 // resources/list.
 func fixtureGroups() *groups.Catalog {
 	byTheme := map[string][]string{}
-	for _, def := range fixtureTools() {
+	for _, def := range Tools() {
 		theme := def.Name[:strings.IndexByte(def.Name, '_')]
 		byTheme[theme] = append(byTheme[theme], def.Name)
 	}
@@ -114,7 +120,7 @@ func fixtureGroups() *groups.Catalog {
 		}
 		if t.name == "billing" {
 			d.Instructions = "For a refund, follow the billing-refunds skill listed in this group's resources."
-			d.Resources = []string{billingSkill}
+			d.Resources = []string{BillingSkill}
 		}
 		if err := cat.Add(d); err != nil {
 			panic(err) // the theme table is fixed, so this is a programming error

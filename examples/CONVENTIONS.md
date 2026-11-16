@@ -26,7 +26,7 @@ browser build (`web/`, #1711), which `make -C examples test-getting-started`
 runs. Any example with `web/worker.js` and a `server/` package gets published at
 `/try/<example>/` on the docs site and loaded in Chromium by
 `make test-web-examples` (#1712). Its page must show "Connected to" in `#status`
-and give each tool a `.tool` block whose form calls it with default inputs. Every other non-UI example follows the full convention below.
+and give each tool a `.tool[data-tool=<name>]` block whose form calls it. Every other non-UI example follows the full convention below.
 
 ---
 
@@ -1109,3 +1109,28 @@ can ask for, done by rebuilding the whole server over the same subscription
 store behind a swappable handler. It stays inside the rule because every piece
 is public API (`WithWebhookStore`, a fresh `server.Server`); what it would
 break is the rule's spirit if it reached into the registry to fake survival.
+
+---
+
+## Browser playground (optional)
+
+A non-UI example can also run in a browser tab (#1714). Give it this shape:
+
+```
+examples/<name>/
+├── mcp/mcp.go      # package mcp: Register(srv) (+ Options(...) if flags pick server options)
+├── web/main.go     # package main: server.NewServer, mcp.Register, srv.Run
+└── main.go         # unchanged dual-mode CLI; serve() calls mcp.Register
+```
+
+- `mcp/` must not import demokit, otel or `examples/common`. demokit pulls in a package that
+  doesn't build for js, and the two together double the download.
+- `web/main.go` stays about ten lines, and it uses the defaults the CLI's flags use.
+- Data the server reads from disk gets embedded in `mcp/`, as `skills-core` and `disclosure`
+  do with `mcp/skills/`.
+- Add `serve-web` to the Makefile and justfile, a "Try it in your browser" README section, and
+  a smoke call in `tests/web-examples/tests/web-examples.spec.ts`.
+
+The docs site publishes it at `/try/<name>/` with the shared playground page from
+`examples/common/web/`. `examples/NOTES.md` § Which examples run in the browser lists the
+candidates and the examples that can't run there.

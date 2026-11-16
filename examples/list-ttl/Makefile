@@ -13,5 +13,8 @@ readme: ## Regenerate WALKTHROUGH.md from demo definitions
 build: ## Build the binary
 	go build -o list-ttl-demo .
 
-.PHONY: demo note serve readme build
+serve-web: ## Serve the browser playground on http://localhost:8788/
+	@bash ../../scripts/serve-example-wasm.sh . ./web 8788
+
+.PHONY: demo note serve readme build serve-web
 .DEFAULT_GOAL := demo

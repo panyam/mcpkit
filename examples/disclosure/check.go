@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/panyam/mcpkit/examples/disclosure/mcp"
+
 	"github.com/panyam/mcpkit/client"
 	"github.com/panyam/mcpkit/core"
 	"github.com/panyam/mcpkit/experimental/ext/groups"
@@ -45,7 +47,7 @@ func runChecks(ctx context.Context, url string, opts ...client.ClientOption) []c
 	defer plain.Close()
 
 	flatCount, flatBytes, err := listAllTools(ctx, plain)
-	rows = append(rows, countRow(rowPlainTools, flatCount, flatBytes, err, func(n int) bool { return n == toolCount }))
+	rows = append(rows, countRow(rowPlainTools, flatCount, flatBytes, err, func(n int) bool { return n == mcp.ToolCount }))
 	rows = append(rows, checkSkill(ctx, plain))
 
 	groupsOpts := append([]client.ClientOption{groups.ClientOption()}, opts...)
@@ -114,7 +116,7 @@ func countRow(name string, n, size int, err error, ok func(int) bool) checkRow {
 	if err != nil {
 		return checkRow{Name: name, Detail: err.Error()}
 	}
-	return checkRow{Name: name, OK: ok(n), Detail: fmt.Sprintf("%d of %d tools, %d bytes", n, toolCount, size)}
+	return checkRow{Name: name, OK: ok(n), Detail: fmt.Sprintf("%d of %d tools, %d bytes", n, mcp.ToolCount, size)}
 }
 
 func checkSkill(ctx context.Context, c *client.Client) checkRow {
@@ -164,8 +166,8 @@ func checkGroupsList(ctx context.Context, c *client.Client) (checkRow, int) {
 			return row, len(res.Raw)
 		}
 	}
-	row.OK = len(lr.Groups) == len(themes)
-	row.Detail = fmt.Sprintf("%d groups, want %d, %d bytes", len(lr.Groups), len(themes), len(res.Raw))
+	row.OK = len(lr.Groups) == mcp.ThemeCount
+	row.Detail = fmt.Sprintf("%d groups, want %d, %d bytes", len(lr.Groups), mcp.ThemeCount, len(res.Raw))
 	return row, len(res.Raw)
 }
 
@@ -191,8 +193,8 @@ func checkGroupsGet(ctx context.Context, c *client.Client) (checkRow, int) {
 			return row, len(res.Raw)
 		}
 	}
-	hasSkill := strings.Contains(string(res.Raw), billingSkill)
-	want := toolCount / len(themes)
+	hasSkill := strings.Contains(string(res.Raw), mcp.BillingSkill)
+	want := mcp.ToolCount / mcp.ThemeCount
 	row.OK = len(gr.Tools) == want && hasSkill
 	row.Detail = fmt.Sprintf("%d tools, want %d, SKILL.md listed %v", len(gr.Tools), want, hasSkill)
 	return row, len(res.Raw)

@@ -35,6 +35,16 @@ way, but the explicit form states the intent on the wire.
 A server whose response varies per caller MUST set `private` explicitly,
 see the security note in the migration guide.
 
+## Try it in your browser
+
+[panyam.github.io/mcpkit/try/list-ttl](https://panyam.github.io/mcpkit/try/list-ttl/) runs this server in a browser tab,
+with nothing to install. It's a playground rather than the walkthrough. Call any tool with any
+input, answer the server when it asks for input, and watch the JSON-RPC go each way.
+`just serve-web` builds and serves the same page on `http://localhost:8788/`.
+
+The tools live in `mcp/`. The CLI server, the tests and `web/main.go` all register them from
+there, so the playground runs the same server without demokit or otel.
+
 ## Quick Start
 
 ```bash

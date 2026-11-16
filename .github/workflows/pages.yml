@@ -23,8 +23,10 @@ on:
       # by collect_walkthroughs.py on every build.
       - 'examples/**/*.md'
       - 'examples/**/bundle/**'
-      # Browser builds of the examples, published under /try/ (#1712).
+      # Browser builds of the examples, published under /try/ (#1712), and
+      # the mcp/ packages they serve (#1714).
       - 'examples/**/web/**'
+      - 'examples/**/mcp/**'
       - 'server/worker_js.go'
       - 'scripts/collect_web_examples.sh'
       - 'scripts/build-example-wasm.sh'
@@ -125,4 +127,8 @@ jobs:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_dir: ./dist
           publish_branch: gh-pages
+          # Replace the branch with one commit on each deploy. The /try/ pages
+          # ship a wasm binary each, about 15 MB, so a kept history would grow
+          # by that much every time a server changes (#1714).
+          force_orphan: true
           commit_message: 'Deploy mcpkit docs site (${{ github.sha }})'

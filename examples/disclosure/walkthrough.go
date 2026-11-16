@@ -7,6 +7,8 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/panyam/mcpkit/examples/disclosure/mcp"
+
 	"github.com/panyam/demokit"
 	"github.com/panyam/mcpkit/client"
 	"github.com/panyam/mcpkit/core"
@@ -84,7 +86,7 @@ func runDemo() {
 				return
 			}
 			fmt.Printf("    %d tools, %d bytes of JSON\n", n, size)
-			fmt.Printf("    about %d bytes per theme\n", size/len(themes))
+			fmt.Printf("    about %d bytes per theme\n", size/mcp.ThemeCount)
 			return
 		})
 

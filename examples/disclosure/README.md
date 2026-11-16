@@ -15,6 +15,16 @@ instead of 200 tools, and fetches one group's tools with `groups/get` when it ne
 billing group lists the `billing-refunds` skill next to its tools. A client that doesn't declare
 the extension still gets the flat list.
 
+## Try it in your browser
+
+[panyam.github.io/mcpkit/try/disclosure](https://panyam.github.io/mcpkit/try/disclosure/) runs this server in a browser tab,
+with nothing to install. It's a playground rather than the walkthrough. Call any tool with any
+input, answer the server when it asks for input, and watch the JSON-RPC go each way.
+`just serve-web` builds and serves the same page on `http://localhost:8788/`.
+
+The tools live in `mcp/`. The CLI server, the tests and `web/main.go` all register them from
+there, so the playground runs the same server without demokit or otel.
+
 ## Run it
 
 ```bash
@@ -56,7 +66,8 @@ the billing tools, next to the flat list.
 
 | File | What it holds |
 |---|---|
-| `fixture.go` | The 200 tool definitions, the eight groups and the embedded `skills/` tree |
+| `mcp/fixture.go` | The 200 tool definitions, the eight groups and the embedded `mcp/skills/` tree |
 | `check.go` | The `--check` rows |
 | `walkthrough.go` | The demokit walkthrough |
-| `skills/` | `billing-refunds` and `incident-triage` |
+| `mcp/skills/` | `billing-refunds` and `incident-triage` |
+| `web/main.go` | The bare server the browser playground runs |
