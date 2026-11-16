@@ -77,9 +77,23 @@
   #asks { margin-bottom: 12px; }
   #log { display: flex; flex-direction: column; gap: 8px; max-height: 75vh; overflow: auto; }
   .msg { border-left: 3px solid var(--border); padding-left: 8px; }
-  .msg .dir { font-size: 12px; font-weight: 600; }
-  .msg.out { border-color: var(--out); } .msg.out .dir { color: var(--out); }
-  .msg.in { border-color: var(--in); } .msg.in .dir { color: var(--in); }
+  .msg.new { animation: msg-in .25s ease-out; }
+  @keyframes msg-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+  @media (prefers-reduced-motion: reduce) { .msg.new { animation: none; } }
+  .msg > summary { cursor: pointer; list-style: none; font-size: 12px; }
+  .msg > summary::-webkit-details-marker { display: none; }
+  .msg .head, .msg .meta { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .msg .head { font-weight: 600; }
+  .msg .head::before { content: "▸ "; color: var(--muted); }
+  .msg[open] .head::before { content: "▾ "; }
+  .msg .head code { font: 12px ui-monospace, monospace; }
+  .msg .meta { color: var(--muted); padding-left: 14px; }
+  .msg .meta.bad { color: var(--err); }
+  .msg.out { border-color: var(--out); } .msg.out .head { color: var(--out); }
+  .msg.in { border-color: var(--in); } .msg.in .head { color: var(--in); }
+  .logbar { display: flex; gap: 6px; }
+  .logbar button { margin: 0; padding: 2px 8px; font-size: 12px; text-transform: none; letter-spacing: 0; }
+  .logbar button.on { background: var(--accent); color: #fff; }
   details.cfg { margin-top: 12px; }
   details.cfg summary { cursor: pointer; color: var(--muted); }
 </style>
@@ -126,12 +140,13 @@
       </details>
       <details class="cfg">
         <summary>Send raw JSON-RPC</summary>
-        <textarea id="raw">{"jsonrpc": "2.0", "id": 9000, "method": "ping"}</textarea>
+        <textarea id="raw">{"jsonrpc": "2.0", "method": "ping"}</textarea>
+        <p class="note">Leave out <code>id</code> and the page uses its next one. A <code>notifications/</code> method goes without one.</p>
         <button id="sendRaw" disabled>Send</button>
       </details>
     </section>
     <section>
-      <h2>Wire log <button class="ghost" id="clearLog">Clear</button></h2>
+      <h2>Wire log <span class="logbar"><button class="ghost" id="expandAll" aria-pressed="false">Expand all</button><button class="ghost" id="clearLog">Clear</button></span></h2>
       <div id="log"></div>
     </section>
   </div>
@@ -180,12 +195,93 @@ const pre = (v) => el("pre", { text: typeof v === "string" ? v : JSON.stringify(
 
 function setStatus(text, cls) { statusEl.textContent = text; statusEl.className = "status " + (cls || ""); }
 
+// The wire log keeps every message collapsed to a two-line summary, except
+// the newest one. "Expand all" opens every message, new ones included.
+let expandAll = false, lastOpen = null;
+const methodOf = new Map(); // "out:3" -> the method of request 3 the page sent
+
+function clip(v, n = 60) {
+  const s = typeof v === "string" ? v : JSON.stringify(v);
+  return s.length > n ? s.slice(0, n - 1) + "…" : s;
+}
+
+function paramsHint(method, p) {
+  if (!p) return "";
+  if (method === "notifications/progress") {
+    return p.progress + (p.total != null ? "/" + p.total : "") + (p.message ? " " + clip(p.message, 40) : "");
+  }
+  if (method === "notifications/message") return (p.level || "") + " " + clip(p.data ?? "", 50);
+  if (p.name) return p.name + (p.arguments && Object.keys(p.arguments).length ? " " + clip(p.arguments, 40) : "");
+  if (p.uri) return p.uri;
+  if (p.taskId) return "task " + p.taskId + (p.status ? " " + p.status : "");
+  if (p.ref) return clip(p.ref, 40) + (p.argument ? " " + p.argument.name + "=" + clip(p.argument.value, 20) : "");
+  if (p.message) return clip(p.message, 50);
+  if (p.cursor) return "cursor " + clip(p.cursor, 20);
+  return "";
+}
+
+function resultHint(r) {
+  if (!r || typeof r !== "object") return "ok";
+  const parts = [];
+  if (r.isError) parts.push("tool error");
+  if (r.resultType && r.resultType !== "complete") parts.push(r.resultType);
+  if (r.status) parts.push(r.status);
+  if (r.serverInfo) parts.push(r.serverInfo.name + " " + r.serverInfo.version);
+  if (r.protocolVersion) parts.push("protocol " + r.protocolVersion);
+  for (const [k, v] of Object.entries(r)) {
+    if (k !== "content" && Array.isArray(v)) parts.push(v.length + " " + k);
+  }
+  const first = Array.isArray(r.content) ? r.content[0] : null;
+  if (first) parts.push(first.type === "text" ? clip(first.text, 50) : r.content.length + " content");
+  if (Array.isArray(r.contents) && r.contents[0]?.mimeType) parts.push(r.contents[0].mimeType);
+  if (r.nextCursor) parts.push("more pages");
+  return parts.join(" · ") || "ok";
+}
+
+// summarize turns one JSON-RPC message into a head line (kind, id, method)
+// and a meta line (what it asked or what came back).
+function summarize(dir, text) {
+  const arrow = dir === "out" ? "→" : "←";
+  let m;
+  try { m = JSON.parse(text); } catch { return { head: arrow + " text", meta: clip(text, 80) }; }
+  if (Array.isArray(m)) return { head: arrow + " batch of " + m.length, meta: "" };
+  const peer = dir === "out" ? "in" : "out";
+  if (m.method && m.id !== undefined) {
+    methodOf.set(dir + ":" + m.id, m.method);
+    return { head: arrow + " request #" + m.id, method: m.method, meta: paramsHint(m.method, m.params) };
+  }
+  if (m.method) return { head: arrow + " notification", method: m.method, meta: paramsHint(m.method, m.params) };
+  const method = methodOf.get(peer + ":" + m.id);
+  if (m.error) {
+    return { head: arrow + " error #" + m.id, method, bad: true,
+             meta: m.error.code + " " + clip(m.error.message || "", 70) };
+  }
+  return { head: arrow + " response #" + m.id, method, meta: resultHint(m.result), bad: !!m.result?.isError };
+}
+
 function log(dir, text) {
   let body = text;
   try { body = JSON.stringify(JSON.parse(text), null, 2); } catch {}
-  logEl.append(el("div", { class: "msg " + dir },
-    el("div", { class: "dir", text: dir === "out" ? "→ page to server" : "← server to page" }), pre(body)));
-  logEl.scrollTop = logEl.scrollHeight;
+  const s = summarize(dir, text);
+  const way = dir === "out" ? "page to server" : "server to page";
+  const head = el("div", { class: "head", title: way }, s.head + " ", s.method ? el("code", { text: s.method }) : null);
+  const meta = el("div", { class: "meta" + (s.bad ? " bad" : ""), text: s.meta || way });
+  const item = el("details", { class: "msg new " + dir }, el("summary", {}, head, meta), pre(body));
+  item.addEventListener("animationend", () => item.classList.remove("new"), { once: true });
+  if (lastOpen && !expandAll) lastOpen.open = false;
+  item.open = true;
+  lastOpen = item;
+  logEl.append(item);
+  logEl.scrollTo({ top: logEl.scrollHeight, behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
+}
+
+function setExpandAll(on) {
+  expandAll = on;
+  const b = $("expandAll");
+  b.textContent = on ? "Collapse all" : "Expand all";
+  b.classList.toggle("on", on);
+  b.setAttribute("aria-pressed", String(on));
+  for (const d of logEl.querySelectorAll(".msg")) d.open = on || d === lastOpen;
 }
 
 function post(msg) {
@@ -225,8 +321,8 @@ function connect() {
   for (const b of document.querySelectorAll("#wires button")) b.classList.toggle("on", b.dataset.wire === wire);
   $("wire-note").textContent = WIRE_NOTES[wire];
   $("raw").value = JSON.stringify(wire === "stateless"
-    ? { jsonrpc: "2.0", id: 9000, method: "tools/list", params: withStatelessMeta({}) }
-    : { jsonrpc: "2.0", id: 9000, method: "ping" }, null, 2);
+    ? { jsonrpc: "2.0", method: "tools/list", params: withStatelessMeta({}) }
+    : { jsonrpc: "2.0", method: "ping" }, null, 2);
   const url = new URL(location.href);
   url.searchParams.set("wire", wire);
   history.replaceState(null, "", url);
@@ -671,10 +767,16 @@ $("reconnect").onclick = connect;
 for (const b of document.querySelectorAll("#wires button")) {
   b.onclick = () => { if (b.dataset.wire !== wire) { wire = b.dataset.wire; connect(); } };
 }
-$("clearLog").onclick = () => logEl.replaceChildren();
+$("clearLog").onclick = () => { logEl.replaceChildren(); lastOpen = null; };
+$("expandAll").onclick = () => setExpandAll(!expandAll);
+// A raw request with no id takes the page's next one, so it can't collide
+// with a request the page has in flight. A typed id goes out as typed.
 $("sendRaw").onclick = () => {
-  const text = $("raw").value;
-  try { JSON.parse(text); } catch (err) { alert("Not valid JSON: " + err.message); return; }
+  let text = $("raw").value, msg;
+  try { msg = JSON.parse(text); } catch (err) { alert("Not valid JSON: " + err.message); return; }
+  const isRequest = msg && typeof msg === "object" && !Array.isArray(msg) &&
+    typeof msg.method === "string" && !msg.method.startsWith("notifications/");
+  if (isRequest && !("id" in msg)) text = JSON.stringify({ jsonrpc: "2.0", id: nextId++, ...msg });
   log("out", text);
   worker.postMessage(text);
 };

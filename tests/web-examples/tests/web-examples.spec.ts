@@ -98,6 +98,19 @@ for (const name of examples) {
         await expect(log).not.toContainText('"method": "server/discover"');
       }
 
+      // A raw request sent without an id gets the page's next one, and the
+      // response comes back under the same id.
+      await page.locator("summary", { hasText: "Send raw JSON-RPC" }).click();
+      const raw = JSON.parse(await page.locator("#raw").inputValue());
+      delete raw.id;
+      await page.locator("#raw").fill(JSON.stringify(raw));
+      await page.locator("#sendRaw").click();
+      const sent = await page.locator("#log .msg.out .head").last().textContent();
+      const id = sent?.match(new RegExp(`^→ request #(\\d+) ${raw.method}$`))?.[1];
+      expect(id, `raw request header: ${sent}`).toBeTruthy();
+      await expect(page.locator("#log .msg.in .head", { hasText: `← response #${id} ${raw.method}` })).toHaveCount(1);
+      await page.locator("summary", { hasText: "Send raw JSON-RPC" }).click();
+
       const smoke = manifest(name).smoke;
       if (!smoke) {
         await expect(page.locator(".tool, .item, .group").first()).toBeAttached();
