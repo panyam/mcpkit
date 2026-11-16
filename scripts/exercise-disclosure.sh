@@ -30,8 +30,8 @@ echo "    $(grep -E '^testconf-skills: ' "$LOG/skills.log" | tail -1 | sed 's/ (
 grep -q '^testconf-skills: ' "$LOG/skills.log" || echo "    testconf-skills: no summary, see $LOG/skills.log"
 
 echo "  2. skills client scenarios:"
-if [ ! -d "$MCPCONFORMANCE_CLIENT_PATH/dist" ]; then
-    echo "    FAIL no built conformance checkout at $MCPCONFORMANCE_CLIENT_PATH (run make testconf-client once)"
+if [ ! -d "$MCPCONFORMANCE_SKILLS_PATH/dist" ]; then
+    echo "    FAIL no built conformance checkout at $MCPCONFORMANCE_SKILLS_PATH (run make conf-skills-setup, then make testconf-skills)"
     fail=1
 elif ! (cd "$ROOT/cmd/testclient" && go build -buildvcs=false -o "$LOG/testclient" .) >"$LOG/testclient-build.log" 2>&1; then
     echo "    FAIL cmd/testclient did not build, see $LOG/testclient-build.log"
@@ -43,7 +43,7 @@ else
         "$ROOT/conformance/client-check-counts.json" >"$LOG/scenarios.txt"
     while read -r s want; do
         out="$LOG/client-$s"
-        (cd "$MCPCONFORMANCE_CLIENT_PATH" && node dist/index.js client --command "$LOG/testclient" --scenario "$s" -o "$out") \
+        (cd "$MCPCONFORMANCE_SKILLS_PATH" && node dist/index.js client --command "$LOG/testclient" --scenario "$s" -o "$out") \
             </dev/null >"$out.log" 2>&1
         rc=$?
         fails=$(cat $(find "$out" -name checks.json 2>/dev/null) /dev/null | grep -c '"status": "FAILURE"')

@@ -80,6 +80,14 @@ func main() {
 		return
 	}
 
+	if drive, ok := sep2640HostingDrivers[scenario]; ok {
+		if err := drive(serverURL, contextJSON); err != nil {
+			log.Fatalf("%s: %v", scenario, err)
+		}
+		log.Printf("SUCCESS: %s driven", scenario)
+		return
+	}
+
 	if strings.HasPrefix(scenario, "sep-2640-client-verify-") {
 		mode := strings.TrimPrefix(scenario, "sep-2640-client-verify-")
 		if err := driveSEP2640Verify(serverURL, mode); err != nil {

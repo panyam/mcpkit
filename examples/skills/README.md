@@ -97,13 +97,20 @@ go run . --serve --addr=:9090 --skills=./some-other-skills
 
 ## Bundled fixture
 
-Three skills under `skills/` mirror the SEP-2640 Examples table:
+Four skills under `skills/` mirror the SEP-2640 Examples table:
 
 | Skill path             | Files                                                       |
 |------------------------|-------------------------------------------------------------|
 | `git-workflow`         | `SKILL.md`                                                  |
-| `pdf-processing`       | `SKILL.md`, `references/FORMS.md`, `scripts/extract.py`     |
+| `pdf-processing`       | `SKILL.md`, `references/FORMS.md`, `scripts/extract.py`, `forms/SKILL.md` |
+| `pdf-processing/forms` | `SKILL.md`                                                  |
 | `acme/billing/refunds` | `SKILL.md`, `templates/email.md`                            |
+
+`pdf-processing/forms` is a nested skill. It has its own listing entry, and
+`pdf-processing` lists its `SKILL.md` too, since a nested skill's files are
+supporting files of the skill around it. `pdf-processing/output/` holds only a
+hidden `.gitkeep`, which the provider skips, so it reads as an empty
+directory. The SEP-2640 conformance suite uses both.
 
 `pdf-processing/SKILL.md` carries Extra frontmatter (`version`, `tags`)
 to exercise the `Annotations` surface that surfaces extras under the
