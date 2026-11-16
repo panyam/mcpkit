@@ -73,6 +73,10 @@ sweeps over the common path miss them.
 
 ## Which examples run in the browser (#1714)
 
+Mission #1710 built the playgrounds and closed on 2026-11-16. Its issue and the PRs it links
+(#1713 through #1722) hold the history. `make exercise-web-examples` still runs the whole check,
+and CI's `web-examples` job runs the Chromium part on every PR.
+
 Audited 2026-11-15 by building every example main package with `GOOS=js GOARCH=wasm`, then
 reading what each server needs. A browser build runs the server in a Web Worker and talks to
 it over `postMessage` (`server.RunWorker`). It has no socket, no file system and no child

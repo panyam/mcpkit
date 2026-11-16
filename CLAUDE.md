@@ -57,8 +57,6 @@ missions, one worktree each:
   `rooms-channel`.
 - **#1553** `mission_release_installable`: `make check-install V=<tag>`.
 - **#1701** `mission_progressive_disclosure`: `make exercise-disclosure`. The groups rows fail until #1685.
-- **#1710** `mission_web_examples`: `make exercise-web-examples`. A wasm-ready example has
-  its tools in a demokit-free `mcp/` package and a `web/main.go`, published at `/try/<example>/`.
 
 #1554 (`mission_apps_host`, label `mcpapps`) is queued behind #1683.
 
