@@ -66,6 +66,37 @@ so the check has nothing to protect there. An extension that has completed OAuth
 without an allowlist entry; one that calls before it has a token, such as during discovery, still
 needs one.
 
+## Server Card
+
+A host can read what a server is before it connects. `WithServerCard` serves a
+[SEP-2127](https://github.com/modelcontextprotocol/ext-server-card) Server Card at
+`<prefix>/server-card`, so a server at `https://mcp.example.com/mcp` answers
+`GET https://mcp.example.com/mcp/server-card`:
+
+```go
+srv := server.NewServer(
+    core.Implementation{Name: "weather", Title: "Weather", Version: "1.2.0"},
+    server.WithServerCard(
+        server.WithCardName("io.github.acme/weather"),
+        server.WithCardDescription("Forecasts and alerts for any city"),
+    ),
+)
+```
+
+The card takes `version`, `title`, `websiteUrl` and `icons` from the `Implementation`. Its remote
+lists the protocol versions the endpoint accepts, so the card agrees with `initialize` and
+`server/discover`. The card's `name` must be reverse-DNS (`namespace/name`) and its `description`
+1 to 100 characters. `Implementation.Name` is free-form, so most servers pass `WithCardName`.
+`Handler` panics on a card that breaks the schema.
+
+The route is public. It sits outside the `Origin` check and bearer auth, sends the CORS headers
+the spec requires, and answers `If-None-Match` with a 304. A `WithHandlerWrap` middleware still
+wraps it. Behind a proxy that rewrites the path, pass the public URL with `WithCardRemotes`.
+An extension adds server-level data to the remote with `srv.SetCardExtensionInfo(id, fn)`.
+
+Only the streamable HTTP transport gets a card, because the spec appends `/server-card` to the
+streamable URL.
+
 ## Refusing for lack of scope
 
 Middleware that refuses a request returns `core.InsufficientScope("pages:act")`, which the server

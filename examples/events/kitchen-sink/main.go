@@ -222,6 +222,13 @@ func buildServerWith(addr string, tp core.TracerProvider, conformanceEvents bool
 	if tp != nil {
 		srvOpts = append(srvOpts, server.WithTracerProvider(tp))
 	}
+	// A host can read what this server is before it connects, at
+	// GET /mcp/server-card (#531). Implementation.Name is free-form, so the
+	// card carries its own reverse-DNS name.
+	srvOpts = append(srvOpts, server.WithServerCard(
+		server.WithCardName("io.github.panyam/kitchen-sink-events"),
+		server.WithCardDescription("Chat, alert and presence events over webhooks and streams"),
+	))
 	srv := server.NewServer(
 		core.ServerInfo{Name: "kitchen-sink-events", Version: "0.1.0"},
 		srvOpts...,

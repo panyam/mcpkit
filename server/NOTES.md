@@ -418,6 +418,22 @@ The groups extension uses it to leave grouped primitives out of a groups client'
 - `resources/templates/list` is not filtered. The groups draft scopes resources by URI, and a
   template has none.
 
+## The Server Card route sits outside `handleRoot` (#531)
+
+`handleRoot` runs the `Origin` check first, and a host fetches the card before it has a token or a
+listed origin. So `Handler` mounts `<prefix>/server-card` on an outer mux, beside the transport,
+and the card never reaches that check. `TestServerCard_OutsideOriginGuardAndAuth` pins it with a
+public `Host`, the same trap as #1547.
+
+- `listenAndServe` with `WithMux` mounts the MCP handler at the exact prefix. The card path needs
+  its own entry on that mux, or it 404s. `TestServerCard_WithMux` covers it.
+- The card's versions come from `cardVersions(mode)`. A stateless-only endpoint lists what
+  `server/discover` lists. Any endpoint that also speaks the session wire lists
+  `protocolVersions()`, since `initialize` can negotiate any of those.
+- The remote URL is rebuilt from each request's `Host`, with `X-Forwarded-Proto` for the scheme.
+  The card is public, so a spoofed `Host` only changes the caller's own copy. Clients that use
+  `extensionsInfo` for security must fetch the card from the remote's origin anyway.
+
 ## `Run` under js/wasm serves a Web Worker (#1711)
 
 A wasm build of an example calls the same `srv.Run(":8787")` as the CLI build. The Get Started docs quote `examples/getting-started/server/main.go` whole, and `check-snippets` compares them. A build-tagged second `main` would split that file. So `worker_js.go` sets `runOverride` in `init`, and `Run` calls `RunWorker` instead of listening.

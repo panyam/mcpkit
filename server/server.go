@@ -38,8 +38,9 @@ type Server struct {
 	// listenBroadcasters fan a notification out to open subscriptions/listen
 	// streams only, one per Streamable HTTP transport (NotifyListeners).
 	listenBroadcasters []func(method string, params any)
-	subRegistry         *subscriptionRegistry      // nil when subscriptions not enabled
-	subFilters          subscriptionFilterRegistry // extension keys for the subscriptions/listen filter
+	subRegistry        *subscriptionRegistry      // nil when subscriptions not enabled
+	subFilters         subscriptionFilterRegistry // extension keys for the subscriptions/listen filter
+	cardExtInfo        cardExtensionInfo          // SetCardExtensionInfo providers for the Server Card's remotes
 
 	// metricsMiddleware wraps every dispatched JSON-RPC request when a
 	// non-Noop MeterProvider was installed via WithMeterProvider. nil =
@@ -99,6 +100,7 @@ type serverOptions struct {
 	tracerProvider       core.TracerProvider            // SEP-414 P2 — WithTracerProvider; nil/Noop = trace middleware not installed
 	meterProvider        core.MeterProvider             // issue 7 — WithMeterProvider; nil/Noop = metrics middleware not installed
 	notificationRelay    NotificationRelay              // issue 755 — WithNotificationRelay; nil = no cross-replica broadcast (Broadcast fires local only)
+	serverCard           *serverCardConfig              // WithServerCard; nil = no <prefix>/server-card route (#531)
 }
 
 type httpHandlerEntry struct {
@@ -1299,6 +1301,16 @@ func (s *Server) Handler(opts ...TransportOption) http.Handler {
 		handler = mux
 	}
 
+	// The Server Card sits beside the streamable endpoint, outside
+	// handleRoot, so the Origin guard and bearer auth never see it (#531).
+	if s.options.serverCard != nil && cfg.streamableHTTP {
+		s.validateServerCard()
+		mux := http.NewServeMux()
+		mux.Handle("/", handler)
+		mux.Handle(prefix+core.ServerCardPath, s.serverCardHandler(prefix, cfg.statelessMode))
+		handler = mux
+	}
+
 	// Mount custom HTTP handlers if configured.
 	if len(s.options.httpHandlers) > 0 {
 		mux := http.NewServeMux()
@@ -1527,6 +1539,9 @@ func (s *Server) listenAndServe(ln net.Listener, opts ...TransportOption) error 
 	if cfg.muxSetup != nil {
 		mux := http.NewServeMux()
 		mux.Handle(cfg.prefix, mcpHandler)
+		if s.options.serverCard != nil && cfg.streamableHTTP {
+			mux.Handle(strings.TrimRight(cfg.prefix, "/")+core.ServerCardPath, mcpHandler)
+		}
 		cfg.muxSetup(mux)
 		handler = mux
 	}

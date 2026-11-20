@@ -40,8 +40,8 @@ MCP is point-to-point: one client speaks to exactly one server. **The host** (Cl
 
 …and decides per entry whether to bring up a client now (eager) or on first use (lazy). The protocol says nothing about this. It's host policy plus user consent. From MCP's point of view, "selection" = "the host instantiated a client wired to one server."
 
-> [!WARNING]
-> **Target-shape gap (extension):** the [Dec-2025 transport WG post](https://blog.modelcontextprotocol.io/posts/2025-12-19-mcp-transport-future/) introduces **Server Cards** at `/.well-known/mcp.json`, letting a host inspect capabilities *before* opening a session. Today, you must initialize to learn anything.
+> [!NOTE]
+> **Pre-connection discovery (extension):** [Server Cards](https://github.com/modelcontextprotocol/ext-server-card) (SEP-2127) let a host read a server's identity, transport and protocol versions *before* opening a session. A server serves its card at `<streamable-http-url>/server-card`, and a domain lists its cards in `/.well-known/ai-catalog.json`. A card never lists tools or other primitives, so a host still connects to learn those. mcpkit serves one with `server.WithServerCard`.
 
 ### 2. Transport selection (config-driven, not negotiated)
 
