@@ -6,7 +6,7 @@ replace github.com/panyam/mcpkit => ../../..
 
 require (
 	github.com/panyam/mcpkit v0.8.21
-	github.com/panyam/servicekit v0.2.2
+	github.com/panyam/servicekit v0.2.4
 	github.com/stretchr/testify v1.12.1
 )
 

@@ -8,7 +8,7 @@ require (
 	github.com/panyam/mcpkit v0.8.21
 	github.com/panyam/mcpkit/examples/common v0.0.0-20260917230721-e154756d5e32
 	github.com/panyam/mcpkit/ext/auth v0.6.0
-	github.com/panyam/oneauth v0.3.2
+	github.com/panyam/oneauth v0.3.13
 	go.opentelemetry.io/otel/trace v1.47.0
 )
 
@@ -52,7 +52,7 @@ require (
 	github.com/panyam/gocurrent v0.1.2 // indirect
 	github.com/panyam/goutils v0.1.13 // indirect
 	github.com/panyam/mcpkit/ext/otel v0.6.0 // indirect
-	github.com/panyam/servicekit v0.2.2 // indirect
+	github.com/panyam/servicekit v0.2.4 // indirect
 	github.com/panyam/templar v0.1.2 // indirect
 	github.com/pb33f/ordered-map/v2 v2.3.1 // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect

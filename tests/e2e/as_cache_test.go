@@ -27,7 +27,7 @@ func TestE2E_ASMetadataCacheAcrossServers(t *testing.T) {
 	cache := client.NewMemoryASMetadataStore(0) // default 1h TTL
 
 	// First discovery — fetches AS metadata from the network
-	info1, err := auth.DiscoverMCPAuth(env.MCPServerURL,
+	info1, err := auth.DiscoverMCPAuth(env.MCPServerURL+"/mcp",
 		auth.WithASMetadataStore(cache),
 	)
 	require.NoError(t, err, "first DiscoverMCPAuth should succeed")
@@ -36,11 +36,11 @@ func TestE2E_ASMetadataCacheAcrossServers(t *testing.T) {
 
 	// Verify the cache was populated
 	cached, ok := cache.Get(env.AS.Issuer())
-	assert.True(t, ok, "cache should contain AS metadata after first discovery")
+	require.True(t, ok, "cache should contain AS metadata after first discovery")
 	assert.Equal(t, info1.ASMetadata.Issuer, cached.Issuer)
 
 	// Second discovery — should hit the cache
-	info2, err := auth.DiscoverMCPAuth(env.MCPServerURL,
+	info2, err := auth.DiscoverMCPAuth(env.MCPServerURL+"/mcp",
 		auth.WithASMetadataStore(cache),
 	)
 	require.NoError(t, err, "second DiscoverMCPAuth should succeed")
@@ -58,7 +58,7 @@ func TestE2E_ASMetadataCacheAcrossServers(t *testing.T) {
 func TestE2E_ASMetadataCacheWithoutStore(t *testing.T) {
 	env := NewTestEnv(t)
 
-	info, err := auth.DiscoverMCPAuth(env.MCPServerURL)
+	info, err := auth.DiscoverMCPAuth(env.MCPServerURL + "/mcp")
 	require.NoError(t, err)
 	require.NotNil(t, info.ASMetadata)
 	assert.Equal(t, env.AS.Issuer(), info.ASMetadata.Issuer)

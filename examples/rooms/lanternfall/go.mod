@@ -67,8 +67,8 @@ require (
 	github.com/panyam/goutils v0.1.13 // indirect
 	github.com/panyam/massrelay v0.3.7 // indirect
 	github.com/panyam/mcpkit/ext/otel v0.6.0 // indirect
-	github.com/panyam/oneauth v0.3.2 // indirect
-	github.com/panyam/servicekit v0.2.2 // indirect
+	github.com/panyam/oneauth v0.3.13 // indirect
+	github.com/panyam/servicekit v0.2.4 // indirect
 	github.com/panyam/templar v0.1.2 // indirect
 	github.com/pb33f/ordered-map/v2 v2.3.1 // indirect
 	github.com/prometheus/client_golang v1.24.1 // indirect
