@@ -250,14 +250,17 @@ The HMAC proves a delivery came from someone who knows the subscription secret. 
 reg := events.NewWebhookRegistry(
     events.WithWebhookSigningKeys(events.SigningKey{KID: "2026-11", Signer: priv}), // ed25519.PrivateKey or a KMS crypto.Signer
 )
-jwks := reg.SigningJWKS() // publish on the Server Card under extensionsInfo["io.modelcontextprotocol/events"].webhooks.signingKeys
 ```
 
-A gateway verifies against the set it fetched from the server's own card, never from the delivery:
+`events.Register` publishes the keys on the server's Server Card (`server.WithServerCard`), at `remotes[].extensionsInfo["io.modelcontextprotocol/events"].webhooks.signingKeys`. `WithWebhookEgressIPRanges("203.0.113.0/24")` adds `egressIpRanges` beside them. A registry with neither adds no entry.
+
+A receiver verifies against the keys on the server's own card, never against anything in the delivery. The Go receiver does it with one option. It fetches the card from the MCP URL's origin, refuses a cross-origin redirect or plain http, and refetches once when a delivery carries a key it hasn't seen:
 
 ```go
-kid, ok := events.VerifyServerIdentity(jwks, msgID, ts, body, sig)
+rcv := eventsclient.NewReceiver[Data](secret, eventsclient.WithServerIdentity("https://api.example.com/mcp"))
 ```
+
+A hand-rolled receiver fetches the card with `client.FetchServerCard`, reads the keys with `events.CardWebhooks`, and calls `events.VerifyServerIdentity(*info.SigningKeys, msgID, ts, body, sig)`.
 
 To rotate, pass the old and new keys together, wait for gateways to refetch the card, then drop the old one. `MCPHeaders` mode has no `webhook-signature` header, so it sends no `v1a` and logs a warning at construction. Standard Webhooks has deprecated `v1a` for `v2a`, and SEP-3415 still names `v1a`, so this sends `v1a` for now (#1437).
 

@@ -11,6 +11,7 @@ package main
 
 import (
 	"context"
+	"crypto/ed25519"
 	"encoding/json"
 	"flag"
 	"log"
@@ -26,6 +27,7 @@ import (
 	"github.com/panyam/mcpkit/experimental/ext/events"
 	"github.com/panyam/mcpkit/server"
 	gohttp "github.com/panyam/servicekit/http"
+	skwebhooks "github.com/panyam/servicekit/http/webhooks"
 )
 
 func decodeJSON(r *http.Request, v any) error {
@@ -65,6 +67,8 @@ func serve() {
 		"register the MCP Events conformance control tools and the poll-only event type (see conformance_events.go)")
 	flag.BoolVar(&chatGPTCompat, "chatgpt-compat", false,
 		"also declare top-level capabilities.events, for ChatGPT (events.Config.ChatGPTCompat)")
+	flag.StringVar(&webhookSigningKey, "webhook-signing-key", "",
+		"sign deliveries with this whsk_ ed25519 key, or \"ephemeral\" for a fresh one, and publish it on the Server Card (#1437, #1738)")
 	tel := common.RegisterTelemetryFlags(flag.CommandLine)
 	wire := common.RegisterWireFlags(flag.CommandLine)
 	// FilterArgs STRIPS the flags listed here. Strip only the --serve
@@ -160,6 +164,29 @@ type wiredServer struct {
 // than a buildServer parameter so the test call sites stay as they are.
 var chatGPTCompat bool
 
+// webhookSigningKey is --webhook-signing-key. Empty signs with the HMAC only.
+var webhookSigningKey string
+
+// signingKeyOption turns --webhook-signing-key into a registry option, or nil
+// when the flag is empty.
+func signingKeyOption() events.WebhookOption {
+	if webhookSigningKey == "" {
+		return nil
+	}
+	var priv ed25519.PrivateKey
+	if webhookSigningKey == "ephemeral" {
+		privS, _ := skwebhooks.GenerateKeyPair()
+		priv, _ = skwebhooks.ParsePrivateKey(privS)
+	} else {
+		var err error
+		if priv, err = skwebhooks.ParsePrivateKey(webhookSigningKey); err != nil {
+			log.Fatalf("--webhook-signing-key: %v", err)
+		}
+	}
+	log.Printf("[server] signing webhook deliveries with ed25519 public key %s", skwebhooks.EncodePublicKey(priv.Public().(ed25519.PublicKey)))
+	return events.WithWebhookSigningKeys(events.SigningKey{Signer: priv})
+}
+
 func buildServer(addr string, tp core.TracerProvider, conformanceEvents bool) *wiredServer {
 	var rt *conformanceRuntime
 	if conformanceEvents {
@@ -206,6 +233,9 @@ func buildServerWith(addr string, tp core.TracerProvider, conformanceEvents bool
 	}
 	if tp != nil {
 		webhookOpts = append(webhookOpts, events.WithWebhookTracerProvider(tp))
+	}
+	if opt := signingKeyOption(); opt != nil {
+		webhookOpts = append(webhookOpts, opt)
 	}
 	webhooks := events.NewWebhookRegistry(webhookOpts...)
 	idx := events.NewSubscriptionIndex()

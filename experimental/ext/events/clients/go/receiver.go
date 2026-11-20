@@ -39,6 +39,7 @@ type Receiver[Data any] struct {
 	tolerance time.Duration
 	dedup     *Deduper
 	now       func() time.Time
+	identity  *serverIdentity
 
 	// Control envelope callbacks per SEP-3415 §"Non-event webhook bodies"
 	// L415-423. Both are optional. The discriminator is the top-level
@@ -76,6 +77,7 @@ func NewReceiver[Data any](secret string, opts ...ReceiverOption) *Receiver[Data
 		tolerance: cfg.tolerance,
 		dedup:     dedupFor(cfg.dedup, cfg.allowDuplicates),
 		now:       cfg.now,
+		identity:  cfg.identity,
 	}
 }
 
@@ -87,6 +89,7 @@ type receiverConfig struct {
 	dedup           *Deduper
 	allowDuplicates bool
 	now             func() time.Time
+	identity        *serverIdentity
 }
 
 // WithTimestampTolerance sets how far the delivery's timestamp header may be
@@ -179,6 +182,10 @@ func (r *Receiver[Data]) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 
 	if !verifySignature(req.Header, body, secret) || !r.timestampFresh(req.Header, secret) {
 		http.Error(w, "signature verification failed", http.StatusUnauthorized)
+		return
+	}
+	if r.identity != nil && !r.identity.verify(req.Context(), req.Header, body) {
+		http.Error(w, "server identity verification failed", http.StatusUnauthorized)
 		return
 	}
 

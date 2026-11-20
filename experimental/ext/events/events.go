@@ -391,6 +391,9 @@ func Register(cfg Config) *Registry {
 	// registered yet, so a server that starts empty and grows still tells its
 	// clients.
 	srv.RegisterExtension(EventsExtension{ListChanged: true, DeclareTopLevel: cfg.ChatGPTCompat})
+	if cfg.Webhooks != nil {
+		cfg.Webhooks.publishOnCard(srv)
+	}
 	// SEP-3415 delivers notifications/events/list_changed only on a
 	// subscriptions/listen stream whose filter asked for eventsListChanged,
 	// and the acknowledgement echoes the key when the server declared
