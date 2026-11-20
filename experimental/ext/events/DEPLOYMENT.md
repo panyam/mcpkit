@@ -97,7 +97,7 @@ Results are cached per `(principal, url)`, so refreshes and subscribes that diff
 
 **Well-known documents.** Off unless you pass `WithWellKnownReceiverDocs()`, because it sends a request to every new callback origin and it is the part of the section most likely to change during SEP review. Only `https` origins count, since the document stands in for proof the receiver controls the origin. The fetch uses the same SSRF-guarded, no-redirect client, is capped at 64 KiB, and spends one token of the host's verification budget on a cache miss. Documents are cached per origin, honouring `Cache-Control: max-age` up to an hour (5 minutes without one), and an origin with no usable document is left alone for a minute. A missing, malformed, redirected or oversized document never fails a subscribe; the handshake decides instead. Publishing the document also tells anyone who fetches it where your endpoints are, which is the trade-off Svix raised; receivers that mind can rely on the handshake.
 
-Not implemented yet: asymmetric `v1a,` server signing (#1437, waiting on SEP-2127).
+**Server identity.** `WithWebhookSigningKeys` adds an ed25519 `v1a` signature to every delivery, control envelope and verification POST, one per key. Publish `SigningJWKS()` on the Server Card so gateways can verify with `VerifyServerIdentity` (README § Server identity). Hold the private key in a KMS if you can. `v1a` hands the signer the whole body, so a KMS with a message size cap (AWS KMS allows 4096 bytes) fails on larger deliveries. A failed signature is logged and left out, and the delivery still goes with its `v1` HMAC. To rotate, sign with both keys, publish both, and drop the old one after gateways have refetched the card.
 
 ## Retry and backoff timing
 

@@ -256,7 +256,7 @@ func (r *WebhookRegistry) challenge(ctx context.Context, p verifyEndpointParams)
 	if err != nil {
 		return DeliveryErrorChallengeFailed
 	}
-	signed := signFor(r.headerMode, newControlMessageID("verification"), body, p.Secret, time.Now()).
+	signed := r.sign(newControlMessageID("verification"), body, p.Secret, time.Now()).
 		withSubscriptionID(p.DerivedID)
 	req, err := http.NewRequestWithContext(ctx, "POST", p.URL, bytes.NewReader(signed.body))
 	if err != nil {
