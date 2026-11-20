@@ -226,7 +226,7 @@ This is the right composition shape for MCP extensions, which depend on stable c
 
 ### Header mode (`WebhookHeaderMode`)
 
-Two on-the-wire signature formats. Default is `MCPHeaders`. Only the headers and signature scheme are configurable; the body shape (the `events.Event` envelope) is unchanged.
+Two on-the-wire signature formats. Default is `StandardWebhooks`. Only the headers and signature scheme are configurable; the body shape (the `events.Event` envelope) is unchanged.
 
 | Mode | Headers | HMAC base |
 |---|---|---|
@@ -241,6 +241,25 @@ events.VerifyStandardWebhooksSignature(body, secret, msgID, ts, sig)
 ```
 
 The Python `events_client.py` receiver auto-detects which header set is on the inbound request and verifies accordingly, with no client-side mode flag needed.
+
+### Server identity (`v1a`)
+
+The HMAC proves a delivery came from someone who knows the subscription secret. A gateway that allowlists servers also needs to know which server sent it. SEP-3415 adds an optional ed25519 signature for that. Configure keys on the registry, and every delivery, control envelope and verification POST carries one `v1a` entry per key after the `v1` HMAC:
+
+```go
+reg := events.NewWebhookRegistry(
+    events.WithWebhookSigningKeys(events.SigningKey{KID: "2026-11", Signer: priv}), // ed25519.PrivateKey or a KMS crypto.Signer
+)
+jwks := reg.SigningJWKS() // publish on the Server Card under extensionsInfo["io.modelcontextprotocol/events"].webhooks.signingKeys
+```
+
+A gateway verifies against the set it fetched from the server's own card, never from the delivery:
+
+```go
+kid, ok := events.VerifyServerIdentity(jwks, msgID, ts, body, sig)
+```
+
+To rotate, pass the old and new keys together, wait for gateways to refetch the card, then drop the old one. `MCPHeaders` mode has no `webhook-signature` header, so it sends no `v1a` and logs a warning at construction. Standard Webhooks has deprecated `v1a` for `v2a`, and SEP-3415 still names `v1a`, so this sends `v1a` for now (#1437).
 
 ### Endpoint verification
 

@@ -8,6 +8,8 @@ import (
 	"encoding/json"
 	"testing"
 
+	"github.com/panyam/mcpkit/ext/auth"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -28,19 +30,21 @@ func TestE2E_PRM_PathBased(t *testing.T) {
 	assert.Equal(t, env.MCPServerURL, prm["resource"])
 }
 
-// TestE2E_PRM_RootFallback verifies that the root PRM endpoint at
-// /.well-known/oauth-protected-resource also returns valid metadata.
-// Per MCP spec, clients try path-based first, then fall back to root.
-func TestE2E_PRM_RootFallback(t *testing.T) {
+// TestE2E_PRM_PathedResourceNotAtRoot verifies that a server mounted
+// under /mcp serves its metadata only at the path URL (RFC 9728 §3.1), and
+// that discovery from the /mcp URL still finds it. oneauth stopped serving
+// the root copy in v0.3.12.
+func TestE2E_PRM_PathedResourceNotAtRoot(t *testing.T) {
 	env := NewTestEnv(t)
 
 	resp := RawGET(t, env.MCPServerURL+"/.well-known/oauth-protected-resource", "")
-	body := ReadBody(t, resp)
-	assert.Equal(t, 200, resp.StatusCode)
+	ReadBody(t, resp)
+	assert.Equal(t, 404, resp.StatusCode)
 
-	var prm map[string]any
-	require.NoError(t, json.Unmarshal([]byte(body), &prm))
-	assert.Equal(t, env.MCPServerURL, prm["resource"])
+	info, err := auth.DiscoverMCPAuth(env.MCPServerURL + "/mcp")
+	require.NoError(t, err)
+	require.NotNil(t, info.PRM, "discovery from /mcp must find the path-based PRM, not fall back to legacy")
+	assert.Equal(t, env.MCPServerURL, info.PRM.Resource)
 }
 
 // TestE2E_PRM_Content verifies the full PRM document content: resource URI

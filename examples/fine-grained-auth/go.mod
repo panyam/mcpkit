@@ -7,8 +7,8 @@ require (
 	github.com/panyam/mcpkit v0.8.21
 	github.com/panyam/mcpkit/examples/common v0.0.0-20260917230721-e154756d5e32
 	github.com/panyam/mcpkit/ext/auth v0.6.0
-	github.com/panyam/oneauth v0.3.2
-	github.com/panyam/servicekit v0.2.2
+	github.com/panyam/oneauth v0.3.13
+	github.com/panyam/servicekit v0.2.4
 )
 
 require (

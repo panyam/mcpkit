@@ -620,6 +620,10 @@ type WebhookRegistry struct {
 	suspendWindow           time.Duration     // sliding window over which failures accumulate; default 10min
 	retryBackoff            time.Duration     // first retry's delay, doubling per retry up to maxBackoff; initialBackoff outside tests
 
+	// signingKeys add a v1a signature to every delivery for server
+	// identity. Set by WithWebhookSigningKeys (server_identity.go, #1437).
+	signingKeys []resolvedSigningKey
+
 	// callbackOrigins holds origins permitted past both guards at run time
 	// by UnsafeAllowCallbackOrigins, keyed "scheme://host:port" with the port
 	// always explicit. callbackDialAddrs is the same set as the "host:port"
@@ -814,6 +818,7 @@ func NewWebhookRegistry(opts ...WebhookOption) *WebhookRegistry {
 	}
 	r.applyTTLClamp()
 	r.warnIfInfiniteTTLWithDefaultStore()
+	r.warnIfSigningKeysUnused()
 	// http.Client wired AFTER options apply so the Dialer.Control callback
 	// can read the resolved allowPrivateNetworks setting. Spec
 	// SEP-3415 §"Webhook security" (SSRF prevention).
@@ -1637,7 +1642,7 @@ func (r *WebhookRegistry) deliver(target WebhookTarget, eventName string, body [
 		// "Derived id" L367) so the receiver can select the correct
 		// secret without parsing the body. Per SEP-3415 §"Webhook event delivery" + SEP-3415 §"Webhook security": this is the only
 		// MCP-specific header on a Standard Webhooks delivery.
-		signed := signFor(r.headerMode, msgID, body, target.Secret, time.Now()).
+		signed := r.sign(msgID, body, target.Secret, time.Now()).
 			withSubscriptionID(target.ID)
 
 		req, err := http.NewRequest("POST", target.URL, bytes.NewReader(signed.body))

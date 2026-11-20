@@ -18,8 +18,10 @@ type AuthConfig struct {
 	// ScopesSupported lists the OAuth scopes this server understands.
 	ScopesSupported []string
 
-	// MCPPath is the MCP endpoint path (e.g., "/mcp"). Used to construct
-	// the well-known URI: /.well-known/oauth-protected-resource/<mcpPath>
+	// MCPPath is the MCP endpoint path (e.g., "/mcp"). Metadata is served
+	// at /.well-known/oauth-protected-resource<mcpPath> only, as RFC 9728
+	// §3.1 places a pathed resource's metadata. Empty or "/" serves it at
+	// /.well-known/oauth-protected-resource.
 	MCPPath string
 
 	// Validator, if set, is automatically wired with ScopesSupported as its
