@@ -277,7 +277,7 @@ func (r *WebhookRegistry) postTerminatedSilent(target WebhookTarget, controlErr 
 // racing condition the receiver is already being told to recover from.
 func (r *WebhookRegistry) deliverControl(target WebhookTarget, typ string, body []byte) {
 	msgID := newControlMessageID(typ)
-	signed := signFor(r.headerMode, msgID, body, target.Secret, time.Now()).
+	signed := r.sign(msgID, body, target.Secret, time.Now()).
 		withSubscriptionID(target.ID)
 
 	req, err := http.NewRequestWithContext(context.Background(), "POST", target.URL, bytes.NewReader(signed.body))

@@ -538,3 +538,18 @@ A test that fails a delivery takes `withFastRetries()`. A test that checks no re
 the 410 and 413 tests do, needs it too. Otherwise a retry would land after the test's 200ms wait,
 and the test would pass for the wrong reason. To wait for retries to end, call
 `waitForLastError`, not a fixed sleep: `deliver` records `LastError` only after the last attempt.
+
+## Server identity sends `v1a`, which Standard Webhooks deprecated (#1437)
+
+SEP-3415 names Standard Webhooks `v1a,` for the optional ed25519 server signature. Standard
+Webhooks deprecated `v1a` for `v2a` in standard-webhooks PR 372, merged 2026-11-18, a day before
+SEP-3415 merged. `v2a` signs SHA-256 of `endpoint_id.msg_id.timestamp.payload`, so one key can
+serve every endpoint and a KMS signs only a digest. The SEP publishes one key set for every
+endpoint, which is the cross-endpoint replay `v2a` closes. The question is open in
+tasks-events-wg. Until it settles, the registry sends `v1a` as the SEP says. servicekit v0.2.4
+ships `SignV2a`/`VerifyV2a` beside `SignV1a`/`VerifyV1a`, so switching changes `sign` in
+`server_identity.go` and adds an endpoint ID per subscription.
+
+The JWK conversion and the RFC 8037 thumbprint `kid` come from `oneauth/utils`, which is why
+this module requires oneauth.
+
