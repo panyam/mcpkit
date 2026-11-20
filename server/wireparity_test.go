@@ -42,6 +42,8 @@ type parityWire struct {
 	// notify posts method as a notification, with no id member or with
 	// "id":null, and returns the HTTP status and body.
 	notify func(t *testing.T, method string, nullID bool) (int, string)
+	// cardURL is where this wire's handler serves the Server Card.
+	cardURL string
 }
 
 func parityFixture(t *testing.T, opts ...Option) *Server {
@@ -188,6 +190,7 @@ func parityWires(t *testing.T, s *Server, caps map[string]any) []parityWire {
 		}
 	}
 	session.notify, stateless.notify = notifyOn(sid), notifyOn("")
+	session.cardURL, stateless.cardURL = sessionURL+core.ServerCardPath, statelessURL+core.ServerCardPath
 	return []parityWire{session, stateless}
 }
 
@@ -714,6 +717,38 @@ func TestWireParity(t *testing.T) {
 				case !tc.accept && (rpcErr == nil || rpcErr.Code != core.ErrCodeHeaderMismatch || status != http.StatusBadRequest):
 					t.Errorf("%s %s wire: got HTTP %d and %+v, want 400 and %d", tc.name, w.name, status, rpcErr, core.ErrCodeHeaderMismatch)
 				}
+			}
+		}
+	})
+
+	t.Run("531 the Server Card agrees with what each wire negotiates", func(t *testing.T) {
+		for _, w := range parityWires(t, parityFixture(t, WithServerCard(testCard...)), map[string]any{}) {
+			resp, body := getCard(t, http.MethodGet, w.cardURL, "", nil)
+			if resp.StatusCode != http.StatusOK {
+				t.Fatalf("%s: card HTTP %d", w.name, resp.StatusCode)
+			}
+			card := decodeCard(t, body)
+			versions := card.Remotes[0].SupportedProtocolVersions
+			var info core.Implementation
+			if w.name == "session" {
+				_ = json.Unmarshal(w.initResult["serverInfo"], &info)
+				var negotiated string
+				_ = json.Unmarshal(w.initResult["protocolVersion"], &negotiated)
+				if !slices.Contains(versions, negotiated) {
+					t.Errorf("session: negotiated %s, card lists %v", negotiated, versions)
+				}
+			} else {
+				var meta map[string]json.RawMessage
+				_ = json.Unmarshal(w.initResult["_meta"], &meta)
+				_ = json.Unmarshal(meta["io.modelcontextprotocol/serverInfo"], &info)
+				var discover []string
+				_ = json.Unmarshal(w.initResult["supportedVersions"], &discover)
+				if !slices.Equal(versions, discover) {
+					t.Errorf("stateless: discover %v, card %v", discover, versions)
+				}
+			}
+			if info.Version == "" || card.Version != info.Version {
+				t.Errorf("%s: card version %q, serverInfo version %q", w.name, card.Version, info.Version)
 			}
 		}
 	})

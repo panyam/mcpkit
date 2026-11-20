@@ -55,6 +55,7 @@ mission issue. The `mission:active` label marks the active ones, one worktree ea
 
 - **#1701** `mission_progressive_disclosure`: `make exercise-disclosure`.
 - **#1554** `mission_apps_host` (label `mcpapps`): `make test-apps-playwright`.
+- **#1737** `mission_server_card`: `make exercise-server-card`.
 
 #1683 `mission_ai_inside_ui` has all its tickets closed. It closes after a by-hand Claude Code run
 through `rooms-channel`, plus `make exercise-aipage`.
