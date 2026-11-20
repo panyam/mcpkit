@@ -6,8 +6,10 @@
 #   make exercise-server-card
 #
 # Each wire starts kitchen-sink on a free port and runs
-# tools/check-server-card against it. The webhook signing step prints as
-# skipped until #1437 and #1738 land. Exits 1 when any check fails.
+# tools/check-server-card against it. On the legacy wire it also runs the
+# events check-webhook-identity command: a webhook receiver verifies a
+# delivery with the key from the card, and a card reached through a
+# cross-origin redirect is refused (#1738). Exits 1 when any check fails.
 set -u
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 WORK=$(mktemp -d -t exercise-server-card.XXXXXX)
@@ -23,7 +25,7 @@ free_port() { python3 -c 'import socket;s=socket.socket();s.bind(("127.0.0.1",0)
 FAILED=0
 for WIRE in legacy stateless; do
     PORT=$(free_port)
-    "$BIN" --serve --addr="127.0.0.1:$PORT" --wire="$WIRE" >"$WORK/server-$WIRE.log" 2>&1 &
+    "$BIN" --serve --addr="127.0.0.1:$PORT" --wire="$WIRE" --webhook-signing-key=ephemeral --chat-every=500ms >"$WORK/server-$WIRE.log" 2>&1 &
     PID=$!
     for _ in $(seq 1 50); do
         curl -s -o /dev/null "http://127.0.0.1:$PORT/mcp/server-card" && break
@@ -31,12 +33,14 @@ for WIRE in legacy stateless; do
     done
     echo "=== wire: $WIRE ==="
     (cd "$ROOT" && go run ./tools/check-server-card -url "http://127.0.0.1:$PORT/mcp" -wire "$WIRE") || FAILED=1
+    if [ "$WIRE" = legacy ]; then
+        (cd "$ROOT/experimental/ext/events/clients/go" && go run ./cmd/check-webhook-identity -url "http://127.0.0.1:$PORT/mcp") || FAILED=1
+    fi
     kill "$PID" 2>/dev/null; wait "$PID" 2>/dev/null; PID=""
 done
 
 echo ""
 echo "=== exercise-server-card @ $(git -C "$ROOT" rev-parse --short HEAD) ==="
-echo "  skipped webhook delivery verified with a key from the card: needs #1437 and #1738"
-[ "$FAILED" -eq 0 ] && echo "  card checks: pass on both wires" || echo "  card checks: FAILED, see above"
+[ "$FAILED" -eq 0 ] && echo "  card and webhook identity checks: pass" || echo "  checks FAILED, see above"
 echo "Server logs in $WORK"
 exit "$FAILED"

@@ -3,9 +3,12 @@ package events
 import (
 	"crypto"
 	"crypto/ed25519"
+	"encoding/json"
 	"fmt"
+	"net/netip"
 	"time"
 
+	"github.com/panyam/mcpkit/server"
 	"github.com/panyam/oneauth/utils"
 	webhooks "github.com/panyam/servicekit/http/webhooks"
 )
@@ -149,4 +152,75 @@ func VerifyServerIdentity(set utils.JWKSet, msgID, timestamp string, body []byte
 		}
 	}
 	return "", false
+}
+
+// WithWebhookEgressIPRanges lists the CIDR ranges outbound deliveries leave
+// from, such as "203.0.113.0/24" or "2001:db8::/32". They are published on
+// the Server Card as egressIpRanges so a receiver can firewall to them. The
+// server does not enforce them: they describe the deployment's network.
+//
+// It panics on a value netip.ParsePrefix rejects, since a malformed range on
+// the card would make a receiver's firewall rule fail or match the wrong
+// hosts.
+func WithWebhookEgressIPRanges(cidrs ...string) WebhookOption {
+	ranges := make([]string, 0, len(cidrs))
+	for _, c := range cidrs {
+		p, err := netip.ParsePrefix(c)
+		if err != nil {
+			panic(fmt.Sprintf("events: WithWebhookEgressIPRanges: %q: %v", c, err))
+		}
+		ranges = append(ranges, p.String())
+	}
+	return func(r *WebhookRegistry) {
+		r.egressIPRanges = ranges
+	}
+}
+
+// CardWebhooksInfo is the "webhooks" member of the events entry in a Server
+// Card's remotes[].extensionsInfo (SEP-3415 §"Webhook security").
+type CardWebhooksInfo struct {
+	SigningKeys    *utils.JWKSet `json:"signingKeys,omitempty"`
+	EgressIPRanges []string      `json:"egressIpRanges,omitempty"`
+}
+
+// cardInfo returns the extensionsInfo entry for this registry, or nil when
+// it has neither signing keys nor egress ranges to publish.
+func (r *WebhookRegistry) cardInfo() map[string]any {
+	if len(r.signingKeys) == 0 && len(r.egressIPRanges) == 0 {
+		return nil
+	}
+	info := CardWebhooksInfo{EgressIPRanges: r.egressIPRanges}
+	if len(r.signingKeys) > 0 {
+		set := r.SigningJWKS()
+		info.SigningKeys = &set
+	}
+	return map[string]any{"webhooks": info}
+}
+
+// publishOnCard adds the registry's entry to the server's Server Card. The
+// entry is the same for every remote, since the keys sign every delivery
+// whichever endpoint the subscribe came through.
+func (r *WebhookRegistry) publishOnCard(srv *server.Server) {
+	if r.cardInfo() == nil {
+		return
+	}
+	srv.SetCardExtensionInfo(ExtensionID, func(string) map[string]any { return r.cardInfo() })
+}
+
+// CardWebhooks reads the events webhooks entry from one remote's
+// extensionsInfo, as a receiver gets it from a fetched Server Card. ok is
+// false when the remote has no events entry or the entry is malformed.
+func CardWebhooks(extensionsInfo map[string]map[string]any) (info CardWebhooksInfo, ok bool) {
+	entry, found := extensionsInfo[ExtensionID]
+	if !found {
+		return info, false
+	}
+	raw, err := json.Marshal(entry["webhooks"])
+	if err != nil || string(raw) == "null" {
+		return info, false
+	}
+	if err := json.Unmarshal(raw, &info); err != nil {
+		return info, false
+	}
+	return info, true
 }

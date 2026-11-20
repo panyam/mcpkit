@@ -102,6 +102,22 @@ so the server frees it, and runs its `OnSessionClose` hooks, right away instead 
 expiry. It's best effort and gives up after two seconds. A server answering 405, or one that's
 gone, doesn't make `Close` fail. Stateless-wire clients have no session, so they send nothing.
 
+## Reading a Server Card
+
+`FetchServerCard` reads the SEP-2127 card a server publishes at `<mcp-url>/server-card`, before or
+without connecting:
+
+```go
+card, err := client.FetchServerCard(ctx, "https://api.example.com/mcp")
+remote, ok := client.CardRemote(card, "https://api.example.com/mcp")
+info := remote.ExtensionsInfo["io.modelcontextprotocol/events"]
+```
+
+It refuses plain http (`ErrCardInsecure`) and any redirect to another origin (`ErrCardCrossOrigin`),
+which is the condition the card spec sets for trusting security-relevant `extensionsInfo` such as
+webhook signing keys. `WithInsecureCardFetch()` allows http for local testing. A
+`ServerCardCache` keeps each card with its ETag and revalidates with `If-None-Match`.
+
 ## When the server wants more scope
 
 A 403 the client cannot step up from (a static token, say) comes back as a

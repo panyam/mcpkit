@@ -624,6 +624,10 @@ type WebhookRegistry struct {
 	// identity. Set by WithWebhookSigningKeys (server_identity.go, #1437).
 	signingKeys []resolvedSigningKey
 
+	// egressIPRanges are the CIDRs deliveries leave from, published on the
+	// Server Card beside the signing keys (WithWebhookEgressIPRanges, #1738).
+	egressIPRanges []string
+
 	// callbackOrigins holds origins permitted past both guards at run time
 	// by UnsafeAllowCallbackOrigins, keyed "scheme://host:port" with the port
 	// always explicit. callbackDialAddrs is the same set as the "host:port"

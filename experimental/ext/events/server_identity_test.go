@@ -20,6 +20,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/panyam/mcpkit/client"
+	"github.com/panyam/mcpkit/core"
+	"github.com/panyam/mcpkit/server"
 	"github.com/panyam/oneauth/utils"
 	webhooks "github.com/panyam/servicekit/http/webhooks"
 	"github.com/stretchr/testify/assert"
@@ -258,4 +261,57 @@ func TestWithWebhookSigningKeys_PanicsOnBadConfig(t *testing.T) {
 			WithWebhookSigningKeys(keys...)
 		}()
 	}
+}
+
+// cardFor serves a server with a Server Card and events registered on reg,
+// and returns the card as a client fetches it.
+func cardFor(t *testing.T, reg *WebhookRegistry) (*core.ServerCard, string) {
+	t.Helper()
+	srv := server.NewServer(core.ServerInfo{Name: "events-card", Version: "1.0.0"},
+		server.WithServerCard(server.WithCardName("io.github.example/events-card"), server.WithCardDescription("test")))
+	Register(Config{Server: srv, Webhooks: reg, UnsafeAnonymousPrincipal: "alice"})
+	ts := httptest.NewServer(srv.Handler(server.WithStreamableHTTP(true)))
+	t.Cleanup(ts.Close)
+	mcpURL := ts.URL + "/mcp"
+	card, err := client.FetchServerCard(context.Background(), mcpURL, client.WithInsecureCardFetch())
+	require.NoError(t, err)
+	return card, mcpURL
+}
+
+func TestServerCard_PublishesSigningKeysThatVerifyDeliveries(t *testing.T) {
+	key := newEd25519Key(t)
+	opts := []WebhookOption{
+		WithWebhookSigningKeys(SigningKey{KID: "k1", Signer: key}),
+		WithWebhookEgressIPRanges("203.0.113.0/24", "2001:db8::/32"),
+	}
+	card, mcpURL := cardFor(t, NewWebhookRegistry(opts...))
+	remote, ok := client.CardRemote(card, mcpURL)
+	require.True(t, ok)
+	info, ok := CardWebhooks(remote.ExtensionsInfo)
+	require.True(t, ok, "the events entry must be on the card: %v", remote.ExtensionsInfo)
+	require.NotNil(t, info.SigningKeys)
+	require.Len(t, info.SigningKeys.Keys, 1)
+	assert.Equal(t, []string{"203.0.113.0/24", "2001:db8::/32"}, info.EgressIPRanges)
+
+	_, posts := deliverOne(t, opts...)
+	kid, ok := verifyIdentity(*info.SigningKeys, posts[0])
+	assert.True(t, ok, "a delivery must verify with the key taken from the card")
+	assert.Equal(t, "k1", kid)
+}
+
+func TestServerCard_NoEventsEntryWithoutKeysOrRanges(t *testing.T) {
+	card, mcpURL := cardFor(t, NewWebhookRegistry())
+	remote, ok := client.CardRemote(card, mcpURL)
+	require.True(t, ok)
+	_, ok = CardWebhooks(remote.ExtensionsInfo)
+	assert.False(t, ok, "nothing to publish, so no events entry: %v", remote.ExtensionsInfo)
+}
+
+func TestWithWebhookEgressIPRanges_PanicsOnBadCIDR(t *testing.T) {
+	defer func() {
+		msg, _ := recover().(string)
+		assert.Contains(t, msg, "events: WithWebhookEgressIPRanges")
+	}()
+	WithWebhookEgressIPRanges("203.0.113.0/24", "not-a-cidr")
+	t.Fatal("expected a panic")
 }
