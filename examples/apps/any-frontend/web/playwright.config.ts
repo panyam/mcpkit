@@ -14,5 +14,15 @@ export default defineConfig({
     reuseExistingServer: !process.env.CI,
     timeout: 180_000,
   },
-  projects: [{ name: "chromium", use: { browserName: "chromium" } }],
+  // CI sets CHROME_PATH to the runner's Chrome (#1742). Unset, Playwright
+  // uses its own Chromium.
+  projects: [
+    {
+      name: "chromium",
+      use: {
+        browserName: "chromium",
+        launchOptions: { executablePath: process.env.CHROME_PATH || undefined },
+      },
+    },
+  ],
 });

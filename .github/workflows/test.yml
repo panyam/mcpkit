@@ -412,12 +412,18 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      # Its own Go cache, as the test job explains.
-      - id: go
-        uses: actions/setup-go@v7
+      # Its own Go cache, as the test job explains, so go-cache is off.
+      - uses: panyam/ci-actions/setup-go-pnpm@v0.1.2
         with:
-          go-version-file: go.mod
-          cache: false
+          go-cache: false
+          pnpm-version: 12.4.1
+          working-directory: experimental/ext/rooms/ts
+          install: false
+
+      # The cache keys below use setup-go's version string, which the
+      # composite action does not pass on.
+      - id: go
+        run: echo "go-version=$(go env GOVERSION | sed 's/^go//')" >> "$GITHUB_OUTPUT"
 
       - uses: actions/cache/restore@v6.1.0
         with:
@@ -438,16 +444,6 @@ jobs:
       - name: Run the room events and the channel front end
         run: bash experimental/scripts/test-roomsevents.sh
 
-      - uses: pnpm/action-setup@v6
-        with:
-          version: 12.4.1
-
-      - uses: actions/setup-node@v7
-        with:
-          node-version: '22'
-          cache: pnpm
-          cache-dependency-path: experimental/ext/rooms/ts/pnpm-lock.yaml
-
       # The TypeScript page client against the Go bridge on a real relay,
       # including the ext/ui frame case (#1581 acceptance 7).
       - name: Run the TypeScript page client tests
@@ -466,12 +462,18 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      # Its own Go cache, as the test job explains.
-      - id: go
-        uses: actions/setup-go@v7
+      # Its own Go cache, as the test job explains, so go-cache is off.
+      - uses: panyam/ci-actions/setup-go-pnpm@v0.1.2
         with:
-          go-version-file: go.mod
-          cache: false
+          go-cache: false
+          pnpm-version: 12.4.1
+          working-directory: ext/ui/assets
+          install: false
+
+      # The cache keys below use setup-go's version string, which the
+      # composite action does not pass on.
+      - id: go
+        run: echo "go-version=$(go env GOVERSION | sed 's/^go//')" >> "$GITHUB_OUTPUT"
 
       - uses: actions/cache/restore@v6.1.0
         with:
@@ -491,16 +493,6 @@ jobs:
 
       # The bridge JS tests and the stale-build check ran in no workflow, so
       # fixtures that matched a wrong wire shape stayed green (issue 1452).
-      - uses: pnpm/action-setup@v6
-        with:
-          version: 12.4.1
-
-      - uses: actions/setup-node@v7
-        with:
-          node-version: '22'
-          cache: pnpm
-          cache-dependency-path: ext/ui/assets/pnpm-lock.yaml
-
       - name: Run bridge JS tests
         run: bash ext/ui/scripts/test-bridge.sh
 
@@ -528,12 +520,17 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      # Its own Go cache, as the test job explains.
-      - id: go
-        uses: actions/setup-go@v7
+      # Its own Go cache, as the test job explains, so go-cache is off.
+      - uses: panyam/ci-actions/setup-go-pnpm@v0.1.2
         with:
-          go-version-file: go.mod
-          cache: false
+          go-cache: false
+          pnpm-version: 12.4.1
+          working-directory: examples/apps/any-frontend/web
+
+      # The cache keys below use setup-go's version string, which the
+      # composite action does not pass on.
+      - id: go
+        run: echo "go-version=$(go env GOVERSION | sed 's/^go//')" >> "$GITHUB_OUTPUT"
 
       - uses: actions/cache/restore@v6.1.0
         with:
@@ -545,25 +542,17 @@ jobs:
             go-${{ runner.os }}-${{ steps.go.outputs.go-version }}-${{ github.job }}-${{ hashFiles('**/go.sum') }}-
             go-${{ runner.os }}-${{ steps.go.outputs.go-version }}-${{ github.job }}-
 
-      - uses: pnpm/action-setup@v6
-        with:
-          version: 12.4.1
-
-      - uses: actions/setup-node@v7
-        with:
-          node-version: '22'
-          cache: pnpm
-          cache-dependency-path: examples/apps/any-frontend/web/pnpm-lock.yaml
-
       - name: Go tests
         run: go test ./... -count=1
 
       - name: Typecheck the Views and check the committed build is current
         run: bash scripts/check-views.sh
 
-      - name: Install Chromium and its system libraries
-        working-directory: examples/apps/any-frontend/web
-        run: pnpm install --frozen-lockfile --silent && pnpm exec playwright install --with-deps chromium
+      # Points Playwright at the runner's Chrome through CHROME_PATH, so no
+      # apt-get (#1742).
+      - uses: panyam/ci-actions/setup-browser@v0.1.2
+        with:
+          working-directory: examples/apps/any-frontend/web
 
       - name: Drive all four Views through /host
         run: bash scripts/test-e2e.sh
@@ -589,12 +578,17 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      # Its own Go cache, as the test job explains.
-      - id: go
-        uses: actions/setup-go@v7
+      # Its own Go cache, as the test job explains, so go-cache is off.
+      - uses: panyam/ci-actions/setup-go-pnpm@v0.1.2
         with:
-          go-version-file: go.mod
-          cache: false
+          go-cache: false
+          pnpm-version: 12.4.1
+          working-directory: examples/rooms/lanternfall/web
+
+      # The cache keys below use setup-go's version string, which the
+      # composite action does not pass on.
+      - id: go
+        run: echo "go-version=$(go env GOVERSION | sed 's/^go//')" >> "$GITHUB_OUTPUT"
 
       - uses: actions/cache/restore@v6.1.0
         with:
@@ -606,27 +600,17 @@ jobs:
             go-${{ runner.os }}-${{ steps.go.outputs.go-version }}-${{ github.job }}-${{ hashFiles('**/go.sum') }}-
             go-${{ runner.os }}-${{ steps.go.outputs.go-version }}-${{ github.job }}-
 
-      - uses: pnpm/action-setup@v6
-        with:
-          version: 12.4.1
-
-      - uses: actions/setup-node@v7
-        with:
-          node-version: '22'
-          cache: pnpm
-          cache-dependency-path: |
-            examples/rooms/lanternfall/web/pnpm-lock.yaml
-            experimental/ext/rooms/ts/pnpm-lock.yaml
-
       - name: Go tests
         run: go test ./... -count=1
 
       - name: Typecheck the page and check the committed build is current
         run: bash scripts/check-web.sh
 
-      - name: Install Chromium and its system libraries
-        working-directory: examples/rooms/lanternfall/web
-        run: pnpm install --frozen-lockfile --silent && pnpm exec playwright install --with-deps chromium
+      # Points Playwright at the runner's Chrome through CHROME_PATH, so no
+      # apt-get (#1742).
+      - uses: panyam/ci-actions/setup-browser@v0.1.2
+        with:
+          working-directory: examples/rooms/lanternfall/web
 
       - name: An agent drives a player's page
         run: bash scripts/test-e2e.sh
@@ -647,12 +631,17 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      # Its own Go cache, as the test job explains.
-      - id: go
-        uses: actions/setup-go@v7
+      # Its own Go cache, as the test job explains, so go-cache is off.
+      - uses: panyam/ci-actions/setup-go-pnpm@v0.1.2
         with:
-          go-version-file: go.mod
-          cache: false
+          go-cache: false
+          pnpm-version: 12.4.1
+          working-directory: tests/web-examples
+
+      # The cache keys below use setup-go's version string, which the
+      # composite action does not pass on.
+      - id: go
+        run: echo "go-version=$(go env GOVERSION | sed 's/^go//')" >> "$GITHUB_OUTPUT"
 
       - uses: actions/cache/restore@v6.1.0
         with:
@@ -664,19 +653,11 @@ jobs:
             go-${{ runner.os }}-${{ steps.go.outputs.go-version }}-${{ github.job }}-${{ hashFiles('**/go.sum') }}-
             go-${{ runner.os }}-${{ steps.go.outputs.go-version }}-${{ github.job }}-
 
-      - uses: pnpm/action-setup@v6
+      # Points Playwright at the runner's Chrome through CHROME_PATH, so no
+      # apt-get (#1742).
+      - uses: panyam/ci-actions/setup-browser@v0.1.2
         with:
-          version: 12.4.1
-
-      - uses: actions/setup-node@v7
-        with:
-          node-version: '22'
-          cache: pnpm
-          cache-dependency-path: tests/web-examples/pnpm-lock.yaml
-
-      - name: Install Chromium and its system libraries
-        working-directory: tests/web-examples
-        run: pnpm install --frozen-lockfile --silent && pnpm exec playwright install --with-deps chromium
+          working-directory: tests/web-examples
 
       - name: Load each example page and call a tool
         run: make test-web-examples
@@ -734,12 +715,19 @@ jobs:
           ref: ${{ steps.pin.outputs.sha }}
           path: conf-upstream-main
 
-      # Its own Go cache, as the test job explains.
-      - id: go
-        uses: actions/setup-go@v7
+      # Its own Go cache, as the test job explains, so go-cache is off.
+      - uses: panyam/ci-actions/setup-go-pnpm@v0.1.2
         with:
           go-version-file: mcpkit/go.mod
-          cache: false
+          go-cache: false
+          pnpm-version: 12.4.1
+          working-directory: mcpkit/tools/conformance-report
+          install: false
+
+      # The cache keys below use setup-go's version string, which the
+      # composite action does not pass on.
+      - id: go
+        run: echo "go-version=$(go env GOVERSION | sed 's/^go//')" >> "$GITHUB_OUTPUT"
 
       - uses: actions/cache/restore@v6.1.0
         with:
@@ -750,19 +738,6 @@ jobs:
           restore-keys: |
             go-${{ runner.os }}-${{ steps.go.outputs.go-version }}-${{ github.job }}-${{ hashFiles('mcpkit/**/go.sum') }}-
             go-${{ runner.os }}-${{ steps.go.outputs.go-version }}-${{ github.job }}-
-
-      # Must precede setup-node so its pnpm cache resolution finds the binary.
-      # Also needed by the check-conformance-stale step below, which shells out
-      # to scripts/refresh-conformance.sh and installs the renderer there.
-      - uses: pnpm/action-setup@v6
-        with:
-          version: 12.4.1
-
-      - uses: actions/setup-node@v7
-        with:
-          node-version: '22'
-          cache: pnpm
-          cache-dependency-path: mcpkit/tools/conformance-report/pnpm-lock.yaml
 
       - uses: astral-sh/setup-uv@v7
         with:

@@ -1,10 +1,13 @@
 package auth
 
 import (
+	"encoding/json"
 	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // TestMountAuthAutoWiresAllScopes verifies that when MountAuth is called
@@ -72,4 +75,47 @@ func TestMountAuthNilValidator(t *testing.T) {
 		MCPPath:              "/mcp",
 		// No Validator — should not panic
 	})
+}
+
+func getPRM(t *testing.T, mux *http.ServeMux, path string) (int, map[string]any) {
+	t.Helper()
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "https://mcp.example.com"+path, nil))
+	if rec.Code != http.StatusOK {
+		return rec.Code, nil
+	}
+	var doc map[string]any
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &doc))
+	return rec.Code, doc
+}
+
+// RFC 9728 §3.3: a client discards a document whose resource differs from
+// the one it built the well-known URL from, so a pathed resource's metadata
+// must not also answer at the root URL (#1732, oneauth PR 524).
+func TestMountAuthPathedResourceServesPRMOnlyAtPathURL(t *testing.T) {
+	mux := http.NewServeMux()
+	MountAuth(mux, AuthConfig{
+		ResourceURI:          "https://mcp.example.com/mcp",
+		AuthorizationServers: []string{"https://auth.example.com"},
+		MCPPath:              "/mcp",
+	})
+
+	code, doc := getPRM(t, mux, "/.well-known/oauth-protected-resource/mcp")
+	require.Equal(t, http.StatusOK, code)
+	assert.Equal(t, "https://mcp.example.com/mcp", doc["resource"])
+
+	code, _ = getPRM(t, mux, "/.well-known/oauth-protected-resource")
+	assert.Equal(t, http.StatusNotFound, code)
+}
+
+func TestMountAuthRootResourceServesPRMAtRootURL(t *testing.T) {
+	mux := http.NewServeMux()
+	MountAuth(mux, AuthConfig{
+		ResourceURI:          "https://mcp.example.com",
+		AuthorizationServers: []string{"https://auth.example.com"},
+	})
+
+	code, doc := getPRM(t, mux, "/.well-known/oauth-protected-resource")
+	require.Equal(t, http.StatusOK, code)
+	assert.Equal(t, "https://mcp.example.com", doc["resource"])
 }
