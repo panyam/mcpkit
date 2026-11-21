@@ -1,6 +1,6 @@
 module github.com/panyam/mcpkit/examples/otel/stdout
 
-go 1.26.9
+go 1.26.11
 
 require (
 	github.com/panyam/demokit v0.0.33

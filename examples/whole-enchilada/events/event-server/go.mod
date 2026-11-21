@@ -1,6 +1,6 @@
 module github.com/panyam/mcpkit/examples/whole-enchilada/events/event-server
 
-go 1.26.9
+go 1.26.11
 
 replace (
 	github.com/panyam/mcpkit => ../../../..

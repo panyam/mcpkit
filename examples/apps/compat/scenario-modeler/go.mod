@@ -1,6 +1,6 @@
 module github.com/panyam/mcpkit/examples/apps/compat/scenario-modeler
 
-go 1.26.9
+go 1.26.11
 
 replace (
 	github.com/panyam/mcpkit => ../../../..

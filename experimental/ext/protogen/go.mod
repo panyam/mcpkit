@@ -1,6 +1,6 @@
 module github.com/panyam/mcpkit/experimental/ext/protogen
 
-go 1.26.9
+go 1.26.11
 
 require (
 	github.com/panyam/mcpkit v0.8.21
