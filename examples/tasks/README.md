@@ -45,7 +45,7 @@ A TypeScript reference server with the same 6 tools is included for side-by-side
 
 ```bash
 cd examples/tasks
-npm install              # first time only
+pnpm install             # first time only
 node ts-reference-server.mjs   # default port 8080
 PORT=8090 node ts-reference-server.mjs   # custom port
 ```
