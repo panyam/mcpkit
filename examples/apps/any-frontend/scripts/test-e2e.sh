@@ -5,5 +5,6 @@ set -eu
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$DIR/web"
 pnpm install --frozen-lockfile --silent
-pnpm exec playwright install chromium
+# CI points CHROME_PATH at the runner's Chrome (#1742), so skip the download.
+[ -n "${CHROME_PATH:-}" ] || pnpm exec playwright install chromium
 pnpm exec playwright test

@@ -1,7 +1,7 @@
 name: Publish @panyam/mcpkit-rooms
 
 # Publishes experimental/ext/rooms/ts, the room bridge's page client, to npm
-# on a release tag, through servicekit's shared workflow, which uses npm
+# on a release tag, through ci-actions' shared workflow, which uses npm
 # trusted publishing (no token). The package is versioned with the release:
 # @panyam/mcpkit-rooms X.Y.Z is the page side of the bridge protocol that the
 # Go modules carry at vX.Y.Z. make bump-root sets its version, and
@@ -40,17 +40,11 @@ jobs:
       - name: Restore in-repo replaces
         run: bash scripts/release-replaces.sh restore
 
-      - uses: actions/setup-go@v7
+      - uses: panyam/ci-actions/setup-go-pnpm@v0.1.2
         with:
-          go-version-file: go.mod
-
-      - uses: pnpm/action-setup@v6
-        with:
-          version: 12.4.1
-
-      - uses: actions/setup-node@v7
-        with:
-          node-version: '22'
+          pnpm-version: 12.4.1
+          working-directory: experimental/ext/rooms/ts
+          install: false
 
       - name: Tag, package and rooms pin agree
         run: bash scripts/rooms-ts-version.sh check "$GITHUB_REF_NAME"
@@ -62,7 +56,7 @@ jobs:
 
   publish:
     needs: test
-    uses: panyam/servicekit/.github/workflows/npm-publish.yml@master
+    uses: panyam/ci-actions/.github/workflows/npm-publish.yml@v0.1.2
     with:
       working-directory: experimental/ext/rooms/ts
       package-manager: pnpm

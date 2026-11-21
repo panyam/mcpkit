@@ -11,7 +11,10 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DIR="$ROOT/tests/web-examples"
 rm -rf "$DIR/.site"
 "$ROOT/scripts/collect_web_examples.sh" "$DIR/.site/try"
+# Full Chrome asks for /favicon.ico, and the spec fails on the 404 it logs.
+: > "$DIR/.site/favicon.ico"
 cd "$DIR"
 pnpm install --frozen-lockfile --silent
-pnpm exec playwright install chromium >/dev/null
+# CI points CHROME_PATH at the runner's Chrome (#1742), so skip the download.
+[ -n "${CHROME_PATH:-}" ] || pnpm exec playwright install chromium >/dev/null
 pnpm exec playwright test "$@"
