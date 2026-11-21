@@ -181,8 +181,8 @@ packages:
   '@cfworker/json-schema@4.1.1':
     resolution: {integrity: sha512-gAmrUZSGtKc3AiBL71iNWxDsyUC5uMaKKGdvzYsBoTW/xi42JQHl7eKV2OYzCUqvc+D2RCcf7EXY2iCyFIk6og==}
 
-  '@hono/node-server@1.19.17':
-    resolution: {integrity: sha512-dSneS5qhiauZWGDCeK4o695Xd9nUNjviSZCMQrj10eetr8Uln1ucn6bbphOM6UynAMMtNIzZNSpL9vnASJwrPQ==}
+  '@hono/node-server@1.19.19':
+    resolution: {integrity: sha512-Fy9R7PACOzHU9LDpfnuzVyuVYevKQRcEG2mZhmfc+DRdmayEd3RVfa2XOt2IgGcPNgA77Yk63KBszepcMFK5Ng==}
     engines: {node: '>=18.14.1'}
     peerDependencies:
       hono: ^4
@@ -214,13 +214,13 @@ snapshots:
 
   '@cfworker/json-schema@4.1.1': {}
 
-  '@hono/node-server@1.19.17(hono@4.13.18)':
+  '@hono/node-server@1.19.19(hono@4.13.18)':
     dependencies:
       hono: 4.13.18
 
   '@modelcontextprotocol/node@2.0.0-alpha.2(@modelcontextprotocol/server@2.0.0-alpha.2(@cfworker/json-schema@4.1.1))(hono@4.13.18)':
     dependencies:
-      '@hono/node-server': 1.19.17(hono@4.13.18)
+      '@hono/node-server': 1.19.19(hono@4.13.18)
       '@modelcontextprotocol/server': 2.0.0-alpha.2(@cfworker/json-schema@4.1.1)
       hono: 4.13.18
 
