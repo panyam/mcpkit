@@ -7,7 +7,7 @@
 #
 # Prerequisites:
 #   - Go server: this directory (examples/tasks)
-#   - TS server: npm install in this directory (first time only)
+#   - TS server: pnpm install in this directory (first time only)
 
 set -e
 
@@ -28,7 +28,7 @@ trap cleanup EXIT
 
 if [ ! -d "$SCRIPT_DIR/node_modules/@modelcontextprotocol" ]; then
   echo "Installing TS SDK dependencies..."
-  cd "$SCRIPT_DIR" && npm install
+  cd "$SCRIPT_DIR" && pnpm install --frozen-lockfile
 fi
 
 # Helper: extract JSON from SSE or plain response

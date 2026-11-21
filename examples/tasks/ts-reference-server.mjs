@@ -4,7 +4,7 @@
  * Imports the TS SDK's Server + transport, registers our tools.
  *
  * Setup:
- *   cd examples/tasks && npm install   # first time only
+ *   cd examples/tasks && pnpm install  # first time only
  *
  * Usage:
  *   node ts-reference-server.mjs                # default port 8090
