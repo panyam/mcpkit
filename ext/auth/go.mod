@@ -1,6 +1,6 @@
 module github.com/panyam/mcpkit/ext/auth
 
-go 1.26.9
+go 1.26.11
 
 require (
 	github.com/golang-jwt/jwt/v5 v5.3.1

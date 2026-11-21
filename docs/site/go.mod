@@ -1,6 +1,6 @@
 module github.com/panyam/mcpkit/docs/site
 
-go 1.26.9
+go 1.26.11
 
 require (
 	github.com/alecthomas/chroma v0.10.0

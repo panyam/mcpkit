@@ -1,6 +1,6 @@
 module github.com/panyam/mcpkit/examples/protogen/bookservice
 
-go 1.26.9
+go 1.26.11
 
 require (
 	github.com/panyam/mcpkit v0.8.21

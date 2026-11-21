@@ -1,6 +1,6 @@
 module github.com/panyam/mcpkit/examples/agents/kitchen-sink/server
 
-go 1.26.9
+go 1.26.11
 
 replace github.com/panyam/mcpkit => ../../../..
 

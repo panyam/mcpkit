@@ -1,6 +1,6 @@
 module github.com/panyam/mcpkit/ext/skills
 
-go 1.26.9
+go 1.26.11
 
 require (
 	github.com/fsnotify/fsnotify v1.10.1

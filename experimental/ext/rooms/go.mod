@@ -1,6 +1,6 @@
 module github.com/panyam/mcpkit/experimental/ext/rooms
 
-go 1.26.9
+go 1.26.11
 
 replace github.com/panyam/mcpkit => ../../..
 

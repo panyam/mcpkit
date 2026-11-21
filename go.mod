@@ -1,6 +1,6 @@
 module github.com/panyam/mcpkit
 
-go 1.26.9
+go 1.26.11
 
 require (
 	github.com/invopop/jsonschema v0.14.0
