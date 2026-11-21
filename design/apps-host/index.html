@@ -1,0 +1,783 @@
+<!DOCTYPE html>
+
+
+
+
+
+
+
+
+
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    
+    <script>
+      try {
+        const t = localStorage.getItem('theme');
+        if (t === 'dark' || t === 'light') document.documentElement.dataset.theme = t;
+      } catch {}
+    </script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="AppHost lifecycle, Bridge JS, and embedding mcpkit Apps in a host application.">
+    <title>MCP Apps — Host Model · mcpkit</title>
+
+    <link rel="stylesheet" href="/mcpkit/static/css/main.css">
+    <style>.bg {  }
+.chroma {  }
+.chroma .err { color: #a61717; background-color: #e3d2d2 }
+.chroma .lntd { vertical-align: top; padding: 0; margin: 0; border: 0; }
+.chroma .lntable { border-spacing: 0; padding: 0; margin: 0; border: 0; }
+.chroma .hl { background-color: #e5e5e5 }
+.chroma .lnt { white-space: pre; user-select: none; margin-right: 0.4em; padding: 0 0.4em 0 0.4em;color: #7f7f7f }
+.chroma .ln { white-space: pre; user-select: none; margin-right: 0.4em; padding: 0 0.4em 0 0.4em;color: #7f7f7f }
+.chroma .line { display: flex; }
+.chroma .k { color: #000000; font-weight: bold }
+.chroma .kc { color: #000000; font-weight: bold }
+.chroma .kd { color: #000000; font-weight: bold }
+.chroma .kn { color: #000000; font-weight: bold }
+.chroma .kp { color: #000000; font-weight: bold }
+.chroma .kr { color: #000000; font-weight: bold }
+.chroma .kt { color: #445588; font-weight: bold }
+.chroma .na { color: #008080 }
+.chroma .nb { color: #0086b3 }
+.chroma .bp { color: #999999 }
+.chroma .nc { color: #445588; font-weight: bold }
+.chroma .no { color: #008080 }
+.chroma .nd { color: #3c5d5d; font-weight: bold }
+.chroma .ni { color: #800080 }
+.chroma .ne { color: #990000; font-weight: bold }
+.chroma .nf { color: #990000; font-weight: bold }
+.chroma .nl { color: #990000; font-weight: bold }
+.chroma .nn { color: #555555 }
+.chroma .nt { color: #000080 }
+.chroma .nv { color: #008080 }
+.chroma .vc { color: #008080 }
+.chroma .vg { color: #008080 }
+.chroma .vi { color: #008080 }
+.chroma .s { color: #dd1144 }
+.chroma .sa { color: #dd1144 }
+.chroma .sb { color: #dd1144 }
+.chroma .sc { color: #dd1144 }
+.chroma .dl { color: #dd1144 }
+.chroma .sd { color: #dd1144 }
+.chroma .s2 { color: #dd1144 }
+.chroma .se { color: #dd1144 }
+.chroma .sh { color: #dd1144 }
+.chroma .si { color: #dd1144 }
+.chroma .sx { color: #dd1144 }
+.chroma .sr { color: #009926 }
+.chroma .s1 { color: #dd1144 }
+.chroma .ss { color: #990073 }
+.chroma .m { color: #009999 }
+.chroma .mb { color: #009999 }
+.chroma .mf { color: #009999 }
+.chroma .mh { color: #009999 }
+.chroma .mi { color: #009999 }
+.chroma .il { color: #009999 }
+.chroma .mo { color: #009999 }
+.chroma .o { color: #000000; font-weight: bold }
+.chroma .ow { color: #000000; font-weight: bold }
+.chroma .c { color: #999988; font-style: italic }
+.chroma .ch { color: #999988; font-style: italic }
+.chroma .cm { color: #999988; font-style: italic }
+.chroma .c1 { color: #999988; font-style: italic }
+.chroma .cs { color: #999999; font-weight: bold; font-style: italic }
+.chroma .cp { color: #999999; font-weight: bold; font-style: italic }
+.chroma .cpf { color: #999999; font-weight: bold; font-style: italic }
+.chroma .gd { color: #000000; background-color: #ffdddd }
+.chroma .ge { color: #000000; font-style: italic }
+.chroma .gr { color: #aa0000 }
+.chroma .gh { color: #999999 }
+.chroma .gi { color: #000000; background-color: #ddffdd }
+.chroma .go { color: #888888 }
+.chroma .gp { color: #555555 }
+.chroma .gs { font-weight: bold }
+.chroma .gu { color: #aaaaaa }
+.chroma .gt { color: #aa0000 }
+.chroma .gl { text-decoration: underline }
+.chroma .w { color: #bbbbbb }
+@media (prefers-color-scheme: dark) {
+:root:not([data-theme]) .bg { color: #f8f8f2;  }
+:root:not([data-theme]) .chroma { color: #f8f8f2;  }
+:root:not([data-theme]) .chroma .err { color: #960050; background-color: #1e0010 }
+:root:not([data-theme]) .chroma .lntd { vertical-align: top; padding: 0; margin: 0; border: 0; }
+:root:not([data-theme]) .chroma .lntable { border-spacing: 0; padding: 0; margin: 0; border: 0; }
+:root:not([data-theme]) .chroma .hl { background-color: #3c3d38 }
+:root:not([data-theme]) .chroma .lnt { white-space: pre; user-select: none; margin-right: 0.4em; padding: 0 0.4em 0 0.4em;color: #7f7f7f }
+:root:not([data-theme]) .chroma .ln { white-space: pre; user-select: none; margin-right: 0.4em; padding: 0 0.4em 0 0.4em;color: #7f7f7f }
+:root:not([data-theme]) .chroma .line { display: flex; }
+:root:not([data-theme]) .chroma .k { color: #66d9ef }
+:root:not([data-theme]) .chroma .kc { color: #66d9ef }
+:root:not([data-theme]) .chroma .kd { color: #66d9ef }
+:root:not([data-theme]) .chroma .kn { color: #f92672 }
+:root:not([data-theme]) .chroma .kp { color: #66d9ef }
+:root:not([data-theme]) .chroma .kr { color: #66d9ef }
+:root:not([data-theme]) .chroma .kt { color: #66d9ef }
+:root:not([data-theme]) .chroma .na { color: #a6e22e }
+:root:not([data-theme]) .chroma .nc { color: #a6e22e }
+:root:not([data-theme]) .chroma .no { color: #66d9ef }
+:root:not([data-theme]) .chroma .nd { color: #a6e22e }
+:root:not([data-theme]) .chroma .ne { color: #a6e22e }
+:root:not([data-theme]) .chroma .nf { color: #a6e22e }
+:root:not([data-theme]) .chroma .nx { color: #a6e22e }
+:root:not([data-theme]) .chroma .nt { color: #f92672 }
+:root:not([data-theme]) .chroma .l { color: #ae81ff }
+:root:not([data-theme]) .chroma .ld { color: #e6db74 }
+:root:not([data-theme]) .chroma .s { color: #e6db74 }
+:root:not([data-theme]) .chroma .sa { color: #e6db74 }
+:root:not([data-theme]) .chroma .sb { color: #e6db74 }
+:root:not([data-theme]) .chroma .sc { color: #e6db74 }
+:root:not([data-theme]) .chroma .dl { color: #e6db74 }
+:root:not([data-theme]) .chroma .sd { color: #e6db74 }
+:root:not([data-theme]) .chroma .s2 { color: #e6db74 }
+:root:not([data-theme]) .chroma .se { color: #ae81ff }
+:root:not([data-theme]) .chroma .sh { color: #e6db74 }
+:root:not([data-theme]) .chroma .si { color: #e6db74 }
+:root:not([data-theme]) .chroma .sx { color: #e6db74 }
+:root:not([data-theme]) .chroma .sr { color: #e6db74 }
+:root:not([data-theme]) .chroma .s1 { color: #e6db74 }
+:root:not([data-theme]) .chroma .ss { color: #e6db74 }
+:root:not([data-theme]) .chroma .m { color: #ae81ff }
+:root:not([data-theme]) .chroma .mb { color: #ae81ff }
+:root:not([data-theme]) .chroma .mf { color: #ae81ff }
+:root:not([data-theme]) .chroma .mh { color: #ae81ff }
+:root:not([data-theme]) .chroma .mi { color: #ae81ff }
+:root:not([data-theme]) .chroma .il { color: #ae81ff }
+:root:not([data-theme]) .chroma .mo { color: #ae81ff }
+:root:not([data-theme]) .chroma .o { color: #f92672 }
+:root:not([data-theme]) .chroma .ow { color: #f92672 }
+:root:not([data-theme]) .chroma .c { color: #75715e }
+:root:not([data-theme]) .chroma .ch { color: #75715e }
+:root:not([data-theme]) .chroma .cm { color: #75715e }
+:root:not([data-theme]) .chroma .c1 { color: #75715e }
+:root:not([data-theme]) .chroma .cs { color: #75715e }
+:root:not([data-theme]) .chroma .cp { color: #75715e }
+:root:not([data-theme]) .chroma .cpf { color: #75715e }
+:root:not([data-theme]) .chroma .gd { color: #f92672 }
+:root:not([data-theme]) .chroma .ge { font-style: italic }
+:root:not([data-theme]) .chroma .gi { color: #a6e22e }
+:root:not([data-theme]) .chroma .gs { font-weight: bold }
+:root:not([data-theme]) .chroma .gu { color: #75715e }
+}
+:root[data-theme="dark"] .bg { color: #f8f8f2;  }
+:root[data-theme="dark"] .chroma { color: #f8f8f2;  }
+:root[data-theme="dark"] .chroma .err { color: #960050; background-color: #1e0010 }
+:root[data-theme="dark"] .chroma .lntd { vertical-align: top; padding: 0; margin: 0; border: 0; }
+:root[data-theme="dark"] .chroma .lntable { border-spacing: 0; padding: 0; margin: 0; border: 0; }
+:root[data-theme="dark"] .chroma .hl { background-color: #3c3d38 }
+:root[data-theme="dark"] .chroma .lnt { white-space: pre; user-select: none; margin-right: 0.4em; padding: 0 0.4em 0 0.4em;color: #7f7f7f }
+:root[data-theme="dark"] .chroma .ln { white-space: pre; user-select: none; margin-right: 0.4em; padding: 0 0.4em 0 0.4em;color: #7f7f7f }
+:root[data-theme="dark"] .chroma .line { display: flex; }
+:root[data-theme="dark"] .chroma .k { color: #66d9ef }
+:root[data-theme="dark"] .chroma .kc { color: #66d9ef }
+:root[data-theme="dark"] .chroma .kd { color: #66d9ef }
+:root[data-theme="dark"] .chroma .kn { color: #f92672 }
+:root[data-theme="dark"] .chroma .kp { color: #66d9ef }
+:root[data-theme="dark"] .chroma .kr { color: #66d9ef }
+:root[data-theme="dark"] .chroma .kt { color: #66d9ef }
+:root[data-theme="dark"] .chroma .na { color: #a6e22e }
+:root[data-theme="dark"] .chroma .nc { color: #a6e22e }
+:root[data-theme="dark"] .chroma .no { color: #66d9ef }
+:root[data-theme="dark"] .chroma .nd { color: #a6e22e }
+:root[data-theme="dark"] .chroma .ne { color: #a6e22e }
+:root[data-theme="dark"] .chroma .nf { color: #a6e22e }
+:root[data-theme="dark"] .chroma .nx { color: #a6e22e }
+:root[data-theme="dark"] .chroma .nt { color: #f92672 }
+:root[data-theme="dark"] .chroma .l { color: #ae81ff }
+:root[data-theme="dark"] .chroma .ld { color: #e6db74 }
+:root[data-theme="dark"] .chroma .s { color: #e6db74 }
+:root[data-theme="dark"] .chroma .sa { color: #e6db74 }
+:root[data-theme="dark"] .chroma .sb { color: #e6db74 }
+:root[data-theme="dark"] .chroma .sc { color: #e6db74 }
+:root[data-theme="dark"] .chroma .dl { color: #e6db74 }
+:root[data-theme="dark"] .chroma .sd { color: #e6db74 }
+:root[data-theme="dark"] .chroma .s2 { color: #e6db74 }
+:root[data-theme="dark"] .chroma .se { color: #ae81ff }
+:root[data-theme="dark"] .chroma .sh { color: #e6db74 }
+:root[data-theme="dark"] .chroma .si { color: #e6db74 }
+:root[data-theme="dark"] .chroma .sx { color: #e6db74 }
+:root[data-theme="dark"] .chroma .sr { color: #e6db74 }
+:root[data-theme="dark"] .chroma .s1 { color: #e6db74 }
+:root[data-theme="dark"] .chroma .ss { color: #e6db74 }
+:root[data-theme="dark"] .chroma .m { color: #ae81ff }
+:root[data-theme="dark"] .chroma .mb { color: #ae81ff }
+:root[data-theme="dark"] .chroma .mf { color: #ae81ff }
+:root[data-theme="dark"] .chroma .mh { color: #ae81ff }
+:root[data-theme="dark"] .chroma .mi { color: #ae81ff }
+:root[data-theme="dark"] .chroma .il { color: #ae81ff }
+:root[data-theme="dark"] .chroma .mo { color: #ae81ff }
+:root[data-theme="dark"] .chroma .o { color: #f92672 }
+:root[data-theme="dark"] .chroma .ow { color: #f92672 }
+:root[data-theme="dark"] .chroma .c { color: #75715e }
+:root[data-theme="dark"] .chroma .ch { color: #75715e }
+:root[data-theme="dark"] .chroma .cm { color: #75715e }
+:root[data-theme="dark"] .chroma .c1 { color: #75715e }
+:root[data-theme="dark"] .chroma .cs { color: #75715e }
+:root[data-theme="dark"] .chroma .cp { color: #75715e }
+:root[data-theme="dark"] .chroma .cpf { color: #75715e }
+:root[data-theme="dark"] .chroma .gd { color: #f92672 }
+:root[data-theme="dark"] .chroma .ge { font-style: italic }
+:root[data-theme="dark"] .chroma .gi { color: #a6e22e }
+:root[data-theme="dark"] .chroma .gs { font-weight: bold }
+:root[data-theme="dark"] .chroma .gu { color: #75715e }
+</style>
+    <link rel="icon" href="data:,">
+</head>
+<body>
+    
+<header class="site-header">
+    <div class="site-header-inner">
+        
+        <a class="brand" href="/mcpkit/">
+            <span class="brand-name">mcpkit</span>
+        </a>
+        <nav class="top-nav">
+            
+            
+            <a class="top-nav-link" href="/mcpkit/get-started/">Get Started</a>
+            
+            <a class="top-nav-link" href="/mcpkit/try/">Try it</a>
+            
+            <a class="top-nav-link" href="/mcpkit/guides/transports/">Guides</a>
+            
+            <a class="top-nav-link" href="/mcpkit/examples/">Examples</a>
+            
+            <a class="top-nav-link" href="/mcpkit/concepts/">Concepts</a>
+            
+            <a class="top-nav-link" href="/mcpkit/conformance/">Conformance</a>
+            
+            <a class="top-nav-link" href="/mcpkit/packages/core/">Packages</a>
+            
+            <a class="top-nav-link" href="/mcpkit/design/apps/">Reference</a>
+            
+            <a class="top-nav-link external" href="https://github.com/panyam/mcpkit">GitHub</a>
+            <button type="button" class="theme-toggle" aria-label="Toggle dark mode" title="Toggle dark mode">
+                <span class="theme-toggle-light">☀</span>
+                <span class="theme-toggle-dark">☾</span>
+            </button>
+        </nav>
+    </div>
+</header>
+
+
+    <div class="page">
+        
+<aside class="sidebar">
+    
+    
+    <nav class="sidebar-nav">
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/get-started/">Get Started</a>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/try/">Try it</a>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/guides/transports/">Guides</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/guides/transports/">Transports</a></li>
+                
+                <li><a href="/mcpkit/guides/auth/">Auth</a></li>
+                
+                <li><a href="/mcpkit/guides/tasks/">Long-running tasks</a></li>
+                
+                <li><a href="/mcpkit/guides/apps/">MCP Apps</a></li>
+                
+                <li><a href="/mcpkit/guides/prompts/">Prompts</a></li>
+                
+                <li><a href="/mcpkit/guides/elicitation/">Elicitation</a></li>
+                
+                <li><a href="/mcpkit/guides/completions/">Argument completion</a></li>
+                
+                <li><a href="/mcpkit/guides/observability/">Observability</a></li>
+                
+                <li><a href="/mcpkit/guides/mrtr/">MRTR input-gathering</a></li>
+                
+                <li><a href="/mcpkit/guides/deployment/">Deployment</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/examples/">Examples</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/examples/">All examples</a></li>
+                
+                <li><a href="/mcpkit/examples/auth/">Auth</a></li>
+                
+                <li><a href="/mcpkit/examples/tasks-v2/">Tasks v2</a></li>
+                
+                <li><a href="/mcpkit/examples/mrtr/">MRTR</a></li>
+                
+                <li><a href="/mcpkit/examples/apps/">MCP Apps</a></li>
+                
+                <li><a href="/mcpkit/examples/events/discord/">Events</a></li>
+                
+                <li><a href="/mcpkit/examples/skills-core/">Skills</a></li>
+                
+                <li><a href="/mcpkit/examples/disclosure/">Progressive disclosure</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/concepts/">Concepts</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/concepts/">Overview</a></li>
+                
+                <li><a href="/mcpkit/concepts/bringup/">Bring-up</a></li>
+                
+                <li><a href="/mcpkit/concepts/transport-mechanics/">Transport mechanics</a></li>
+                
+                <li><a href="/mcpkit/concepts/notifications/">Notifications</a></li>
+                
+                <li><a href="/mcpkit/concepts/request-anatomy/">Anatomy of a request</a></li>
+                
+                <li><a href="/mcpkit/concepts/extension-mechanisms/">Extension mechanisms</a></li>
+                
+                <li><a href="/mcpkit/concepts/reverse-call/">Reverse calls</a></li>
+                
+                <li><a href="/mcpkit/concepts/mrtr/">MRTR internals</a></li>
+                
+                <li><a href="/mcpkit/concepts/tracing/">Tracing</a></li>
+                
+                <li><a href="/mcpkit/concepts/events/">Events</a></li>
+                
+                <li><a href="/mcpkit/concepts/progressive-disclosure/">Progressive disclosure</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/conformance/">Conformance</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/conformance/">Coverage matrix</a></li>
+                
+                <li><a href="/mcpkit/conformance/upstream-audit/">Upstream audit</a></li>
+                
+                <li><a href="/mcpkit/conformance/fixture-audit/">Fixture audit</a></li>
+                
+                <li><a href="/mcpkit/conformance/external-checker/">External checker</a></li>
+                
+                <li><a href="/mcpkit/conformance/apps/compat/">Apps compat</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/packages/core/">Packages</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/packages/core/">core</a></li>
+                
+                <li><a href="/mcpkit/packages/server/">server</a></li>
+                
+                <li><a href="/mcpkit/packages/client/">client</a></li>
+                
+                <li><a href="/mcpkit/packages/ext-auth/">ext/auth</a></li>
+                
+                <li><a href="/mcpkit/packages/ext-tasks/">ext/tasks</a></li>
+                
+                <li><a href="/mcpkit/packages/ext-ui/">ext/ui</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/design/apps/">Reference</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/design/apps/">MCP Apps — design</a></li>
+                
+                <li><a href="/mcpkit/design/apps-host/">MCP Apps — host model</a></li>
+                
+                <li><a href="/mcpkit/design/apps-onboarding/">MCP Apps — onboarding</a></li>
+                
+                <li><a href="/mcpkit/design/tasks-v2-migration/">Tasks v2 migration</a></li>
+                
+                <li><a href="/mcpkit/design/sep-2567-handles/">SEP-2567 handles</a></li>
+                
+                <li><a href="/mcpkit/design/sep-2577-deprecations/">SEP-2577 deprecations</a></li>
+                
+                <li><a href="/mcpkit/design/list-ttl-migration/">List TTL migration</a></li>
+                
+            </ul>
+            
+        </div>
+        
+    </nav>
+</aside>
+
+        <main class="main">
+            
+<article class="content">
+    
+    <header class="content-header">
+        <h1>MCP Apps — Host Model</h1>
+        
+        <p class="lead">AppHost lifecycle, Bridge JS, and embedding mcpkit Apps in a host application.</p>
+        
+        
+        <p class="source-link">
+            Source: <a href="https://github.com/panyam/mcpkit/blob/main/docs/APPS_HOST.md"><code>docs/APPS_HOST.md</code></a>
+        </p>
+        
+    </header>
+    
+
+    <div class="content-body">
+        
+<h1 id="mcp-apps-host-implementation-guide">MCP Apps host implementation guide <a class="anchor" href="#mcp-apps-host-implementation-guide">¶</a></h1>
+<p>Building custom MCP hosts (agent harnesses, desktop apps, custom UIs) using AppHost and ServerRegistry.</p>
+<p>See <a href="/mcpkit/packages/ext-ui/">APPS_DESIGN.md</a> for the core protocol design and <a href="/mcpkit/design/apps-onboarding/">APPS_ONBOARDING.md</a> for shipping your app.</p>
+<h2 id="apphost-and-host-side-app-management">AppHost and host-side app management <a class="anchor" href="#apphost-and-host-side-app-management">¶</a></h2>
+<h3 id="overview">Overview <a class="anchor" href="#overview">¶</a></h3>
+<p><code>AppHost</code> (<a href="https://github.com/panyam/mcpkit/blob/main/ext/ui/app_host.go"><code>ext/ui/app_host.go</code></a>) wraps an MCP <code>Client</code> and an <code>AppBridge</code> to mediate between an MCP App (running in a browser iframe or in-process) and an MCP server. It enables custom host implementations (agent harnesses, desktop apps, or custom UIs) to manage app-provided tools.</p>
+<h3 id="architecture">Architecture <a class="anchor" href="#architecture">¶</a></h3>
+<pre><code>┌─────────────────┐     ┌───────────────┐     ┌──────────────┐
+│   MCP Server    │◄────│   AppHost     │────►│   MCP App    │
+│  (tools, etc.)  │     │ (mediator)    │     │ (iframe/Go)  │
+│                 │     │               │     │              │
+│ server_echo     │     │ ListAllTools  │     │ app_greet    │
+│ server_fetch    │     │ CallAppTool   │     │ app_dice     │
+└─────────────────┘     └───────────────┘     └──────────────┘
+        ▲                    │    ▲                   │
+        │                    │    │                   │
+    Client.Call         bridge.Send            bridge.SendToHost
+</code></pre>
+<h3 id="request-flows">Request Flows <a class="anchor" href="#request-flows">¶</a></h3>
+<h4 id="hostapp-calling-an-app-provided-tool">Host→App: Calling an App-Provided Tool <a class="anchor" href="#hostapp-calling-an-app-provided-tool">¶</a></h4>
+<p>The host (or LLM) discovers app tools via <code>ListAppTools()</code> and invokes them via <code>CallAppTool()</code>. The bridge forwards the JSON-RPC request to the app.</p>
+<pre><code class="language-mermaid">sequenceDiagram
+    participant LLM as LLM / Agent
+    participant Host as AppHost
+    participant Bridge as AppBridge
+    participant App as MCP App
+
+    LLM-&gt;&gt;Host: ListAllTools()
+    Host-&gt;&gt;Bridge: Send(tools/list)
+    Bridge-&gt;&gt;App: tools/list
+    App--&gt;&gt;Bridge: {tools: [{name: &quot;app_greet&quot;, ...}]}
+    Bridge--&gt;&gt;Host: Response
+    Host--&gt;&gt;LLM: [server_echo, app_greet]
+
+    LLM-&gt;&gt;Host: CallAppTool(&quot;app_greet&quot;, {name: &quot;world&quot;})
+    Host-&gt;&gt;Bridge: Send(tools/call, {name: &quot;app_greet&quot;, args: ...})
+    Bridge-&gt;&gt;App: tools/call
+    App--&gt;&gt;Bridge: {content: [{type: &quot;text&quot;, text: &quot;hello world&quot;}]}
+    Bridge--&gt;&gt;Host: ToolResult
+    Host--&gt;&gt;LLM: ToolResult{content: &quot;hello world&quot;}
+</code></pre>
+<h4 id="apphost-app-calling-a-server-tool">App→Host: App Calling a Server Tool <a class="anchor" href="#apphost-app-calling-a-server-tool">¶</a></h4>
+<p>The app calls <code>MCPApp.callTool(&quot;server_tool&quot;, {...})</code>, which the bridge forwards to AppHost, which forwards to the MCP server via the Client.</p>
+<pre><code class="language-mermaid">sequenceDiagram
+    participant App as MCP App
+    participant Bridge as AppBridge
+    participant Host as AppHost
+    participant Client as Client
+    participant Server as MCP Server
+
+    App-&gt;&gt;Bridge: MCPApp.callTool(&quot;server_echo&quot;, {msg: &quot;hi&quot;})
+    Bridge-&gt;&gt;Host: handleAppRequest(tools/call)
+    Host-&gt;&gt;Client: Call(&quot;tools/call&quot;, params)
+    Client-&gt;&gt;Server: JSON-RPC tools/call
+    Server--&gt;&gt;Client: ToolResult
+    Client--&gt;&gt;Host: CallResult
+    Host--&gt;&gt;Bridge: Response
+    Bridge--&gt;&gt;App: {content: [{type: &quot;text&quot;, text: &quot;server:hi&quot;}]}
+</code></pre>
+<h4 id="apphost-host-capabilities">App→Host: Host Capabilities <a class="anchor" href="#apphost-host-capabilities">¶</a></h4>
+<p><code>ui/open-link</code>, <code>ui/download-file</code>, <code>ui/message</code>, <code>ui/request-display-mode</code> and<br />
+<code>ui/update-model-context</code> belong to the host, not the server. AppHost answers them from the<br />
+<code>HostHandlers</code> passed with <code>WithHostHandlers</code> and never forwards them. A nil handler means the host<br />
+does not support that method, and the app gets <code>-32601</code>. <code>ui/request-display-mode</code> is the exception:<br />
+the spec requires the host to answer with the mode in effect, so with no handler it answers<br />
+<code>{mode: &quot;inline&quot;}</code> (<code>ui.DefaultDisplayMode</code>). <code>HostHandlers.Notification</code> receives every<br />
+app notification except <code>notifications/tools/list_changed</code>, which AppHost consumes itself.</p>
+<pre tabindex="0" class="chroma"><code><span class="line"><span class="cl"><span class="nx">host</span> <span class="o">:=</span> <span class="nx">ui</span><span class="p">.</span><span class="nf">NewAppHost</span><span class="p">(</span><span class="nx">c</span><span class="p">,</span> <span class="nx">bridge</span><span class="p">,</span> <span class="nx">ui</span><span class="p">.</span><span class="nf">WithHostHandlers</span><span class="p">(</span><span class="nx">ui</span><span class="p">.</span><span class="nx">HostHandlers</span><span class="p">{</span>
+</span></span><span class="line"><span class="cl">    <span class="nx">UpdateModelContext</span><span class="p">:</span> <span class="kd">func</span><span class="p">(</span><span class="nx">ctx</span> <span class="nx">context</span><span class="p">.</span><span class="nx">Context</span><span class="p">,</span> <span class="nx">u</span> <span class="nx">ui</span><span class="p">.</span><span class="nx">ModelContextUpdate</span><span class="p">)</span> <span class="kt">error</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">        <span class="nx">session</span><span class="p">.</span><span class="nf">SetAppContext</span><span class="p">(</span><span class="nx">u</span><span class="p">)</span> <span class="c1">// replaces the previous update from this view
+</span></span></span><span class="line"><span class="cl"><span class="c1"></span>        <span class="k">return</span> <span class="kc">nil</span>
+</span></span><span class="line"><span class="cl">    <span class="p">},</span>
+</span></span><span class="line"><span class="cl">    <span class="nx">Message</span><span class="p">:</span> <span class="kd">func</span><span class="p">(</span><span class="nx">ctx</span> <span class="nx">context</span><span class="p">.</span><span class="nx">Context</span><span class="p">,</span> <span class="nx">m</span> <span class="nx">ui</span><span class="p">.</span><span class="nx">MessageRequest</span><span class="p">)</span> <span class="kt">error</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">        <span class="k">return</span> <span class="nx">session</span><span class="p">.</span><span class="nf">QueueTurn</span><span class="p">(</span><span class="nx">m</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl">    <span class="p">},</span>
+</span></span><span class="line"><span class="cl"><span class="p">}))</span>
+</span></span></code></pre><h4 id="dynamic-tool-registration">Dynamic Tool Registration <a class="anchor" href="#dynamic-tool-registration">¶</a></h4>
+<p>When the app registers a new tool at runtime, a <code>notifications/tools/list_changed</code> notification triggers a cache refresh.</p>
+<pre><code class="language-mermaid">sequenceDiagram
+    participant App as MCP App
+    participant Bridge as AppBridge
+    participant Host as AppHost
+
+    App-&gt;&gt;Bridge: registerTool(&quot;app_dice&quot;, ...)
+    Bridge-&gt;&gt;Host: notifications/tools/list_changed
+    Host-&gt;&gt;Bridge: Send(tools/list)
+    Bridge-&gt;&gt;App: tools/list
+    App--&gt;&gt;Bridge: {tools: [{name: &quot;app_greet&quot;}, {name: &quot;app_dice&quot;}]}
+    Bridge--&gt;&gt;Host: Response
+    Note over Host: Cache updated: 2 app tools
+</code></pre>
+<h3 id="appbridge-interface">AppBridge Interface <a class="anchor" href="#appbridge-interface">¶</a></h3>
+<p><code>AppBridge</code> abstracts the host↔app communication channel. The protocol is JSON-RPC 2.0, mirroring the <code>postMessage</code> protocol in <code>mcp-app-bridge.ts</code>.</p>
+<pre tabindex="0" class="chroma"><code><span class="line"><span class="cl"><span class="kd">type</span> <span class="nx">AppBridge</span> <span class="kd">interface</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">    <span class="nf">Send</span><span class="p">(</span><span class="nx">ctx</span> <span class="nx">context</span><span class="p">.</span><span class="nx">Context</span><span class="p">,</span> <span class="nx">req</span> <span class="o">*</span><span class="nx">core</span><span class="p">.</span><span class="nx">Request</span><span class="p">)</span> <span class="p">(</span><span class="o">*</span><span class="nx">core</span><span class="p">.</span><span class="nx">Response</span><span class="p">,</span> <span class="kt">error</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl">    <span class="nf">SetRequestHandler</span><span class="p">(</span><span class="nx">fn</span> <span class="kd">func</span><span class="p">(</span><span class="nx">ctx</span> <span class="nx">context</span><span class="p">.</span><span class="nx">Context</span><span class="p">,</span> <span class="nx">req</span> <span class="o">*</span><span class="nx">core</span><span class="p">.</span><span class="nx">Request</span><span class="p">)</span> <span class="o">*</span><span class="nx">core</span><span class="p">.</span><span class="nx">Response</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl">    <span class="nf">SetNotificationHandler</span><span class="p">(</span><span class="nx">fn</span> <span class="kd">func</span><span class="p">(</span><span class="nx">method</span> <span class="kt">string</span><span class="p">,</span> <span class="nx">params</span> <span class="nx">json</span><span class="p">.</span><span class="nx">RawMessage</span><span class="p">))</span>
+</span></span><span class="line"><span class="cl">    <span class="nf">Start</span><span class="p">()</span> <span class="kt">error</span>
+</span></span><span class="line"><span class="cl">    <span class="nf">Close</span><span class="p">()</span> <span class="kt">error</span>
+</span></span><span class="line"><span class="cl"><span class="p">}</span>
+</span></span></code></pre><p>Implementations:</p>
+<ul>
+<li><strong><code>InProcessAppBridge</code></strong> - for testing. Registers Go handlers that simulate app-side tools.</li>
+<li><strong>WebSocket bridge</strong> (future) - for Go hosts serving browser iframes over WebSocket.</li>
+<li><strong>Native bridge</strong> (future) - for desktop apps using webview/wails JS↔Go bindings.</li>
+</ul>
+<h3 id="usage-with-oauth-authentication">Usage with OAuth Authentication <a class="anchor" href="#usage-with-oauth-authentication">¶</a></h3>
+<p>AppHost does not own auth. The caller wires <code>ext/auth.OAuthTokenSource</code> into the Client. Auth retry (401/403) happens transparently at the Client&rsquo;s transport layer.</p>
+<pre tabindex="0" class="chroma"><code><span class="line"><span class="cl"><span class="c1">// 1. Create OAuth token source
+</span></span></span><span class="line"><span class="cl"><span class="c1"></span><span class="nx">ts</span> <span class="o">:=</span> <span class="o">&amp;</span><span class="nx">auth</span><span class="p">.</span><span class="nx">OAuthTokenSource</span><span class="p">{</span>
+</span></span><span class="line"><span class="cl">    <span class="nx">ServerURL</span><span class="p">:</span>   <span class="s">&#34;https://api.example.com/mcp&#34;</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">    <span class="nx">ClientID</span><span class="p">:</span>    <span class="s">&#34;my-host&#34;</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">    <span class="nx">OpenBrowser</span><span class="p">:</span> <span class="nx">browser</span><span class="p">.</span><span class="nx">Open</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">    <span class="nx">CredStore</span><span class="p">:</span>   <span class="nx">myCredStore</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl"><span class="p">}</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="c1">// 2. Create client with auth
+</span></span></span><span class="line"><span class="cl"><span class="c1"></span><span class="nx">c</span> <span class="o">:=</span> <span class="nx">client</span><span class="p">.</span><span class="nf">NewClient</span><span class="p">(</span><span class="nx">url</span><span class="p">,</span> <span class="nx">info</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">    <span class="nx">client</span><span class="p">.</span><span class="nf">WithTokenSource</span><span class="p">(</span><span class="nx">ts</span><span class="p">),</span>
+</span></span><span class="line"><span class="cl">    <span class="nx">client</span><span class="p">.</span><span class="nf">WithUIExtension</span><span class="p">(),</span>
+</span></span><span class="line"><span class="cl"><span class="p">)</span>
+</span></span><span class="line"><span class="cl"><span class="nx">c</span><span class="p">.</span><span class="nf">Connect</span><span class="p">()</span>
+</span></span><span class="line"><span class="cl"><span class="k">defer</span> <span class="nx">c</span><span class="p">.</span><span class="nf">Close</span><span class="p">()</span> <span class="c1">// also closes OAuthTokenSource
+</span></span></span><span class="line"><span class="cl"><span class="c1"></span>
+</span></span><span class="line"><span class="cl"><span class="c1">// 3. Create AppHost
+</span></span></span><span class="line"><span class="cl"><span class="c1"></span><span class="nx">bridge</span> <span class="o">:=</span> <span class="nx">ui</span><span class="p">.</span><span class="nf">NewInProcessAppBridge</span><span class="p">()</span> <span class="c1">// or WebSocketBridge for browser
+</span></span></span><span class="line"><span class="cl"><span class="c1"></span><span class="nx">host</span> <span class="o">:=</span> <span class="nx">ui</span><span class="p">.</span><span class="nf">NewAppHost</span><span class="p">(</span><span class="nx">c</span><span class="p">,</span> <span class="nx">bridge</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl"><span class="nx">host</span><span class="p">.</span><span class="nf">Start</span><span class="p">(</span><span class="nx">ctx</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl"><span class="k">defer</span> <span class="nx">host</span><span class="p">.</span><span class="nf">Close</span><span class="p">()</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="c1">// 4. Use
+</span></span></span><span class="line"><span class="cl"><span class="c1"></span><span class="nx">tools</span><span class="p">,</span> <span class="nx">_</span> <span class="o">:=</span> <span class="nx">host</span><span class="p">.</span><span class="nf">ListAllTools</span><span class="p">(</span><span class="nx">ctx</span><span class="p">)</span> <span class="c1">// server + app tools
+</span></span></span><span class="line"><span class="cl"><span class="c1"></span><span class="nx">result</span><span class="p">,</span> <span class="nx">_</span> <span class="o">:=</span> <span class="nx">host</span><span class="p">.</span><span class="nf">CallAppTool</span><span class="p">(</span><span class="nx">ctx</span><span class="p">,</span> <span class="s">&#34;app_greet&#34;</span><span class="p">,</span> <span class="kd">map</span><span class="p">[</span><span class="kt">string</span><span class="p">]</span><span class="nx">any</span><span class="p">{</span><span class="s">&#34;name&#34;</span><span class="p">:</span> <span class="s">&#34;world&#34;</span><span class="p">})</span>
+</span></span></code></pre><h3 id="lifecycle">Lifecycle <a class="anchor" href="#lifecycle">¶</a></h3>
+<ol>
+<li>Create <code>Client</code> with desired auth and extensions</li>
+<li><code>Client.Connect()</code> - MCP handshake with server</li>
+<li><code>NewAppHost(client, bridge)</code> + <code>host.Start(ctx)</code> - wires bridge handlers, fetches initial tool list</li>
+<li>Use <code>ListAllTools</code>, <code>CallAppTool</code>, etc.</li>
+<li><code>host.Close()</code> - closes bridge</li>
+<li><code>client.Close()</code> - closes MCP session and auth token source</li>
+</ol>
+<h2 id="serverregistry-and-multi-server-aggregation">ServerRegistry and multi-server aggregation <a class="anchor" href="#serverregistry-and-multi-server-aggregation">¶</a></h2>
+<h3 id="overview-1">Overview <a class="anchor" href="#overview-1">¶</a></h3>
+<p><code>ServerRegistry</code> (<a href="https://github.com/panyam/mcpkit/blob/main/ext/ui/server_registry.go"><code>ext/ui/server_registry.go</code></a>) manages connections to multiple MCP servers simultaneously. It aggregates tool lists across servers, routes tool calls to the correct server, and provides pluggable collision resolution for ambiguous tool names.</p>
+<h3 id="architecture-1">Architecture <a class="anchor" href="#architecture-1">¶</a></h3>
+<pre><code>┌──────────────────────────────────────────────────────────┐
+│                    ServerRegistry                        │
+│                                                          │
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐     │
+│  │  &quot;weather&quot;   │  │  &quot;calendar&quot;  │  │   &quot;game&quot;    │     │
+│  │  Client      │  │  Client      │  │  Client     │     │
+│  │  (OAuth)     │  │  (Bearer)    │  │  (no auth)  │     │
+│  │             │  │             │  │  + AppHost  │     │
+│  │ get_forecast│  │ list_events │  │  new_game   │     │
+│  │ get_alerts  │  │ create_event│  │  get_board  │     │
+│  └──────┬──────┘  └──────┬──────┘  └──────┬──────┘     │
+│         │                │                │             │
+│  ┌──────┴────────────────┴────────────────┴──────┐      │
+│  │              Tool Index                        │      │
+│  │  get_forecast → weather                        │      │
+│  │  get_alerts   → weather                        │      │
+│  │  list_events  → calendar                       │      │
+│  │  create_event → calendar                       │      │
+│  │  new_game     → game (server)                  │      │
+│  │  get_board    → game (app)                     │      │
+│  └───────────────────────────────────────────────┘      │
+│                                                          │
+│  AllTools() → [get_alerts, get_board, get_forecast, ...] │
+│  CallTool(&quot;get_forecast&quot;, args) → routes to weather      │
+│  CallToolOn(&quot;game&quot;, &quot;get_board&quot;, args) → routes to app   │
+└──────────────────────────────────────────────────────────┘
+</code></pre>
+<h3 id="request-flows-1">Request Flows <a class="anchor" href="#request-flows-1">¶</a></h3>
+<h4 id="unambiguous-tool-call-direct-routing">Unambiguous tool call, direct routing <a class="anchor" href="#unambiguous-tool-call-direct-routing">¶</a></h4>
+<pre><code class="language-mermaid">sequenceDiagram
+    participant Agent as LLM / Agent
+    participant Reg as ServerRegistry
+    participant Idx as Tool Index
+    participant Weather as Weather Server
+
+    Agent-&gt;&gt;Reg: CallTool(&quot;get_forecast&quot;, {zip: &quot;10001&quot;})
+    Reg-&gt;&gt;Idx: lookup &quot;get_forecast&quot;
+    Idx--&gt;&gt;Reg: 1 candidate: weather
+    Reg-&gt;&gt;Weather: Client.Call(tools/call)
+    Weather--&gt;&gt;Reg: ToolResult
+    Reg--&gt;&gt;Agent: ToolResult {text: &quot;Sunny, 72°F&quot;}
+</code></pre>
+<h4 id="ambiguous-tool-call-resolver-invoked">Ambiguous tool call, resolver invoked <a class="anchor" href="#ambiguous-tool-call-resolver-invoked">¶</a></h4>
+<pre><code class="language-mermaid">sequenceDiagram
+    participant Agent as LLM / Agent
+    participant Reg as ServerRegistry
+    participant Idx as Tool Index
+    participant Resolver as ToolResolver
+    participant Local as local-clock
+
+    Agent-&gt;&gt;Reg: CallTool(&quot;get_time&quot;, {timezone: &quot;local&quot;})
+    Reg-&gt;&gt;Idx: lookup &quot;get_time&quot;
+    Idx--&gt;&gt;Reg: 2 candidates: [utc-clock, local-clock]
+    Reg-&gt;&gt;Resolver: resolve(&quot;get_time&quot;, candidates, args)
+    Resolver--&gt;&gt;Reg: &quot;local-clock&quot;
+    Reg-&gt;&gt;Local: Client.Call(tools/call)
+    Local--&gt;&gt;Reg: ToolResult
+    Reg--&gt;&gt;Agent: ToolResult {text: &quot;3:45 PM PDT&quot;}
+</code></pre>
+<h4 id="collision-detection-on-add">Collision detection on Add <a class="anchor" href="#collision-detection-on-add">¶</a></h4>
+<pre><code class="language-mermaid">sequenceDiagram
+    participant Host as Host Code
+    participant Reg as ServerRegistry
+    participant Handler as CollisionHandler
+
+    Host-&gt;&gt;Reg: Add(&quot;utc-clock&quot;, client1)
+    Note over Reg: Index: get_time → [utc-clock]
+
+    Host-&gt;&gt;Reg: Add(&quot;local-clock&quot;, client2)
+    Note over Reg: Index: get_time → [utc-clock, local-clock]
+    Reg-&gt;&gt;Handler: collision(&quot;get_time&quot;, [&quot;utc-clock&quot;, &quot;local-clock&quot;])
+    Note over Handler: Log, alert, or adjust resolver
+</code></pre>
+<h3 id="usage">Usage <a class="anchor" href="#usage">¶</a></h3>
+<pre tabindex="0" class="chroma"><code><span class="line"><span class="cl"><span class="c1">// Create registry with collision handling
+</span></span></span><span class="line"><span class="cl"><span class="c1"></span><span class="nx">reg</span> <span class="o">:=</span> <span class="nx">ui</span><span class="p">.</span><span class="nf">NewServerRegistry</span><span class="p">(</span>
+</span></span><span class="line"><span class="cl">    <span class="nx">ui</span><span class="p">.</span><span class="nf">WithToolResolver</span><span class="p">(</span><span class="kd">func</span><span class="p">(</span><span class="nx">ctx</span> <span class="nx">context</span><span class="p">.</span><span class="nx">Context</span><span class="p">,</span> <span class="nx">name</span> <span class="kt">string</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">        <span class="nx">candidates</span> <span class="p">[]</span><span class="nx">ui</span><span class="p">.</span><span class="nx">RegisteredTool</span><span class="p">,</span> <span class="nx">args</span> <span class="kd">map</span><span class="p">[</span><span class="kt">string</span><span class="p">]</span><span class="nx">any</span><span class="p">)</span> <span class="p">(</span><span class="kt">string</span><span class="p">,</span> <span class="kt">error</span><span class="p">)</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">        <span class="c1">// Pick based on args, LLM context, user input, etc.
+</span></span></span><span class="line"><span class="cl"><span class="c1"></span>        <span class="k">return</span> <span class="nx">candidates</span><span class="p">[</span><span class="mi">0</span><span class="p">].</span><span class="nx">ServerID</span><span class="p">,</span> <span class="kc">nil</span>
+</span></span><span class="line"><span class="cl">    <span class="p">}),</span>
+</span></span><span class="line"><span class="cl">    <span class="nx">ui</span><span class="p">.</span><span class="nf">WithCollisionHandler</span><span class="p">(</span><span class="kd">func</span><span class="p">(</span><span class="nx">name</span> <span class="kt">string</span><span class="p">,</span> <span class="nx">ids</span> <span class="p">[]</span><span class="kt">string</span><span class="p">)</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">        <span class="nx">log</span><span class="p">.</span><span class="nf">Printf</span><span class="p">(</span><span class="s">&#34;tool %q available from servers: %v&#34;</span><span class="p">,</span> <span class="nx">name</span><span class="p">,</span> <span class="nx">ids</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl">    <span class="p">}),</span>
+</span></span><span class="line"><span class="cl"><span class="p">)</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="c1">// Add servers with independent auth
+</span></span></span><span class="line"><span class="cl"><span class="c1"></span><span class="nx">weatherClient</span> <span class="o">:=</span> <span class="nx">client</span><span class="p">.</span><span class="nf">NewClient</span><span class="p">(</span><span class="nx">url1</span><span class="p">,</span> <span class="nx">info</span><span class="p">,</span> <span class="nx">client</span><span class="p">.</span><span class="nf">WithTokenSource</span><span class="p">(</span><span class="nx">oauthTS</span><span class="p">))</span>
+</span></span><span class="line"><span class="cl"><span class="nx">weatherClient</span><span class="p">.</span><span class="nf">Connect</span><span class="p">()</span>
+</span></span><span class="line"><span class="cl"><span class="nx">reg</span><span class="p">.</span><span class="nf">Add</span><span class="p">(</span><span class="nx">ctx</span><span class="p">,</span> <span class="s">&#34;weather&#34;</span><span class="p">,</span> <span class="nx">weatherClient</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="nx">calendarClient</span> <span class="o">:=</span> <span class="nx">client</span><span class="p">.</span><span class="nf">NewClient</span><span class="p">(</span><span class="nx">url2</span><span class="p">,</span> <span class="nx">info</span><span class="p">,</span> <span class="nx">client</span><span class="p">.</span><span class="nf">WithClientBearerToken</span><span class="p">(</span><span class="s">&#34;sk-...&#34;</span><span class="p">))</span>
+</span></span><span class="line"><span class="cl"><span class="nx">calendarClient</span><span class="p">.</span><span class="nf">Connect</span><span class="p">()</span>
+</span></span><span class="line"><span class="cl"><span class="nx">reg</span><span class="p">.</span><span class="nf">Add</span><span class="p">(</span><span class="nx">ctx</span><span class="p">,</span> <span class="s">&#34;calendar&#34;</span><span class="p">,</span> <span class="nx">calendarClient</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="c1">// Add server with app bridge
+</span></span></span><span class="line"><span class="cl"><span class="c1"></span><span class="nx">bridge</span> <span class="o">:=</span> <span class="nx">ui</span><span class="p">.</span><span class="nf">NewInProcessAppBridge</span><span class="p">()</span>
+</span></span><span class="line"><span class="cl"><span class="nx">gameClient</span> <span class="o">:=</span> <span class="nx">client</span><span class="p">.</span><span class="nf">NewClient</span><span class="p">(</span><span class="nx">url3</span><span class="p">,</span> <span class="nx">info</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl"><span class="nx">gameClient</span><span class="p">.</span><span class="nf">Connect</span><span class="p">()</span>
+</span></span><span class="line"><span class="cl"><span class="nx">reg</span><span class="p">.</span><span class="nf">AddWithBridge</span><span class="p">(</span><span class="nx">ctx</span><span class="p">,</span> <span class="s">&#34;game&#34;</span><span class="p">,</span> <span class="nx">gameClient</span><span class="p">,</span> <span class="nx">bridge</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="c1">// Use
+</span></span></span><span class="line"><span class="cl"><span class="c1"></span><span class="nx">tools</span><span class="p">,</span> <span class="nx">_</span> <span class="o">:=</span> <span class="nx">reg</span><span class="p">.</span><span class="nf">AllTools</span><span class="p">(</span><span class="nx">ctx</span><span class="p">)</span>                              <span class="c1">// all tools, clean names
+</span></span></span><span class="line"><span class="cl"><span class="c1"></span><span class="nx">result</span><span class="p">,</span> <span class="nx">_</span> <span class="o">:=</span> <span class="nx">reg</span><span class="p">.</span><span class="nf">CallTool</span><span class="p">(</span><span class="nx">ctx</span><span class="p">,</span> <span class="s">&#34;get_forecast&#34;</span><span class="p">,</span> <span class="nx">args</span><span class="p">)</span>       <span class="c1">// auto-routes
+</span></span></span><span class="line"><span class="cl"><span class="c1"></span><span class="nx">result</span><span class="p">,</span> <span class="nx">_</span> <span class="p">=</span> <span class="nx">reg</span><span class="p">.</span><span class="nf">CallToolOn</span><span class="p">(</span><span class="nx">ctx</span><span class="p">,</span> <span class="s">&#34;game&#34;</span><span class="p">,</span> <span class="s">&#34;get_board&#34;</span><span class="p">,</span> <span class="nx">args</span><span class="p">)</span> <span class="c1">// explicit routing
+</span></span></span><span class="line"><span class="cl"><span class="c1"></span>
+</span></span><span class="line"><span class="cl"><span class="c1">// Cleanup
+</span></span></span><span class="line"><span class="cl"><span class="c1"></span><span class="nx">reg</span><span class="p">.</span><span class="nf">Close</span><span class="p">()</span>       <span class="c1">// closes bridges
+</span></span></span><span class="line"><span class="cl"><span class="c1"></span><span class="nx">weatherClient</span><span class="p">.</span><span class="nf">Close</span><span class="p">()</span>  <span class="c1">// caller owns clients
+</span></span></span><span class="line"><span class="cl"><span class="c1"></span><span class="nx">calendarClient</span><span class="p">.</span><span class="nf">Close</span><span class="p">()</span>
+</span></span><span class="line"><span class="cl"><span class="nx">gameClient</span><span class="p">.</span><span class="nf">Close</span><span class="p">()</span>
+</span></span></code></pre>
+
+    </div>
+</article>
+
+        </main>
+    </div>
+
+    
+<footer class="site-footer">
+    <div class="site-footer-inner">
+        <p>
+            <a href="https://github.com/panyam/mcpkit">https://github.com/panyam/mcpkit</a> ·
+            Licensed under Apache-2.0 ·
+            Source rendered by <a href="https://github.com/panyam/s3gen">s3gen</a>.
+        </p>
+    </div>
+</footer>
+
+
+    
+    <script type="module">
+      const blocks = document.querySelectorAll('pre > code.language-mermaid');
+      if (blocks.length) {
+        const { default: mermaid } = await import('https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs');
+        blocks.forEach((code) => {
+          const pre = document.createElement('pre');
+          pre.className = 'mermaid';
+          pre.textContent = code.textContent;
+          code.parentElement.replaceWith(pre);
+        });
+        mermaid.initialize({ startOnLoad: false, securityLevel: 'strict' });
+        await mermaid.run();
+      }
+    </script>
+
+    
+    <script>
+      document.querySelectorAll('pre > code:not(.language-mermaid)').forEach((code) => {
+        const pre = code.parentElement;
+        pre.classList.add('has-copy');
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'copy-btn';
+        btn.textContent = 'Copy';
+        btn.setAttribute('aria-label', 'Copy code to clipboard');
+        btn.addEventListener('click', async () => {
+          try {
+            await navigator.clipboard.writeText(code.textContent);
+            btn.textContent = 'Copied';
+          } catch {
+            btn.textContent = 'Failed';
+          }
+          setTimeout(() => { btn.textContent = 'Copy'; }, 1500);
+        });
+        pre.appendChild(btn);
+      });
+    </script>
+
+    
+    <script>
+      (function () {
+        const btn = document.querySelector('.theme-toggle');
+        if (!btn) return;
+        btn.addEventListener('click', () => {
+          const root = document.documentElement;
+          const current = root.dataset.theme ||
+            (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+          const next = current === 'dark' ? 'light' : 'dark';
+          root.dataset.theme = next;
+          try { localStorage.setItem('theme', next); } catch {}
+        });
+      })();
+    </script>
+</body>
+</html>

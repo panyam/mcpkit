@@ -1,0 +1,585 @@
+<!DOCTYPE html>
+
+
+
+
+
+
+
+
+
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    
+    <script>
+      try {
+        const t = localStorage.getItem('theme');
+        if (t === 'dark' || t === 'light') document.documentElement.dataset.theme = t;
+      } catch {}
+    </script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Named, parameterised message templates: arguments, content types, and listing.">
+    <title>Prompts · mcpkit</title>
+
+    <link rel="stylesheet" href="/mcpkit/static/css/main.css">
+    <style>.bg {  }
+.chroma {  }
+.chroma .err { color: #a61717; background-color: #e3d2d2 }
+.chroma .lntd { vertical-align: top; padding: 0; margin: 0; border: 0; }
+.chroma .lntable { border-spacing: 0; padding: 0; margin: 0; border: 0; }
+.chroma .hl { background-color: #e5e5e5 }
+.chroma .lnt { white-space: pre; user-select: none; margin-right: 0.4em; padding: 0 0.4em 0 0.4em;color: #7f7f7f }
+.chroma .ln { white-space: pre; user-select: none; margin-right: 0.4em; padding: 0 0.4em 0 0.4em;color: #7f7f7f }
+.chroma .line { display: flex; }
+.chroma .k { color: #000000; font-weight: bold }
+.chroma .kc { color: #000000; font-weight: bold }
+.chroma .kd { color: #000000; font-weight: bold }
+.chroma .kn { color: #000000; font-weight: bold }
+.chroma .kp { color: #000000; font-weight: bold }
+.chroma .kr { color: #000000; font-weight: bold }
+.chroma .kt { color: #445588; font-weight: bold }
+.chroma .na { color: #008080 }
+.chroma .nb { color: #0086b3 }
+.chroma .bp { color: #999999 }
+.chroma .nc { color: #445588; font-weight: bold }
+.chroma .no { color: #008080 }
+.chroma .nd { color: #3c5d5d; font-weight: bold }
+.chroma .ni { color: #800080 }
+.chroma .ne { color: #990000; font-weight: bold }
+.chroma .nf { color: #990000; font-weight: bold }
+.chroma .nl { color: #990000; font-weight: bold }
+.chroma .nn { color: #555555 }
+.chroma .nt { color: #000080 }
+.chroma .nv { color: #008080 }
+.chroma .vc { color: #008080 }
+.chroma .vg { color: #008080 }
+.chroma .vi { color: #008080 }
+.chroma .s { color: #dd1144 }
+.chroma .sa { color: #dd1144 }
+.chroma .sb { color: #dd1144 }
+.chroma .sc { color: #dd1144 }
+.chroma .dl { color: #dd1144 }
+.chroma .sd { color: #dd1144 }
+.chroma .s2 { color: #dd1144 }
+.chroma .se { color: #dd1144 }
+.chroma .sh { color: #dd1144 }
+.chroma .si { color: #dd1144 }
+.chroma .sx { color: #dd1144 }
+.chroma .sr { color: #009926 }
+.chroma .s1 { color: #dd1144 }
+.chroma .ss { color: #990073 }
+.chroma .m { color: #009999 }
+.chroma .mb { color: #009999 }
+.chroma .mf { color: #009999 }
+.chroma .mh { color: #009999 }
+.chroma .mi { color: #009999 }
+.chroma .il { color: #009999 }
+.chroma .mo { color: #009999 }
+.chroma .o { color: #000000; font-weight: bold }
+.chroma .ow { color: #000000; font-weight: bold }
+.chroma .c { color: #999988; font-style: italic }
+.chroma .ch { color: #999988; font-style: italic }
+.chroma .cm { color: #999988; font-style: italic }
+.chroma .c1 { color: #999988; font-style: italic }
+.chroma .cs { color: #999999; font-weight: bold; font-style: italic }
+.chroma .cp { color: #999999; font-weight: bold; font-style: italic }
+.chroma .cpf { color: #999999; font-weight: bold; font-style: italic }
+.chroma .gd { color: #000000; background-color: #ffdddd }
+.chroma .ge { color: #000000; font-style: italic }
+.chroma .gr { color: #aa0000 }
+.chroma .gh { color: #999999 }
+.chroma .gi { color: #000000; background-color: #ddffdd }
+.chroma .go { color: #888888 }
+.chroma .gp { color: #555555 }
+.chroma .gs { font-weight: bold }
+.chroma .gu { color: #aaaaaa }
+.chroma .gt { color: #aa0000 }
+.chroma .gl { text-decoration: underline }
+.chroma .w { color: #bbbbbb }
+@media (prefers-color-scheme: dark) {
+:root:not([data-theme]) .bg { color: #f8f8f2;  }
+:root:not([data-theme]) .chroma { color: #f8f8f2;  }
+:root:not([data-theme]) .chroma .err { color: #960050; background-color: #1e0010 }
+:root:not([data-theme]) .chroma .lntd { vertical-align: top; padding: 0; margin: 0; border: 0; }
+:root:not([data-theme]) .chroma .lntable { border-spacing: 0; padding: 0; margin: 0; border: 0; }
+:root:not([data-theme]) .chroma .hl { background-color: #3c3d38 }
+:root:not([data-theme]) .chroma .lnt { white-space: pre; user-select: none; margin-right: 0.4em; padding: 0 0.4em 0 0.4em;color: #7f7f7f }
+:root:not([data-theme]) .chroma .ln { white-space: pre; user-select: none; margin-right: 0.4em; padding: 0 0.4em 0 0.4em;color: #7f7f7f }
+:root:not([data-theme]) .chroma .line { display: flex; }
+:root:not([data-theme]) .chroma .k { color: #66d9ef }
+:root:not([data-theme]) .chroma .kc { color: #66d9ef }
+:root:not([data-theme]) .chroma .kd { color: #66d9ef }
+:root:not([data-theme]) .chroma .kn { color: #f92672 }
+:root:not([data-theme]) .chroma .kp { color: #66d9ef }
+:root:not([data-theme]) .chroma .kr { color: #66d9ef }
+:root:not([data-theme]) .chroma .kt { color: #66d9ef }
+:root:not([data-theme]) .chroma .na { color: #a6e22e }
+:root:not([data-theme]) .chroma .nc { color: #a6e22e }
+:root:not([data-theme]) .chroma .no { color: #66d9ef }
+:root:not([data-theme]) .chroma .nd { color: #a6e22e }
+:root:not([data-theme]) .chroma .ne { color: #a6e22e }
+:root:not([data-theme]) .chroma .nf { color: #a6e22e }
+:root:not([data-theme]) .chroma .nx { color: #a6e22e }
+:root:not([data-theme]) .chroma .nt { color: #f92672 }
+:root:not([data-theme]) .chroma .l { color: #ae81ff }
+:root:not([data-theme]) .chroma .ld { color: #e6db74 }
+:root:not([data-theme]) .chroma .s { color: #e6db74 }
+:root:not([data-theme]) .chroma .sa { color: #e6db74 }
+:root:not([data-theme]) .chroma .sb { color: #e6db74 }
+:root:not([data-theme]) .chroma .sc { color: #e6db74 }
+:root:not([data-theme]) .chroma .dl { color: #e6db74 }
+:root:not([data-theme]) .chroma .sd { color: #e6db74 }
+:root:not([data-theme]) .chroma .s2 { color: #e6db74 }
+:root:not([data-theme]) .chroma .se { color: #ae81ff }
+:root:not([data-theme]) .chroma .sh { color: #e6db74 }
+:root:not([data-theme]) .chroma .si { color: #e6db74 }
+:root:not([data-theme]) .chroma .sx { color: #e6db74 }
+:root:not([data-theme]) .chroma .sr { color: #e6db74 }
+:root:not([data-theme]) .chroma .s1 { color: #e6db74 }
+:root:not([data-theme]) .chroma .ss { color: #e6db74 }
+:root:not([data-theme]) .chroma .m { color: #ae81ff }
+:root:not([data-theme]) .chroma .mb { color: #ae81ff }
+:root:not([data-theme]) .chroma .mf { color: #ae81ff }
+:root:not([data-theme]) .chroma .mh { color: #ae81ff }
+:root:not([data-theme]) .chroma .mi { color: #ae81ff }
+:root:not([data-theme]) .chroma .il { color: #ae81ff }
+:root:not([data-theme]) .chroma .mo { color: #ae81ff }
+:root:not([data-theme]) .chroma .o { color: #f92672 }
+:root:not([data-theme]) .chroma .ow { color: #f92672 }
+:root:not([data-theme]) .chroma .c { color: #75715e }
+:root:not([data-theme]) .chroma .ch { color: #75715e }
+:root:not([data-theme]) .chroma .cm { color: #75715e }
+:root:not([data-theme]) .chroma .c1 { color: #75715e }
+:root:not([data-theme]) .chroma .cs { color: #75715e }
+:root:not([data-theme]) .chroma .cp { color: #75715e }
+:root:not([data-theme]) .chroma .cpf { color: #75715e }
+:root:not([data-theme]) .chroma .gd { color: #f92672 }
+:root:not([data-theme]) .chroma .ge { font-style: italic }
+:root:not([data-theme]) .chroma .gi { color: #a6e22e }
+:root:not([data-theme]) .chroma .gs { font-weight: bold }
+:root:not([data-theme]) .chroma .gu { color: #75715e }
+}
+:root[data-theme="dark"] .bg { color: #f8f8f2;  }
+:root[data-theme="dark"] .chroma { color: #f8f8f2;  }
+:root[data-theme="dark"] .chroma .err { color: #960050; background-color: #1e0010 }
+:root[data-theme="dark"] .chroma .lntd { vertical-align: top; padding: 0; margin: 0; border: 0; }
+:root[data-theme="dark"] .chroma .lntable { border-spacing: 0; padding: 0; margin: 0; border: 0; }
+:root[data-theme="dark"] .chroma .hl { background-color: #3c3d38 }
+:root[data-theme="dark"] .chroma .lnt { white-space: pre; user-select: none; margin-right: 0.4em; padding: 0 0.4em 0 0.4em;color: #7f7f7f }
+:root[data-theme="dark"] .chroma .ln { white-space: pre; user-select: none; margin-right: 0.4em; padding: 0 0.4em 0 0.4em;color: #7f7f7f }
+:root[data-theme="dark"] .chroma .line { display: flex; }
+:root[data-theme="dark"] .chroma .k { color: #66d9ef }
+:root[data-theme="dark"] .chroma .kc { color: #66d9ef }
+:root[data-theme="dark"] .chroma .kd { color: #66d9ef }
+:root[data-theme="dark"] .chroma .kn { color: #f92672 }
+:root[data-theme="dark"] .chroma .kp { color: #66d9ef }
+:root[data-theme="dark"] .chroma .kr { color: #66d9ef }
+:root[data-theme="dark"] .chroma .kt { color: #66d9ef }
+:root[data-theme="dark"] .chroma .na { color: #a6e22e }
+:root[data-theme="dark"] .chroma .nc { color: #a6e22e }
+:root[data-theme="dark"] .chroma .no { color: #66d9ef }
+:root[data-theme="dark"] .chroma .nd { color: #a6e22e }
+:root[data-theme="dark"] .chroma .ne { color: #a6e22e }
+:root[data-theme="dark"] .chroma .nf { color: #a6e22e }
+:root[data-theme="dark"] .chroma .nx { color: #a6e22e }
+:root[data-theme="dark"] .chroma .nt { color: #f92672 }
+:root[data-theme="dark"] .chroma .l { color: #ae81ff }
+:root[data-theme="dark"] .chroma .ld { color: #e6db74 }
+:root[data-theme="dark"] .chroma .s { color: #e6db74 }
+:root[data-theme="dark"] .chroma .sa { color: #e6db74 }
+:root[data-theme="dark"] .chroma .sb { color: #e6db74 }
+:root[data-theme="dark"] .chroma .sc { color: #e6db74 }
+:root[data-theme="dark"] .chroma .dl { color: #e6db74 }
+:root[data-theme="dark"] .chroma .sd { color: #e6db74 }
+:root[data-theme="dark"] .chroma .s2 { color: #e6db74 }
+:root[data-theme="dark"] .chroma .se { color: #ae81ff }
+:root[data-theme="dark"] .chroma .sh { color: #e6db74 }
+:root[data-theme="dark"] .chroma .si { color: #e6db74 }
+:root[data-theme="dark"] .chroma .sx { color: #e6db74 }
+:root[data-theme="dark"] .chroma .sr { color: #e6db74 }
+:root[data-theme="dark"] .chroma .s1 { color: #e6db74 }
+:root[data-theme="dark"] .chroma .ss { color: #e6db74 }
+:root[data-theme="dark"] .chroma .m { color: #ae81ff }
+:root[data-theme="dark"] .chroma .mb { color: #ae81ff }
+:root[data-theme="dark"] .chroma .mf { color: #ae81ff }
+:root[data-theme="dark"] .chroma .mh { color: #ae81ff }
+:root[data-theme="dark"] .chroma .mi { color: #ae81ff }
+:root[data-theme="dark"] .chroma .il { color: #ae81ff }
+:root[data-theme="dark"] .chroma .mo { color: #ae81ff }
+:root[data-theme="dark"] .chroma .o { color: #f92672 }
+:root[data-theme="dark"] .chroma .ow { color: #f92672 }
+:root[data-theme="dark"] .chroma .c { color: #75715e }
+:root[data-theme="dark"] .chroma .ch { color: #75715e }
+:root[data-theme="dark"] .chroma .cm { color: #75715e }
+:root[data-theme="dark"] .chroma .c1 { color: #75715e }
+:root[data-theme="dark"] .chroma .cs { color: #75715e }
+:root[data-theme="dark"] .chroma .cp { color: #75715e }
+:root[data-theme="dark"] .chroma .cpf { color: #75715e }
+:root[data-theme="dark"] .chroma .gd { color: #f92672 }
+:root[data-theme="dark"] .chroma .ge { font-style: italic }
+:root[data-theme="dark"] .chroma .gi { color: #a6e22e }
+:root[data-theme="dark"] .chroma .gs { font-weight: bold }
+:root[data-theme="dark"] .chroma .gu { color: #75715e }
+</style>
+    <link rel="icon" href="data:,">
+</head>
+<body>
+    
+<header class="site-header">
+    <div class="site-header-inner">
+        
+        <a class="brand" href="/mcpkit/">
+            <span class="brand-name">mcpkit</span>
+        </a>
+        <nav class="top-nav">
+            
+            
+            <a class="top-nav-link" href="/mcpkit/get-started/">Get Started</a>
+            
+            <a class="top-nav-link" href="/mcpkit/try/">Try it</a>
+            
+            <a class="top-nav-link" href="/mcpkit/guides/transports/">Guides</a>
+            
+            <a class="top-nav-link" href="/mcpkit/examples/">Examples</a>
+            
+            <a class="top-nav-link" href="/mcpkit/concepts/">Concepts</a>
+            
+            <a class="top-nav-link" href="/mcpkit/conformance/">Conformance</a>
+            
+            <a class="top-nav-link" href="/mcpkit/packages/core/">Packages</a>
+            
+            <a class="top-nav-link" href="/mcpkit/design/apps/">Reference</a>
+            
+            <a class="top-nav-link external" href="https://github.com/panyam/mcpkit">GitHub</a>
+            <button type="button" class="theme-toggle" aria-label="Toggle dark mode" title="Toggle dark mode">
+                <span class="theme-toggle-light">☀</span>
+                <span class="theme-toggle-dark">☾</span>
+            </button>
+        </nav>
+    </div>
+</header>
+
+
+    <div class="page">
+        
+<aside class="sidebar">
+    
+    
+    <nav class="sidebar-nav">
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/get-started/">Get Started</a>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/try/">Try it</a>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/guides/transports/">Guides</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/guides/transports/">Transports</a></li>
+                
+                <li><a href="/mcpkit/guides/auth/">Auth</a></li>
+                
+                <li><a href="/mcpkit/guides/tasks/">Long-running tasks</a></li>
+                
+                <li><a href="/mcpkit/guides/apps/">MCP Apps</a></li>
+                
+                <li><a href="/mcpkit/guides/prompts/">Prompts</a></li>
+                
+                <li><a href="/mcpkit/guides/elicitation/">Elicitation</a></li>
+                
+                <li><a href="/mcpkit/guides/completions/">Argument completion</a></li>
+                
+                <li><a href="/mcpkit/guides/observability/">Observability</a></li>
+                
+                <li><a href="/mcpkit/guides/mrtr/">MRTR input-gathering</a></li>
+                
+                <li><a href="/mcpkit/guides/deployment/">Deployment</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/examples/">Examples</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/examples/">All examples</a></li>
+                
+                <li><a href="/mcpkit/examples/auth/">Auth</a></li>
+                
+                <li><a href="/mcpkit/examples/tasks-v2/">Tasks v2</a></li>
+                
+                <li><a href="/mcpkit/examples/mrtr/">MRTR</a></li>
+                
+                <li><a href="/mcpkit/examples/apps/">MCP Apps</a></li>
+                
+                <li><a href="/mcpkit/examples/events/discord/">Events</a></li>
+                
+                <li><a href="/mcpkit/examples/skills-core/">Skills</a></li>
+                
+                <li><a href="/mcpkit/examples/disclosure/">Progressive disclosure</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/concepts/">Concepts</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/concepts/">Overview</a></li>
+                
+                <li><a href="/mcpkit/concepts/bringup/">Bring-up</a></li>
+                
+                <li><a href="/mcpkit/concepts/transport-mechanics/">Transport mechanics</a></li>
+                
+                <li><a href="/mcpkit/concepts/notifications/">Notifications</a></li>
+                
+                <li><a href="/mcpkit/concepts/request-anatomy/">Anatomy of a request</a></li>
+                
+                <li><a href="/mcpkit/concepts/extension-mechanisms/">Extension mechanisms</a></li>
+                
+                <li><a href="/mcpkit/concepts/reverse-call/">Reverse calls</a></li>
+                
+                <li><a href="/mcpkit/concepts/mrtr/">MRTR internals</a></li>
+                
+                <li><a href="/mcpkit/concepts/tracing/">Tracing</a></li>
+                
+                <li><a href="/mcpkit/concepts/events/">Events</a></li>
+                
+                <li><a href="/mcpkit/concepts/progressive-disclosure/">Progressive disclosure</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/conformance/">Conformance</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/conformance/">Coverage matrix</a></li>
+                
+                <li><a href="/mcpkit/conformance/upstream-audit/">Upstream audit</a></li>
+                
+                <li><a href="/mcpkit/conformance/fixture-audit/">Fixture audit</a></li>
+                
+                <li><a href="/mcpkit/conformance/external-checker/">External checker</a></li>
+                
+                <li><a href="/mcpkit/conformance/apps/compat/">Apps compat</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/packages/core/">Packages</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/packages/core/">core</a></li>
+                
+                <li><a href="/mcpkit/packages/server/">server</a></li>
+                
+                <li><a href="/mcpkit/packages/client/">client</a></li>
+                
+                <li><a href="/mcpkit/packages/ext-auth/">ext/auth</a></li>
+                
+                <li><a href="/mcpkit/packages/ext-tasks/">ext/tasks</a></li>
+                
+                <li><a href="/mcpkit/packages/ext-ui/">ext/ui</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/design/apps/">Reference</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/design/apps/">MCP Apps — design</a></li>
+                
+                <li><a href="/mcpkit/design/apps-host/">MCP Apps — host model</a></li>
+                
+                <li><a href="/mcpkit/design/apps-onboarding/">MCP Apps — onboarding</a></li>
+                
+                <li><a href="/mcpkit/design/tasks-v2-migration/">Tasks v2 migration</a></li>
+                
+                <li><a href="/mcpkit/design/sep-2567-handles/">SEP-2567 handles</a></li>
+                
+                <li><a href="/mcpkit/design/sep-2577-deprecations/">SEP-2577 deprecations</a></li>
+                
+                <li><a href="/mcpkit/design/list-ttl-migration/">List TTL migration</a></li>
+                
+            </ul>
+            
+        </div>
+        
+    </nav>
+</aside>
+
+        <main class="main">
+            
+<article class="content">
+    
+    <header class="content-header">
+        <h1>Prompts</h1>
+        
+        <p class="lead">Named, parameterised message templates: arguments, content types, and listing.</p>
+        
+        
+        <p class="source-link">
+            Source: <a href="https://github.com/panyam/mcpkit/blob/main/docs/PROMPTS.md"><code>docs/PROMPTS.md</code></a>
+        </p>
+        
+    </header>
+    
+
+    <div class="content-body">
+        
+<h1 id="prompts">Prompts <a class="anchor" href="#prompts">¶</a></h1>
+<p>A prompt is a named, parameterised message template your server hands to a client. The client shows it in a picker, collects any arguments, and drops the resulting messages into a conversation with a model.</p>
+<p>That makes prompts the one primitive the user invokes directly. Tools are chosen by a model and resources are read on demand, but a prompt is something a person picks from a menu. Name and describe them accordingly.</p>
+<h2 id="registering-a-prompt">Registering a prompt <a class="anchor" href="#registering-a-prompt">¶</a></h2>
+<pre tabindex="0" class="chroma"><code><span class="line"><span class="cl"><span class="nx">srv</span><span class="p">.</span><span class="nf">RegisterPrompt</span><span class="p">(</span>
+</span></span><span class="line"><span class="cl">    <span class="nx">core</span><span class="p">.</span><span class="nx">PromptDef</span><span class="p">{</span><span class="nx">Name</span><span class="p">:</span> <span class="s">&#34;changelog&#34;</span><span class="p">,</span> <span class="nx">Description</span><span class="p">:</span> <span class="s">&#34;Draft a changelog entry&#34;</span><span class="p">},</span>
+</span></span><span class="line"><span class="cl">    <span class="kd">func</span><span class="p">(</span><span class="nx">ctx</span> <span class="nx">core</span><span class="p">.</span><span class="nx">PromptContext</span><span class="p">,</span> <span class="nx">req</span> <span class="nx">core</span><span class="p">.</span><span class="nx">PromptRequest</span><span class="p">)</span> <span class="p">(</span><span class="nx">core</span><span class="p">.</span><span class="nx">PromptResponse</span><span class="p">,</span> <span class="kt">error</span><span class="p">)</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">        <span class="k">return</span> <span class="nx">core</span><span class="p">.</span><span class="nx">PromptResult</span><span class="p">{</span>
+</span></span><span class="line"><span class="cl">            <span class="nx">Description</span><span class="p">:</span> <span class="s">&#34;Changelog draft&#34;</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">            <span class="nx">Messages</span><span class="p">:</span> <span class="p">[]</span><span class="nx">core</span><span class="p">.</span><span class="nx">PromptMessage</span><span class="p">{{</span>
+</span></span><span class="line"><span class="cl">                <span class="nx">Role</span><span class="p">:</span>    <span class="s">&#34;user&#34;</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">                <span class="nx">Content</span><span class="p">:</span> <span class="nx">core</span><span class="p">.</span><span class="nx">Content</span><span class="p">{</span><span class="nx">Type</span><span class="p">:</span> <span class="s">&#34;text&#34;</span><span class="p">,</span> <span class="nx">Text</span><span class="p">:</span> <span class="s">&#34;Draft a changelog entry.&#34;</span><span class="p">},</span>
+</span></span><span class="line"><span class="cl">            <span class="p">}},</span>
+</span></span><span class="line"><span class="cl">        <span class="p">},</span> <span class="kc">nil</span>
+</span></span><span class="line"><span class="cl">    <span class="p">},</span>
+</span></span><span class="line"><span class="cl"><span class="p">)</span>
+</span></span></code></pre><p><code>Role</code> is <code>user</code> or <code>assistant</code>. Returning more than one message is how you supply a worked example: an assistant message showing the shape you want, followed by a user message with the real request.</p>
+<p>The handler returns <code>core.PromptResponse</code>, a sealed interface with two implementations. <code>core.PromptResult</code> is the sync answer and the one you write most of the time. <code>core.InputRequiredResult</code> is the MRTR variant: return it to ask the client for sampling, elicitation, or roots input mid-call, and the client re-sends the same <code>prompts/get</code> with the answers attached. See <a href="/mcpkit/guides/mrtr/">MRTR_TUTORIAL.md</a>.</p>
+<p>The interface is sealed through an unexported marker method, so an external type cannot impersonate a response variant.</p>
+<p>Runnable versions of everything on this page are in <a href="https://github.com/panyam/mcpkit/blob/main/server/example_prompts_test.go"><code>server/example_prompts_test.go</code></a> and run with the test suite.</p>
+<h2 id="arguments">Arguments <a class="anchor" href="#arguments">¶</a></h2>
+<p>Declare arguments on the definition so a client can prompt for them, then read them back in the handler:</p>
+<pre tabindex="0" class="chroma"><code><span class="line"><span class="cl"><span class="nx">core</span><span class="p">.</span><span class="nx">PromptDef</span><span class="p">{</span>
+</span></span><span class="line"><span class="cl">    <span class="nx">Name</span><span class="p">:</span> <span class="s">&#34;review&#34;</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">    <span class="nx">Arguments</span><span class="p">:</span> <span class="p">[]</span><span class="nx">core</span><span class="p">.</span><span class="nx">PromptArgument</span><span class="p">{</span>
+</span></span><span class="line"><span class="cl">        <span class="p">{</span><span class="nx">Name</span><span class="p">:</span> <span class="s">&#34;lang&#34;</span><span class="p">,</span> <span class="nx">Description</span><span class="p">:</span> <span class="s">&#34;Source language&#34;</span><span class="p">,</span> <span class="nx">Required</span><span class="p">:</span> <span class="kc">true</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">         <span class="nx">Schema</span><span class="p">:</span> <span class="kd">map</span><span class="p">[</span><span class="kt">string</span><span class="p">]</span><span class="nx">any</span><span class="p">{</span><span class="s">&#34;type&#34;</span><span class="p">:</span> <span class="s">&#34;string&#34;</span><span class="p">}},</span>
+</span></span><span class="line"><span class="cl">    <span class="p">},</span>
+</span></span><span class="line"><span class="cl"><span class="p">}</span>
+</span></span></code></pre><pre tabindex="0" class="chroma"><code><span class="line"><span class="cl"><span class="nx">lang</span><span class="p">,</span> <span class="nx">_</span> <span class="o">:=</span> <span class="nx">req</span><span class="p">.</span><span class="nx">Arguments</span><span class="p">[</span><span class="s">&#34;lang&#34;</span><span class="p">].(</span><span class="kt">string</span><span class="p">)</span>
+</span></span></code></pre><p>Two things to know.</p>
+<p><strong>Arguments are decoded JSON, not strings.</strong> <code>req.Arguments</code> is a <code>map[string]any</code> holding already-decoded values, so a JSON number arrives as <code>float64</code> and an object as <code>map[string]any</code>. String arguments need a type assertion.</p>
+<p><strong>A <code>Schema</code> turns on server-side validation.</strong> When an argument declares one, the dispatcher validates the incoming value before your handler runs and rejects a bad request with <code>-32602</code> and a structured error list. Arguments with no schema are passed through unchecked. Turn the call-time check off with <code>server.WithSchemaValidation(false)</code> if you would rather validate inside the handler.</p>
+<p>Marking an argument <code>Required</code> is advertisement, not enforcement. Give it a schema if you want the dispatcher to reject a missing value.</p>
+<h2 id="content-types">Content types <a class="anchor" href="#content-types">¶</a></h2>
+<p><code>PromptMessage.Content</code> is the same <code>core.Content</code> type tool results use, so a prompt can carry anything a tool result can.</p>
+<p>Text:</p>
+<pre tabindex="0" class="chroma"><code><span class="line"><span class="cl"><span class="nx">core</span><span class="p">.</span><span class="nx">Content</span><span class="p">{</span><span class="nx">Type</span><span class="p">:</span> <span class="s">&#34;text&#34;</span><span class="p">,</span> <span class="nx">Text</span><span class="p">:</span> <span class="s">&#34;Review this Go code.&#34;</span><span class="p">}</span>
+</span></span></code></pre><p>An image, base64 with a mime type:</p>
+<pre tabindex="0" class="chroma"><code><span class="line"><span class="cl"><span class="nx">core</span><span class="p">.</span><span class="nx">Content</span><span class="p">{</span><span class="nx">Type</span><span class="p">:</span> <span class="s">&#34;image&#34;</span><span class="p">,</span> <span class="nx">Data</span><span class="p">:</span> <span class="nx">base64Data</span><span class="p">,</span> <span class="nx">MimeType</span><span class="p">:</span> <span class="s">&#34;image/png&#34;</span><span class="p">}</span>
+</span></span></code></pre><p>An embedded resource:</p>
+<pre tabindex="0" class="chroma"><code><span class="line"><span class="cl"><span class="nx">core</span><span class="p">.</span><span class="nx">Content</span><span class="p">{</span>
+</span></span><span class="line"><span class="cl">    <span class="nx">Type</span><span class="p">:</span> <span class="s">&#34;resource&#34;</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">    <span class="nx">Resource</span><span class="p">:</span> <span class="o">&amp;</span><span class="nx">core</span><span class="p">.</span><span class="nx">ResourceContent</span><span class="p">{</span>
+</span></span><span class="line"><span class="cl">        <span class="nx">URI</span><span class="p">:</span>      <span class="s">&#34;file:///etc/app.conf&#34;</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">        <span class="nx">MimeType</span><span class="p">:</span> <span class="s">&#34;text/plain&#34;</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">        <span class="nx">Text</span><span class="p">:</span>     <span class="s">&#34;debug = true&#34;</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">    <span class="p">},</span>
+</span></span><span class="line"><span class="cl"><span class="p">}</span>
+</span></span></code></pre><p>Prefer an embedded resource over inlined text when the content has a URI the client already knows about. It lets the client attribute the content, re-fetch it, or link to it, instead of treating it as anonymous prose. <code>Text</code> and <code>Blob</code> on the embedded resource are mutually exclusive; use <code>Blob</code> with base64 for binary.</p>
+<h2 id="listing">Listing <a class="anchor" href="#listing">¶</a></h2>
+<p><code>prompts/list</code> returns every registered definition with its description and arguments, which is what a client renders in its picker. mcpkit returns all prompts in a single page: <code>nextCursor</code> is always empty because the server&rsquo;s page size is fixed at &ldquo;no pagination&rdquo;. See <a href="/mcpkit/guides/completions/">COMPLETIONS.md</a> for suggesting values for a prompt argument once the user starts typing.</p>
+<p>Adding or removing a prompt at runtime through the registry broadcasts <code>notifications/prompts/list_changed</code>, so clients refresh without polling.</p>
+<h2 id="related">Related <a class="anchor" href="#related">¶</a></h2>
+<ul>
+<li><a href="/mcpkit/guides/completions/">Argument completion</a> for autocompleting prompt argument values</li>
+<li><a href="/mcpkit/get-started/">Getting started</a> for a first server end to end</li>
+<li><a href="/mcpkit/guides/transports/">Architecture</a> for where prompts sit in dispatch</li>
+</ul>
+
+
+    </div>
+</article>
+
+        </main>
+    </div>
+
+    
+<footer class="site-footer">
+    <div class="site-footer-inner">
+        <p>
+            <a href="https://github.com/panyam/mcpkit">https://github.com/panyam/mcpkit</a> ·
+            Licensed under Apache-2.0 ·
+            Source rendered by <a href="https://github.com/panyam/s3gen">s3gen</a>.
+        </p>
+    </div>
+</footer>
+
+
+    
+    <script type="module">
+      const blocks = document.querySelectorAll('pre > code.language-mermaid');
+      if (blocks.length) {
+        const { default: mermaid } = await import('https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs');
+        blocks.forEach((code) => {
+          const pre = document.createElement('pre');
+          pre.className = 'mermaid';
+          pre.textContent = code.textContent;
+          code.parentElement.replaceWith(pre);
+        });
+        mermaid.initialize({ startOnLoad: false, securityLevel: 'strict' });
+        await mermaid.run();
+      }
+    </script>
+
+    
+    <script>
+      document.querySelectorAll('pre > code:not(.language-mermaid)').forEach((code) => {
+        const pre = code.parentElement;
+        pre.classList.add('has-copy');
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'copy-btn';
+        btn.textContent = 'Copy';
+        btn.setAttribute('aria-label', 'Copy code to clipboard');
+        btn.addEventListener('click', async () => {
+          try {
+            await navigator.clipboard.writeText(code.textContent);
+            btn.textContent = 'Copied';
+          } catch {
+            btn.textContent = 'Failed';
+          }
+          setTimeout(() => { btn.textContent = 'Copy'; }, 1500);
+        });
+        pre.appendChild(btn);
+      });
+    </script>
+
+    
+    <script>
+      (function () {
+        const btn = document.querySelector('.theme-toggle');
+        if (!btn) return;
+        btn.addEventListener('click', () => {
+          const root = document.documentElement;
+          const current = root.dataset.theme ||
+            (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+          const next = current === 'dark' ? 'light' : 'dark';
+          root.dataset.theme = next;
+          try { localStorage.setItem('theme', next); } catch {}
+        });
+      })();
+    </script>
+</body>
+</html>

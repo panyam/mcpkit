@@ -1,0 +1,294 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>map — CesiumJS globe over MCP Apps</title>
+<link rel="stylesheet" href="./demokit-player.css">
+<style>
+body { margin: 2em auto; max-width: 900px; padding: 0 1em; font-family: -apple-system, BlinkMacSystemFont, sans-serif; }
+</style>
+</head>
+<body>
+<demokit-demo>{
+  "demo": {
+    "title": "map — CesiumJS globe over MCP Apps",
+    "description": "Walks the show-map + geocode round trip end-to-end as a scripted MCP client: initialize, tools/list, resources/read (CSP allowlist verified), tools/call show-map, tools/call geocode (live OSM Nominatim hit), and the chained geocode → show-map call a model would make. The fixture mirrors upstream's map-server example: CesiumJS-backed iframe, per-content `_meta.ui.csp.connectDomains` + `resourceDomains` for cesium.com and *.openstreetmap.org, OSM Nominatim geocoding with 1.1s rate-limit. Run `make serve` in another terminal first.",
+    "actors": [
+      {
+        "id": "Host",
+        "label": "MCP Host (this client)"
+      },
+      {
+        "id": "Server",
+        "label": "mcpkit-Go fixture (make serve)"
+      }
+    ],
+    "items": [
+      {
+        "kind": "section",
+        "title": "Setup",
+        "body": "Start the MCP server in a separate terminal first:\n\n```\nTerminal 1:  make serve         # mcpkit-Go fixture on :3101\nTerminal 2:  make demo          # this walkthrough (--tui for interactive TUI)\n```\n\nAny MCP host can connect to the running server (Claude Desktop, VS Code, MCPJam, basic-host). The walkthrough below acts as a scripted host that issues the protocol calls directly through `*mcpkit/client.Client` — no LLM, no browser. The same calls drive the iframe when you run `make demo-app EXAMPLE=map` in basic-host (see the [centralized guide](../README.md#other-ways-to-test-a-fixture))."
+      },
+      {
+        "kind": "step",
+        "title": "Connect to the fixture",
+        "note": "Standard MCP initialize handshake. `*client.Client.Connect()` runs initialize + notifications/initialized + stashes the session header for every subsequent call.",
+        "arrows": [
+          {
+            "from": "Host",
+            "to": "Server",
+            "label": "POST /mcp — initialize"
+          },
+          {
+            "from": "Server",
+            "to": "Host",
+            "label": "serverInfo + capabilities + Mcp-Session-Id",
+            "dashed": true
+          }
+        ],
+        "verbatim": [
+          {
+            "label": "Reproduce on the wire",
+            "variants": [
+              {
+                "label": "curl",
+                "lang": "bash",
+                "content": "# Initialize. Mcp-Session-Id comes back in the response headers.\nSID=$(curl -si -X POST http://localhost:3101/mcp \\\n  -H 'Content-Type: application/json' \\\n  -H 'Accept: text/event-stream, application/json' \\\n  -d '{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2025-11-25\",\"capabilities\":{},\"clientInfo\":{\"name\":\"curl\",\"version\":\"1\"}}}' \\\n  | awk 'tolower($1) == \"mcp-session-id:\" {gsub(/\\r/,\"\"); print $2}')\n\n# Acknowledge so the server's dispatcher unblocks.\ncurl -s -X POST http://localhost:3101/mcp \\\n  -H \"Mcp-Session-Id: $SID\" \\\n  -H 'Content-Type: application/json' \\\n  -H 'Accept: text/event-stream, application/json' \\\n  -d '{\"jsonrpc\":\"2.0\",\"method\":\"notifications/initialized\"}'",
+                "default": true
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "kind": "step",
+        "title": "tools/list — show-map (App) + geocode (plain)",
+        "note": "Two distinct shapes side-by-side. `show-map` carries `_meta.ui.resourceUri` (`ui://cesium-map/mcp-app.html`) → basic-host renders an iframe for it. `geocode` has NO `_meta.ui` → plain MCP tool, no UI. Both declare `execution.taskSupport: \"forbidden\"` (sync-only — can't be wrapped in an MCP Task). The model / basic-host typically calls geocode first to resolve a place name into a bounding box, then calls show-map with that bounding box.",
+        "arrows": [
+          {
+            "from": "Host",
+            "to": "Server",
+            "label": "tools/list"
+          },
+          {
+            "from": "Server",
+            "to": "Host",
+            "label": "tools[] = [show-map, geocode]",
+            "dashed": true
+          }
+        ],
+        "verbatim": [
+          {
+            "label": "Reproduce on the wire",
+            "variants": [
+              {
+                "label": "curl",
+                "lang": "bash",
+                "content": "curl -s -X POST http://localhost:3101/mcp \\\n  -H \"Mcp-Session-Id: $SID\" \\\n  -H 'Content-Type: application/json' \\\n  -H 'Accept: text/event-stream, application/json' \\\n  -d '{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/list\",\"params\":{}}' \\\n  | jq '.result.tools[] | {name, execution, _meta}'",
+                "default": true
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "kind": "step",
+        "title": "resources/read — verify _meta.ui.csp on the resource content",
+        "note": "Headline fix in this walkthrough. CesiumJS streams its viewer from cesium.com CDN, and OSM tiles + Nominatim geocoding hit *.openstreetmap.org. Without per-content `_meta.ui.csp.connectDomains` + `resourceDomains`, basic-host's default CSP blocks both — the iframe loads but Cesium fails with \"Failed to load CesiumJS from CDN\". mcpkit attaches `core.ResourceContentMeta{UI:{CSP: ...}}` to the iframe's `ResourceReadContent` so basic-host sees the allowlist on the preferred path (content-level beats listing-level per the spec). Same mechanism `sheet-music` uses for paulrosen.github.io soundfonts.",
+        "arrows": [
+          {
+            "from": "Host",
+            "to": "Server",
+            "label": "resources/read { uri: ui://cesium-map/mcp-app.html }"
+          },
+          {
+            "from": "Server",
+            "to": "Host",
+            "label": "Contents[0] = { Text, _meta.ui.csp.connectDomains + resourceDomains }",
+            "dashed": true
+          }
+        ],
+        "verbatim": [
+          {
+            "label": "Reproduce on the wire",
+            "variants": [
+              {
+                "label": "curl",
+                "lang": "bash",
+                "content": "curl -s -X POST http://localhost:3101/mcp \\\n  -H \"Mcp-Session-Id: $SID\" \\\n  -H 'Content-Type: application/json' \\\n  -H 'Accept: text/event-stream, application/json' \\\n  -d '{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"resources/read\",\"params\":{\"uri\":\"ui://cesium-map/mcp-app.html\"}}' \\\n  | jq '.result.contents[0]._meta'",
+                "default": true
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "kind": "step",
+        "title": "tools/call show-map {} — sync stub response",
+        "note": "show-map's tool result is intentionally tiny — `\"Displaying globe.\"`. The iframe loads its own CesiumJS bundle and renders the globe entirely client-side; the model just needs to know the call succeeded. With no arguments the server uses the default London bounding box from the struct-tag defaults (west=-0.5, south=51.3, east=0.3, north=51.7).",
+        "arrows": [
+          {
+            "from": "Host",
+            "to": "Server",
+            "label": "tools/call show-map {}"
+          },
+          {
+            "from": "Server",
+            "to": "Host",
+            "label": "ToolResult.content[0].text = \"Displaying globe.\"",
+            "dashed": true
+          }
+        ],
+        "verbatim": [
+          {
+            "label": "Reproduce on the wire",
+            "variants": [
+              {
+                "label": "curl",
+                "lang": "bash",
+                "content": "curl -s -X POST http://localhost:3101/mcp \\\n  -H \"Mcp-Session-Id: $SID\" \\\n  -H 'Content-Type: application/json' \\\n  -H 'Accept: text/event-stream, application/json' \\\n  -d '{\"jsonrpc\":\"2.0\",\"id\":4,\"method\":\"tools/call\",\"params\":{\"name\":\"show-map\",\"arguments\":{}}}' \\\n  | jq '.result | {content, isError}'",
+                "default": true
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "kind": "step",
+        "title": "tools/call geocode {query: \"Eiffel Tower\"} — live OSM round trip",
+        "note": "Real network round trip — the server hits `https://nominatim.openstreetmap.org/search`, honouring OSM's 1 request/sec usage policy (1.1s rate-limit window, single sync.Mutex serialising calls). User-Agent is required by Nominatim's policy. The first match's bounding box from this result is what step 6 feeds into show-map.",
+        "arrows": [
+          {
+            "from": "Host",
+            "to": "Server",
+            "label": "tools/call geocode {query: \"Eiffel Tower\"}"
+          },
+          {
+            "from": "Server",
+            "to": "Host",
+            "label": "ToolResult.content[0].text = formatted 1-5 results",
+            "dashed": true
+          }
+        ],
+        "verbatim": [
+          {
+            "label": "Reproduce on the wire",
+            "variants": [
+              {
+                "label": "curl",
+                "lang": "bash",
+                "content": "curl -s -X POST http://localhost:3101/mcp \\\n  -H \"Mcp-Session-Id: $SID\" \\\n  -H 'Content-Type: application/json' \\\n  -H 'Accept: text/event-stream, application/json' \\\n  -d '{\"jsonrpc\":\"2.0\",\"id\":5,\"method\":\"tools/call\",\"params\":{\"name\":\"geocode\",\"arguments\":{\"query\":\"Eiffel Tower\"}}}' \\\n  | jq -r '.result.content[0].text'",
+                "default": true
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "kind": "step",
+        "title": "tools/call show-map {bounding box from geocode}",
+        "note": "The typical chain: geocode resolves the name → bounding box, then show-map flies the iframe's camera to that box. The iframe consumes the latest show-map call's `_meta.ui.resourceUri` arguments via the App SDK (`app.ontoolresult`) and re-frames the globe. This step uses the Eiffel Tower's canonical bounding box rather than parsing step 5's text output — keeps the trace reproducible even if Nominatim's importance-ordering shuffles the top result.",
+        "arrows": [
+          {
+            "from": "Host",
+            "to": "Server",
+            "label": "tools/call show-map {west:..., south:..., east:..., north:..., label:\"Eiffel Tower\"}"
+          },
+          {
+            "from": "Server",
+            "to": "Host",
+            "label": "ToolResult.content[0].text = \"Displaying globe.\"",
+            "dashed": true
+          }
+        ],
+        "verbatim": [
+          {
+            "label": "Reproduce on the wire",
+            "variants": [
+              {
+                "label": "curl",
+                "lang": "bash",
+                "content": "curl -s -X POST http://localhost:3101/mcp \\\n  -H \"Mcp-Session-Id: $SID\" \\\n  -H 'Content-Type: application/json' \\\n  -H 'Accept: text/event-stream, application/json' \\\n  -d '{\"jsonrpc\":\"2.0\",\"id\":6,\"method\":\"tools/call\",\"params\":{\"name\":\"show-map\",\"arguments\":{\"west\":2.293,\"south\":48.855,\"east\":2.297,\"north\":48.860,\"label\":\"Eiffel Tower\"}}}' \\\n  | jq '.result.content[0]'",
+                "default": true
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "kind": "section",
+        "title": "What the App iframe does with all this",
+        "body": "The host → iframe handoff mechanics (`tools/call` → `resources/read` → sandboxed iframe → `postMessage`) are covered once in [The basic-host bridge dance](../README.md#the-basic-host-bridge-dance). Steps 1-6 above are the floor every MCP Apps interaction starts from, plus the CSP allowlist step 3 surfaces.\n\nmap's iframe sits at the **moderate** end of the App-ness spectrum. The bridge calls its App SDK makes:\n\n- `app.ontoolresult` — reads each show-map tool result and re-frames the CesiumJS camera to the new bounding box. The tool result's text content (`\"Displaying globe.\"`) is ignored; the `_meta.ui.resourceUri` arguments carry the navigation instructions.\n- `app.callServerTool({name: \"geocode\", arguments: {query: ...}})` — when a user types in the iframe's search box, the App calls the server's geocode tool via the bridge (no LLM in the loop), picks the top result, and chains a self-issued show-map call.\n- `app.getHostContext()` + `app.onhostcontextchanged` — applies host theme / safeAreaInsets to the iframe's chrome.\n\nNO `app.registerTool`, NO `app.updateModelContext` — the iframe doesn't expose tools back to the host, doesn't push context updates. Same bridge surface as `customer-segmentation` and `scenario-modeler`; one rung below the rich `budget-allocator` patterns that round-trip tool registrations back through the bridge.\n\n**Why the CSP fix matters here specifically.** Most fixtures' iframes are self-contained — their HTML + CSS + JS all live in the resource read response. map is the first compat fixture whose iframe streams a meaningful chunk of code (CesiumJS) from a CDN at runtime, AND issues runtime XHRs to a different domain (OSM Nominatim, OSM tile servers). Without per-content `_meta.ui.csp.connectDomains` + `resourceDomains`, basic-host's default CSP blocks the CDN fetch entirely."
+      },
+      {
+        "kind": "section",
+        "title": "Where to look in the code",
+        "body": "- `main.go` — fixture is ~250 lines. Two tools (show-map App tool + geocode plain tool), one resource with per-content CSP _meta, and the ported `geocodeWithNominatim` (1.1s rate-limited HTTP call) + `formatGeocodeResults` text formatter that mirror upstream's server.ts.\n- `walkthrough.go` — this file. Each step's curl + Go recipe is the canonical wire reproduction.\n- `../README.md` — narrative + screenshots + the centralized [Other ways to test a fixture](../README.md#other-ways-to-test-a-fixture) guide and the bridge-dance reference section."
+      }
+    ]
+  },
+  "trace": [
+    {
+      "kind": "section",
+      "title": "Setup",
+      "body": "Start the MCP server in a separate terminal first:\n\n```\nTerminal 1:  make serve         # mcpkit-Go fixture on :3101\nTerminal 2:  make demo          # this walkthrough (--tui for interactive TUI)\n```\n\nAny MCP host can connect to the running server (Claude Desktop, VS Code, MCPJam, basic-host). The walkthrough below acts as a scripted host that issues the protocol calls directly through `*mcpkit/client.Client` — no LLM, no browser. The same calls drive the iframe when you run `make demo-app EXAMPLE=map` in basic-host (see the [centralized guide](../README.md#other-ways-to-test-a-fixture))."
+    },
+    {
+      "kind": "step",
+      "title": "Connect to the fixture",
+      "step_id": "step-1",
+      "visit": 1,
+      "output": "    connected to CesiumJS Map Server 1.0.0\n"
+    },
+    {
+      "kind": "step",
+      "title": "tools/list — show-map (App) + geocode (plain)",
+      "step_id": "step-2",
+      "visit": 1,
+      "output": "    show-map\n      execution: {\n        \"taskSupport\": \"forbidden\"\n      }\n      _meta: {\n        \"ui\": {\n          \"resourceUri\": \"ui://cesium-map/mcp-app.html\"\n        },\n        \"ui/resourceUri\": \"ui://cesium-map/mcp-app.html\"\n      }\n    geocode\n      execution: {\n        \"taskSupport\": \"forbidden\"\n      }\n      _meta: null\n"
+    },
+    {
+      "kind": "step",
+      "title": "resources/read — verify _meta.ui.csp on the resource content",
+      "step_id": "step-3",
+      "visit": 1,
+      "output": "    342531 bytes of HTML, mimeType: text/html;profile=mcp-app\n    _meta: {\n      \"ui\": {\n        \"csp\": {\n          \"connectDomains\": [\n            \"https://*.openstreetmap.org\",\n            \"https://cesium.com\",\n            \"https://*.cesium.com\"\n          ],\n          \"resourceDomains\": [\n            \"https://*.openstreetmap.org\",\n            \"https://cesium.com\",\n            \"https://*.cesium.com\"\n          ]\n        }\n      }\n    }\n"
+    },
+    {
+      "kind": "step",
+      "title": "tools/call show-map {} — sync stub response",
+      "step_id": "step-4",
+      "visit": 1,
+      "output": "    isError=false, text=\"Displaying globe.\"\n"
+    },
+    {
+      "kind": "step",
+      "title": "tools/call geocode {query: \"Eiffel Tower\"} — live OSM round trip",
+      "step_id": "step-5",
+      "visit": 1,
+      "output": "    1. Tour Eiffel, 5, Avenue Anatole France, Quartier du Gros-Caillou, Paris 7e Arrondissement, Paris, Île-de-France, France métropolitaine, 75007, France\n   Coordinates: 48.858260, 2.294501\n   Bounding box: W:2.2933, S:48.8575, E:2.2957, N:48.8590\n\n2. Eiffel Tower, Improvement District No. 9, Alberta, Canada\n   Coordinates: 51.333600, -116.235000\n   Bounding box: W:-116.2351, S:51.3336, E:-116.234…\n"
+    },
+    {
+      "kind": "step",
+      "title": "tools/call show-map {bounding box from geocode}",
+      "step_id": "step-6",
+      "visit": 1,
+      "output": "    isError=false, text=\"Displaying globe.\"\n"
+    },
+    {
+      "kind": "section",
+      "title": "What the App iframe does with all this",
+      "body": "The host → iframe handoff mechanics (`tools/call` → `resources/read` → sandboxed iframe → `postMessage`) are covered once in [The basic-host bridge dance](../README.md#the-basic-host-bridge-dance). Steps 1-6 above are the floor every MCP Apps interaction starts from, plus the CSP allowlist step 3 surfaces.\n\nmap's iframe sits at the **moderate** end of the App-ness spectrum. The bridge calls its App SDK makes:\n\n- `app.ontoolresult` — reads each show-map tool result and re-frames the CesiumJS camera to the new bounding box. The tool result's text content (`\"Displaying globe.\"`) is ignored; the `_meta.ui.resourceUri` arguments carry the navigation instructions.\n- `app.callServerTool({name: \"geocode\", arguments: {query: ...}})` — when a user types in the iframe's search box, the App calls the server's geocode tool via the bridge (no LLM in the loop), picks the top result, and chains a self-issued show-map call.\n- `app.getHostContext()` + `app.onhostcontextchanged` — applies host theme / safeAreaInsets to the iframe's chrome.\n\nNO `app.registerTool`, NO `app.updateModelContext` — the iframe doesn't expose tools back to the host, doesn't push context updates. Same bridge surface as `customer-segmentation` and `scenario-modeler`; one rung below the rich `budget-allocator` patterns that round-trip tool registrations back through the bridge.\n\n**Why the CSP fix matters here specifically.** Most fixtures' iframes are self-contained — their HTML + CSS + JS all live in the resource read response. map is the first compat fixture whose iframe streams a meaningful chunk of code (CesiumJS) from a CDN at runtime, AND issues runtime XHRs to a different domain (OSM Nominatim, OSM tile servers). Without per-content `_meta.ui.csp.connectDomains` + `resourceDomains`, basic-host's default CSP blocks the CDN fetch entirely."
+    },
+    {
+      "kind": "section",
+      "title": "Where to look in the code",
+      "body": "- `main.go` — fixture is ~250 lines. Two tools (show-map App tool + geocode plain tool), one resource with per-content CSP _meta, and the ported `geocodeWithNominatim` (1.1s rate-limited HTTP call) + `formatGeocodeResults` text formatter that mirror upstream's server.ts.\n- `walkthrough.go` — this file. Each step's curl + Go recipe is the canonical wire reproduction.\n- `../README.md` — narrative + screenshots + the centralized [Other ways to test a fixture](../README.md#other-ways-to-test-a-fixture) guide and the bridge-dance reference section."
+    }
+  ]
+}
+</demokit-demo>
+<script type="module" src="./demokit-player.js"></script>
+</body>
+</html>

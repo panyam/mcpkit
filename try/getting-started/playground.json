@@ -1,0 +1,18 @@
+{
+  "title": "Getting started",
+  "summary": "The smallest mcpkit server: one typed tool, greet. Call it and watch the whole JSON-RPC exchange.",
+  "about": [
+    "One tool, greet, with a typed input. The form comes from the tool's JSON Schema.",
+    "Call it and watch the whole request and response in the wire log.",
+    "Switch wires to compare the stateless handshake (server/discover) with the older initialize."
+  ],
+  "docs": "get-started/",
+  "package": "./server",
+  "smoke": {
+    "tool": "greet",
+    "args": {
+      "name": "world"
+    },
+    "expect": "Hello, world!"
+  }
+}
