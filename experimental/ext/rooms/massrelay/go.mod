@@ -12,7 +12,7 @@ require (
 	github.com/panyam/massrelay v0.3.7
 	github.com/panyam/mcpkit v0.8.21
 	github.com/panyam/mcpkit/experimental/ext/rooms v0.8.21
-	github.com/panyam/servicekit v0.2.4
+	github.com/panyam/servicekit v0.2.5
 	github.com/stretchr/testify v1.12.1
 	golang.org/x/time v0.16.0
 	google.golang.org/protobuf v1.36.12
@@ -33,9 +33,9 @@ require (
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.30.0 // indirect
 	github.com/invopop/jsonschema v0.14.0 // indirect
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
-	github.com/panyam/gocurrent v0.1.2 // indirect
+	github.com/panyam/gocurrent v0.1.3 // indirect
 	github.com/panyam/goutils v0.1.13 // indirect
-	github.com/panyam/oneauth v0.3.13 // indirect
+	github.com/panyam/oneauth v0.3.19 // indirect
 	github.com/pb33f/ordered-map/v2 v2.3.1 // indirect
 	github.com/prometheus/client_golang v1.24.1 // indirect
 	github.com/prometheus/client_model v0.6.3 // indirect

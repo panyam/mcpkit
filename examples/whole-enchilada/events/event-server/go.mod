@@ -22,7 +22,7 @@ require (
 	github.com/panyam/mcpkit/experimental/ext/events/stores/gorm v0.6.0
 	github.com/panyam/mcpkit/experimental/ext/events/stores/redis v0.6.0
 	github.com/panyam/mcpkit/ext/auth v0.6.0
-	github.com/panyam/servicekit v0.2.4
+	github.com/panyam/servicekit v0.2.5
 	github.com/redis/go-redis/v9 v9.22.0
 	github.com/stretchr/testify v1.12.1
 	gorm.io/driver/postgres v1.6.3
@@ -73,12 +73,12 @@ require (
 	github.com/muesli/cancelreader v0.2.2 // indirect
 	github.com/muesli/termenv v0.16.0 // indirect
 	github.com/panyam/demokit v0.0.33 // indirect
-	github.com/panyam/demokit/notebook v0.0.32 // indirect
-	github.com/panyam/gocurrent v0.1.2 // indirect
+	github.com/panyam/demokit/notebook v0.0.33 // indirect
+	github.com/panyam/gocurrent v0.1.3 // indirect
 	github.com/panyam/goutils v0.1.13 // indirect
 	github.com/panyam/mcpkit/ext/otel v0.6.0 // indirect
 	github.com/panyam/mcpkit/stores/redis v0.8.21 // indirect
-	github.com/panyam/oneauth v0.3.13 // indirect
+	github.com/panyam/oneauth v0.3.19 // indirect
 	github.com/panyam/templar v0.1.2 // indirect
 	github.com/pb33f/ordered-map/v2 v2.3.1 // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect

@@ -62,13 +62,13 @@ require (
 	github.com/muesli/termenv v0.16.0 // indirect
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
 	github.com/panyam/demokit v0.0.33 // indirect
-	github.com/panyam/demokit/notebook v0.0.32 // indirect
-	github.com/panyam/gocurrent v0.1.2 // indirect
+	github.com/panyam/demokit/notebook v0.0.33 // indirect
+	github.com/panyam/gocurrent v0.1.3 // indirect
 	github.com/panyam/goutils v0.1.13 // indirect
 	github.com/panyam/massrelay v0.3.7 // indirect
 	github.com/panyam/mcpkit/ext/otel v0.6.0 // indirect
-	github.com/panyam/oneauth v0.3.13 // indirect
-	github.com/panyam/servicekit v0.2.4 // indirect
+	github.com/panyam/oneauth v0.3.19 // indirect
+	github.com/panyam/servicekit v0.2.5 // indirect
 	github.com/panyam/templar v0.1.2 // indirect
 	github.com/pb33f/ordered-map/v2 v2.3.1 // indirect
 	github.com/prometheus/client_golang v1.24.1 // indirect
