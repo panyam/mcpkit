@@ -13,7 +13,7 @@ require (
 	github.com/panyam/mcpkit v0.8.21
 	github.com/panyam/mcpkit/examples/common v0.0.0
 	github.com/panyam/mcpkit/ext/ui v0.6.0
-	github.com/panyam/servicekit v0.2.4
+	github.com/panyam/servicekit v0.2.5
 )
 
 require (
@@ -50,8 +50,8 @@ require (
 	github.com/muesli/ansi v0.0.0-20230316100256-276c6243b2f6 // indirect
 	github.com/muesli/cancelreader v0.2.2 // indirect
 	github.com/muesli/termenv v0.16.0 // indirect
-	github.com/panyam/demokit/notebook v0.0.32 // indirect
-	github.com/panyam/gocurrent v0.1.2 // indirect
+	github.com/panyam/demokit/notebook v0.0.33 // indirect
+	github.com/panyam/gocurrent v0.1.3 // indirect
 	github.com/panyam/goutils v0.1.13 // indirect
 	github.com/panyam/mcpkit/ext/otel v0.6.0 // indirect
 	github.com/panyam/templar v0.1.2 // indirect

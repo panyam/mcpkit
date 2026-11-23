@@ -5,7 +5,7 @@ go 1.26.11
 require (
 	github.com/panyam/mcpkit v0.8.21
 	github.com/panyam/mcpkit/ext/auth v0.8.21
-	github.com/panyam/oneauth v0.3.13
+	github.com/panyam/oneauth v0.3.19
 )
 
 require (
@@ -24,10 +24,10 @@ require (
 	github.com/golang-jwt/jwt/v5 v5.3.1 // indirect
 	github.com/gorilla/websocket v1.5.3 // indirect
 	github.com/invopop/jsonschema v0.14.0 // indirect
-	github.com/panyam/gocurrent v0.1.2 // indirect
+	github.com/panyam/gocurrent v0.1.3 // indirect
 	github.com/panyam/goutils v0.1.13 // indirect
 	github.com/panyam/mcpkit/ext/skills v0.8.21
-	github.com/panyam/servicekit v0.2.4 // indirect
+	github.com/panyam/servicekit v0.2.5 // indirect
 	github.com/pb33f/ordered-map/v2 v2.3.1 // indirect
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.3 // indirect
 	github.com/yosida95/uritemplate/v3 v3.0.2 // indirect
