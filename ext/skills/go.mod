@@ -24,3 +24,5 @@ require (
 	golang.org/x/text v0.43.0 // indirect
 	golang.org/x/time v0.16.0 // indirect
 )
+
+replace github.com/panyam/mcpkit => ../..

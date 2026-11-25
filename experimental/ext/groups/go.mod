@@ -2,6 +2,8 @@ module github.com/panyam/mcpkit/experimental/ext/groups
 
 go 1.26.11
 
+replace github.com/panyam/mcpkit => ../../..
+
 require github.com/panyam/mcpkit v0.8.22
 
 require (

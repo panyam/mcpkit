@@ -2,6 +2,11 @@ module github.com/panyam/mcpkit/experimental/ext/agents/clients/go
 
 go 1.26.11
 
+replace (
+	github.com/panyam/mcpkit => ../../../../..
+	github.com/panyam/mcpkit/experimental/ext/agents => ../..
+)
+
 require (
 	github.com/panyam/mcpkit v0.8.22
 	github.com/panyam/mcpkit/experimental/ext/agents v0.8.22
