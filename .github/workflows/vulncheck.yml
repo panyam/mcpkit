@@ -60,7 +60,7 @@ jobs:
       #
       # scripts/vulncheck-all.sh wants govulncheck on the PATH, so the command
       # installs a pinned one first.
-      - uses: panyam/ci-actions/vulncheck@v0.1.2
+      - uses: panyam/ci-actions/vulncheck@v0.1.4
         with:
           command: go install golang.org/x/vuln/cmd/govulncheck@v1.10.0 && make vulncheck
           labels: security,P1
