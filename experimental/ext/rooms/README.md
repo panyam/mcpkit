@@ -236,6 +236,9 @@ state, and agreement needs no MCP session.
   `Grants()` lists who it agrees to.
 - **Ending it.** `Revoke(principal)` or `RevokeAll()` on the page, or the page leaving. A grant
   outlives the agent's MCP session: there is no session end on the stateless wire to hang it on.
+- **A refusal says which.** A call on a page that has not agreed says whether the page is another
+  user's, which only pairing opens, or the caller's own page with its switch off. A call that names
+  no page says the same about the pages that offer the tool.
 
 ### Which agents are around
 

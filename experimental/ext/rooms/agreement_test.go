@@ -89,7 +89,7 @@ func TestAgreement_AnotherUsersTabNeedsHerAgreement(t *testing.T) {
 	require.True(t, ok, out)
 	ok, out = call(t, bob, "show_sheet", map[string]any{"sheet": "2", "page": string(alicesTab.ID())})
 	assert.False(t, ok)
-	assert.Contains(t, out, "has not agreed to you")
+	assert.Contains(t, out, "another person's tab")
 	assert.Equal(t, []string{"bob:1"}, rec.all())
 
 	alicesTab.AcceptPairing(code)
@@ -105,6 +105,46 @@ func TestAgreement_AnotherUsersTabNeedsHerAgreement(t *testing.T) {
 	ok, _ = call(t, bob, "show_sheet", map[string]any{"sheet": "5", "page": string(alicesTab.ID())})
 	assert.False(t, ok)
 	assert.Equal(t, []string{"bob:1", "alice:3"}, rec.all())
+}
+
+// A refusal says whose tab refused: another person's tab, which only pairing
+// opens, or the caller's own tab with its agents switch off. A call that names
+// no page says the same about the tabs that could have taken it (agni 1905).
+func TestAgreement_ARefusalSaysWhoseTabItIs(t *testing.T) {
+	st := newStack(t)
+	rec := &recorder{}
+	alicesTab := st.page(t, "alice", room, rec.tool("show_sheet", "alice", false))
+	alicesTab.SetAgentsAllowed(true)
+	bobsTab := st.page(t, "bob", room, rec.tool("show_sheet", "bob", false))
+	bob := st.agent(t, "bob", allScopes...)
+	bob.attach(t, room)
+	bob.waitPage(t, alicesTab.ID(), func(rooms.PageInfo) bool { return true })
+	bob.waitPage(t, bobsTab.ID(), func(rooms.PageInfo) bool { return true })
+
+	ok, out := call(t, bob, "show_sheet", map[string]any{"sheet": "1", "page": string(alicesTab.ID())})
+	assert.False(t, ok)
+	assert.Contains(t, out, "another person's tab")
+	assert.Contains(t, out, "pair")
+
+	ok, out = call(t, bob, "show_sheet", map[string]any{"sheet": "2", "page": string(bobsTab.ID())})
+	assert.False(t, ok)
+	assert.Contains(t, out, "your own tab")
+	assert.Contains(t, out, "turn it on")
+	assert.NotContains(t, out, "another person")
+
+	ok, out = call(t, bob, "show_sheet", map[string]any{"sheet": "3"})
+	assert.False(t, ok)
+	assert.Contains(t, out, "your own tab")
+	assert.Contains(t, out, "turn it on")
+
+	carol := st.agent(t, "carol", allScopes...)
+	carol.attach(t, room)
+	carol.waitPage(t, bobsTab.ID(), func(rooms.PageInfo) bool { return true })
+	ok, out = call(t, carol, "show_sheet", map[string]any{"sheet": "4"})
+	assert.False(t, ok)
+	assert.Contains(t, out, "another person's tab")
+	assert.NotContains(t, out, "your own")
+	assert.Empty(t, rec.all(), "no tab ran a refused call")
 }
 
 // A grant made through one bridge holds on another bridge in the same room:
