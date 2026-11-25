@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Try mcpkit in your browser</title>
+<link rel="icon" href="data:,">
+<style>
+  :root {
+    --bg: #fafaf9; --fg: #1c1917; --muted: #78716c; --panel: #ffffff;
+    --border: #e7e5e4; --accent: #2563eb;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0c0a09; --fg: #e7e5e4; --muted: #a8a29e; --panel: #1c1917;
+      --border: #292524; --accent: #60a5fa;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--fg);
+         font: 15px/1.55 system-ui, -apple-system, sans-serif; }
+  main { max-width: 1000px; margin: 0 auto; padding: 32px 16px; }
+  nav { font-size: 13px; margin-bottom: 20px; }
+  nav a { color: var(--muted); text-decoration: none; }
+  h1 { font-size: 26px; margin: 0 0 8px; }
+  .lede { color: var(--muted); max-width: 700px; margin: 0 0 24px; }
+  .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px; }
+  .card { background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+           padding: 16px; display: flex; flex-direction: column; }
+  .card h2 { font-size: 17px; margin: 0 0 6px; }
+  .card h2 a { color: var(--fg); text-decoration: none; }
+  .card p { margin: 0 0 14px; color: var(--muted); font-size: 14px; flex: 1; }
+  .links { display: flex; gap: 12px; align-items: center; font-size: 14px; flex-wrap: wrap; }
+  .links a { white-space: nowrap; }
+  .open { background: var(--accent); color: #fff; padding: 6px 12px; border-radius: 6px;
+           text-decoration: none; font-weight: 600; }
+  .links a.docs { color: var(--accent); text-decoration: none; }
+  footer { margin-top: 32px; color: var(--muted); font-size: 13px; }
+</style>
+</head>
+<body>
+<main>
+  <nav><a href="../">mcpkit docs</a></nav>
+  <h1>Try mcpkit in your browser</h1>
+  <p class="lede">Each page runs an example server right in your browser, without any backend.
+    Call the tools with any input, answer the server when it asks you something, and watch every
+    JSON-RPC message go back and forth.</p>
+  <div class="cards">
+    <div class="card" data-example="getting-started">
+      <h2><a href="getting-started/">Getting started</a></h2>
+      <p>The smallest mcpkit server: one typed tool, greet. Call it and watch the whole JSON-RPC exchange.</p>
+      <div class="links"><a class="open" href="getting-started/">Open the playground</a><a class="docs" href="../get-started/">Read the example</a></div>
+    </div>
+    <div class="card" data-example="kitchen-sink">
+      <h2><a href="kitchen-sink/">Agent kitchen sink tools</a></h2>
+      <p>The three tools the agent kitchen-sink drives: greet, a large report for testing output offloading, and summary statistics over a list of numbers.</p>
+      <div class="links"><a class="open" href="kitchen-sink/">Open the playground</a><a class="docs" href="https://github.com/panyam/mcpkit/tree/main/examples/agents/kitchen-sink">Read the example</a></div>
+    </div>
+    <div class="card" data-example="file-inputs">
+      <h2><a href="file-inputs/">File inputs</a></h2>
+      <p>Tools that take files (SEP-2356). Pick an image, PDFs or any file, and the page sends each one as a data URI the server decodes, checks against accept and maxSize, and describes.</p>
+      <div class="links"><a class="open" href="file-inputs/">Open the playground</a><a class="docs" href="../examples/file-inputs/">Read the example</a></div>
+    </div>
+    <div class="card" data-example="list-ttl">
+      <h2><a href="list-ttl/">List caching hints</a></h2>
+      <p>A tool, a resource, a resource template and a prompt, so you can see the ttlMs and cacheScope hints (SEP-2549) on every list and read response.</p>
+      <div class="links"><a class="open" href="list-ttl/">Open the playground</a><a class="docs" href="../examples/list-ttl/">Read the example</a></div>
+    </div>
+    <div class="card" data-example="mrtr">
+      <h2><a href="mrtr/">Multi-round-trip requests</a></h2>
+      <p>Tools that stop and ask the client for input (SEP-2322): elicitation, sampling and roots, answered by you in the page, across one or more rounds.</p>
+      <div class="links"><a class="open" href="mrtr/">Open the playground</a><a class="docs" href="../examples/mrtr/">Read the example</a></div>
+    </div>
+    <div class="card" data-example="disclosure">
+      <h2><a href="disclosure/">Progressive disclosure</a></h2>
+      <p>200 tools in eight groups. With the groups extension, the tool list starts empty and you open one group at a time. Turn it off and reconnect to get all 200.</p>
+      <div class="links"><a class="open" href="disclosure/">Open the playground</a><a class="docs" href="../examples/disclosure/">Read the example</a></div>
+    </div>
+    <div class="card" data-example="protogen-bookservice">
+      <h2><a href="protogen-bookservice/">Proto-generated book service</a></h2>
+      <p>An MCP server generated from a .proto file by protogen: tools, resources, prompts and argument completion. Search the catalog, read a book resource, and watch book IDs complete as you type a prompt argument.</p>
+      <div class="links"><a class="open" href="protogen-bookservice/">Open the playground</a><a class="docs" href="../examples/protogen/bookservice/">Read the example</a></div>
+    </div>
+    <div class="card" data-example="skills-core">
+      <h2><a href="skills-core/">Skills</a></h2>
+      <p>One skill served as MCP resources (SEP-2640), plus the format_commit tool it tells the model to call. Read the skill, then call the tool.</p>
+      <div class="links"><a class="open" href="skills-core/">Open the playground</a><a class="docs" href="../examples/skills-core/">Read the example</a></div>
+    </div>
+    <div class="card" data-example="tasks-v2">
+      <h2><a href="tasks-v2/">Tasks v2</a></h2>
+      <p>Long-running tools as tasks (SEP-2663). Start a slow job and watch it poll, answer a task that stops to ask for input, or cancel one.</p>
+      <div class="links"><a class="open" href="tasks-v2/">Open the playground</a><a class="docs" href="../examples/tasks-v2/">Read the example</a></div>
+    </div>
+  </div>
+  <footer>Each server downloads once, about 4 MB, then your browser caches it.
+    The same code runs from the command line: every card links to its example.</footer>
+</main>
+</body>
+</html>

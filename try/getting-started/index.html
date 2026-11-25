@@ -1,0 +1,803 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>mcpkit playground</title>
+<link rel="icon" href="data:,">
+<style>
+  :root {
+    --bg: #fafaf9; --fg: #1c1917; --muted: #78716c; --panel: #ffffff;
+    --border: #e7e5e4; --accent: #2563eb; --out: #1d4ed8; --in: #047857; --err: #b91c1c;
+    --warn: #b45309; --code: #f5f5f4;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0c0a09; --fg: #e7e5e4; --muted: #a8a29e; --panel: #1c1917;
+      --border: #292524; --accent: #60a5fa; --out: #93c5fd; --in: #6ee7b7; --err: #fca5a5;
+      --warn: #fcd34d; --code: #0c0a09;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--fg);
+         font: 14px/1.5 system-ui, -apple-system, sans-serif; }
+  main { max-width: 1200px; margin: 0 auto; padding: 24px 16px; }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  .sub { color: var(--muted); margin: 0 0 8px; }
+  .about { margin: 0 0 16px; padding-left: 20px; color: var(--fg); max-width: 820px; }
+  .about li { margin: 2px 0; }
+  .grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; align-items: start; }
+  @media (max-width: 860px) { .grid { grid-template-columns: minmax(0, 1fr); } }
+  section { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 16px; min-width: 0; }
+  h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin: 0 0 12px;
+       display: flex; justify-content: space-between; align-items: center; }
+  .status { font-size: 13px; color: var(--muted); margin-bottom: 12px; }
+  .status.ok { color: var(--in); } .status.bad { color: var(--err); }
+  .tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--border); margin-bottom: 12px; }
+  .tabs button { background: none; color: var(--muted); border: 0; border-bottom: 2px solid transparent;
+                 border-radius: 0; margin: 0; padding: 6px 10px; font-weight: 600; }
+  .tabs button.on { color: var(--fg); border-bottom-color: var(--accent); }
+  .pane[hidden] { display: none; }
+  .filter { margin-bottom: 8px; }
+  .item { border-top: 1px solid var(--border); padding: 8px 0; }
+  .item:first-of-type { border-top: 0; }
+  .item > summary { cursor: pointer; list-style: none; }
+  .item > summary::-webkit-details-marker { display: none; }
+  .item > summary b { font-family: ui-monospace, monospace; }
+  .item > summary b::before { content: "▸ "; color: var(--muted); }
+  .item[open] > summary b::before { content: "▾ "; }
+  .item > summary .desc { color: var(--muted); display: block; font-size: 13px; }
+  .body { padding: 8px 0 0 14px; }
+  label { display: block; font-size: 12px; color: var(--muted); margin: 6px 0 2px; }
+  label .req { color: var(--err); }
+  input[type=text], input[type=number], select, textarea {
+    width: 100%; padding: 6px 8px; border: 1px solid var(--border); border-radius: 6px;
+    background: var(--code); color: var(--fg); font: 13px ui-monospace, monospace; }
+  textarea { min-height: 70px; resize: vertical; }
+  button { margin-top: 8px; padding: 6px 12px; border: 0; border-radius: 6px; background: var(--accent);
+           color: #fff; font-weight: 600; cursor: pointer; }
+  button.ghost { background: none; color: var(--accent); border: 1px solid var(--border); }
+  button:disabled { opacity: .5; cursor: default; }
+  .result { margin-top: 8px; }
+  .result pre, .msg pre, .ask pre { margin: 4px 0 0; padding: 6px 8px; background: var(--code); border-radius: 4px;
+                                    overflow-x: auto; font-size: 12px; white-space: pre-wrap; word-break: break-word; }
+  .result .text { font-family: ui-monospace, monospace; white-space: pre-wrap; }
+  .result.error .text, .error-text { color: var(--err); }
+  .note { font-size: 12px; color: var(--muted); }
+  .ask { border: 1px solid var(--warn); border-radius: 6px; padding: 8px; margin-top: 8px; }
+  .ask h3 { margin: 0; font-size: 13px; color: var(--warn); }
+  .task { border: 1px solid var(--border); border-radius: 6px; padding: 8px; margin-top: 8px; }
+  .task .state { font-weight: 600; }
+  .wires { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: -4px 0 12px; font-size: 13px; }
+  .wires[hidden] { display: none; }
+  .wires button { margin: 0; padding: 3px 10px; background: none; color: var(--muted); border: 1px solid var(--border); }
+  .wires button.on { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .wires .note { flex-basis: 100%; }
+  #asks:empty { display: none; }
+  #asks { margin-bottom: 12px; }
+  #log { display: flex; flex-direction: column; gap: 8px; max-height: 75vh; overflow: auto; }
+  .msg { border-left: 3px solid var(--border); padding-left: 8px; }
+  .msg.new { animation: msg-in .25s ease-out; }
+  @keyframes msg-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+  @media (prefers-reduced-motion: reduce) { .msg.new { animation: none; } }
+  .msg > summary { cursor: pointer; list-style: none; font-size: 12px; }
+  .msg > summary::-webkit-details-marker { display: none; }
+  .msg .head, .msg .meta { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .msg .head { font-weight: 600; }
+  .msg .head::before { content: "▸ "; color: var(--muted); }
+  .msg[open] .head::before { content: "▾ "; }
+  .msg .head code { font: 12px ui-monospace, monospace; }
+  .msg .meta { color: var(--muted); padding-left: 14px; }
+  .msg .meta.bad { color: var(--err); }
+  .msg.out { border-color: var(--out); } .msg.out .head { color: var(--out); }
+  .msg.in { border-color: var(--in); } .msg.in .head { color: var(--in); }
+  .logbar { display: flex; gap: 6px; }
+  .logbar button { margin: 0; padding: 2px 8px; font-size: 12px; text-transform: none; letter-spacing: 0; }
+  .logbar button.on { background: var(--accent); color: #fff; }
+  details.cfg { margin-top: 12px; }
+  details.cfg summary { cursor: pointer; color: var(--muted); }
+</style>
+</head>
+<body>
+<main>
+  <nav style="font-size:13px;margin-bottom:12px"><a href="../" style="color:var(--muted);text-decoration:none">← All playgrounds</a></nav>
+  <h1 id="title">Playground</h1>
+  <p class="sub">Right here in the browser.</p>
+  <ul class="about" id="about" hidden></ul>
+  <div class="grid">
+    <section>
+      <div id="status" class="status">Loading server.wasm…</div>
+      <div class="wires" id="wires" hidden>
+        <span>Wire:</span>
+        <button data-wire="stateless">Stateless (2026-07-28)</button>
+        <button data-wire="session">Session (2025-11-25)</button>
+        <span class="note" id="wire-note"></span>
+      </div>
+      <div id="asks"></div>
+      <div class="tabs" role="tablist">
+        <button class="on" data-pane="tools">Tools <span id="n-tools"></span></button>
+        <button data-pane="resources">Resources <span id="n-resources"></span></button>
+        <button data-pane="prompts">Prompts <span id="n-prompts"></span></button>
+        <button data-pane="groups" id="tab-groups" hidden>Groups <span id="n-groups"></span></button>
+      </div>
+      <div class="pane" id="pane-tools">
+        <input type="text" class="filter" id="filter" placeholder="Filter tools by name or description">
+        <div id="tools"></div>
+      </div>
+      <div class="pane" id="pane-resources" hidden><div id="resources"></div></div>
+      <div class="pane" id="pane-prompts" hidden><div id="prompts"></div></div>
+      <div class="pane" id="pane-groups" hidden>
+        <p class="note" id="groups-note"></p>
+        <div id="groups"></div>
+      </div>
+      <details class="cfg">
+        <summary>Client capabilities</summary>
+        <p class="note">On the session wire the page sends these once, in initialize. On the stateless wire
+          it sends them in every request's _meta. Edit them and reconnect to see how the server behaves for a
+          client without, say, the tasks extension.</p>
+        <textarea id="caps" rows="9"></textarea>
+        <button id="reconnect">Reconnect</button>
+      </details>
+      <details class="cfg">
+        <summary>Send raw JSON-RPC</summary>
+        <textarea id="raw">{"jsonrpc": "2.0", "method": "ping"}</textarea>
+        <p class="note">Leave out <code>id</code> and the page uses its next one. A <code>notifications/</code> method goes without one.</p>
+        <button id="sendRaw" disabled>Send</button>
+      </details>
+    </section>
+    <section>
+      <h2>Wire log <span class="logbar"><button class="ghost" id="expandAll" aria-pressed="false">Expand all</button><button class="ghost" id="clearLog">Clear</button></span></h2>
+      <div id="log"></div>
+    </section>
+  </div>
+</main>
+<script>
+const DEFAULT_CAPS = {
+  elicitation: {},
+  sampling: {},
+  fileInputs: {},
+  roots: { listChanged: false },
+  extensions: {
+    "io.modelcontextprotocol/tasks": {},
+    "io.modelcontextprotocol/groups": {},
+    "io.modelcontextprotocol/skills": {},
+  },
+};
+const TERMINAL = new Set(["completed", "failed", "cancelled"]);
+const STATELESS_VERSION = "2026-07-28";
+const SESSION_VERSION = "2025-11-25";
+const CLIENT_INFO = { name: "mcpkit-playground", version: "0.1.0" };
+const WIRE_NOTES = {
+  stateless: "No initialize and no session. Every request carries the protocol version and the client capabilities in _meta. The server can't send requests back, so a tool that needs input returns input_required.",
+  session: "The older wire. initialize opens a session, and the server can send requests and notifications back to the page in the middle of a call.",
+};
+
+const $ = (id) => document.getElementById(id);
+const statusEl = $("status"), logEl = $("log"), asksEl = $("asks");
+$("caps").value = JSON.stringify(DEFAULT_CAPS, null, 2);
+
+let worker, pending, progressSinks, nextId;
+let served = {};
+let wires = ["stateless", "session"], wire = "stateless";
+
+function el(tag, attrs = {}, ...kids) {
+  const e = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs)) {
+    if (k === "class") e.className = v;
+    else if (k === "text") e.textContent = v;
+    else if (k.startsWith("on")) e[k] = v;
+    else e.setAttribute(k, v);
+  }
+  for (const k of kids) if (k != null) e.append(k);
+  return e;
+}
+const pre = (v) => el("pre", { text: typeof v === "string" ? v : JSON.stringify(v, null, 2) });
+
+function setStatus(text, cls) { statusEl.textContent = text; statusEl.className = "status " + (cls || ""); }
+
+// The wire log keeps every message collapsed to a two-line summary, except
+// the newest one. "Expand all" opens every message, new ones included.
+let expandAll = false, lastOpen = null;
+const methodOf = new Map(); // "out:3" -> the method of request 3 the page sent
+
+function clip(v, n = 60) {
+  const s = typeof v === "string" ? v : JSON.stringify(v);
+  return s.length > n ? s.slice(0, n - 1) + "…" : s;
+}
+
+function paramsHint(method, p) {
+  if (!p) return "";
+  if (method === "notifications/progress") {
+    return p.progress + (p.total != null ? "/" + p.total : "") + (p.message ? " " + clip(p.message, 40) : "");
+  }
+  if (method === "notifications/message") return (p.level || "") + " " + clip(p.data ?? "", 50);
+  if (p.name) return p.name + (p.arguments && Object.keys(p.arguments).length ? " " + clip(p.arguments, 40) : "");
+  if (p.uri) return p.uri;
+  if (p.taskId) return "task " + p.taskId + (p.status ? " " + p.status : "");
+  if (p.ref) return clip(p.ref, 40) + (p.argument ? " " + p.argument.name + "=" + clip(p.argument.value, 20) : "");
+  if (p.message) return clip(p.message, 50);
+  if (p.cursor) return "cursor " + clip(p.cursor, 20);
+  return "";
+}
+
+function resultHint(r) {
+  if (!r || typeof r !== "object") return "ok";
+  const parts = [];
+  if (r.isError) parts.push("tool error");
+  if (r.resultType && r.resultType !== "complete") parts.push(r.resultType);
+  if (r.status) parts.push(r.status);
+  if (r.serverInfo) parts.push(r.serverInfo.name + " " + r.serverInfo.version);
+  if (r.protocolVersion) parts.push("protocol " + r.protocolVersion);
+  for (const [k, v] of Object.entries(r)) {
+    if (k !== "content" && Array.isArray(v)) parts.push(v.length + " " + k);
+  }
+  const first = Array.isArray(r.content) ? r.content[0] : null;
+  if (first) parts.push(first.type === "text" ? clip(first.text, 50) : r.content.length + " content");
+  if (Array.isArray(r.contents) && r.contents[0]?.mimeType) parts.push(r.contents[0].mimeType);
+  if (r.nextCursor) parts.push("more pages");
+  return parts.join(" · ") || "ok";
+}
+
+// summarize turns one JSON-RPC message into a head line (kind, id, method)
+// and a meta line (what it asked or what came back).
+function summarize(dir, text) {
+  const arrow = dir === "out" ? "→" : "←";
+  let m;
+  try { m = JSON.parse(text); } catch { return { head: arrow + " text", meta: clip(text, 80) }; }
+  if (Array.isArray(m)) return { head: arrow + " batch of " + m.length, meta: "" };
+  const peer = dir === "out" ? "in" : "out";
+  if (m.method && m.id !== undefined) {
+    methodOf.set(dir + ":" + m.id, m.method);
+    return { head: arrow + " request #" + m.id, method: m.method, meta: paramsHint(m.method, m.params) };
+  }
+  if (m.method) return { head: arrow + " notification", method: m.method, meta: paramsHint(m.method, m.params) };
+  const method = methodOf.get(peer + ":" + m.id);
+  if (m.error) {
+    return { head: arrow + " error #" + m.id, method, bad: true,
+             meta: m.error.code + " " + clip(m.error.message || "", 70) };
+  }
+  return { head: arrow + " response #" + m.id, method, meta: resultHint(m.result), bad: !!m.result?.isError };
+}
+
+function log(dir, text) {
+  let body = text;
+  try { body = JSON.stringify(JSON.parse(text), null, 2); } catch {}
+  const s = summarize(dir, text);
+  const way = dir === "out" ? "page to server" : "server to page";
+  const head = el("div", { class: "head", title: way }, s.head + " ", s.method ? el("code", { text: s.method }) : null);
+  const meta = el("div", { class: "meta" + (s.bad ? " bad" : ""), text: s.meta || way });
+  const item = el("details", { class: "msg new " + dir }, el("summary", {}, head, meta), pre(body));
+  item.addEventListener("animationend", () => item.classList.remove("new"), { once: true });
+  if (lastOpen && !expandAll) lastOpen.open = false;
+  item.open = true;
+  lastOpen = item;
+  logEl.append(item);
+  logEl.scrollTo({ top: logEl.scrollHeight, behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
+}
+
+function setExpandAll(on) {
+  expandAll = on;
+  const b = $("expandAll");
+  b.textContent = on ? "Collapse all" : "Expand all";
+  b.classList.toggle("on", on);
+  b.setAttribute("aria-pressed", String(on));
+  for (const d of logEl.querySelectorAll(".msg")) d.open = on || d === lastOpen;
+}
+
+function post(msg) {
+  const text = JSON.stringify(msg);
+  log("out", text);
+  worker.postMessage(text);
+}
+
+// withStatelessMeta adds the SEP-2575 envelope a stateless request must carry,
+// next to anything already in _meta such as a progress token.
+function withStatelessMeta(params) {
+  return {
+    ...(params || {}),
+    _meta: {
+      ...((params || {})._meta || {}),
+      "io.modelcontextprotocol/protocolVersion": STATELESS_VERSION,
+      "io.modelcontextprotocol/clientCapabilities": JSON.parse($("caps").value),
+      "io.modelcontextprotocol/clientInfo": CLIENT_INFO,
+    },
+  };
+}
+
+function request(method, params) {
+  const id = nextId++;
+  if (wire === "stateless") params = withStatelessMeta(params);
+  post({ jsonrpc: "2.0", id, method, params });
+  return new Promise((resolve, reject) => pending.set(id, { resolve, reject }));
+}
+
+function connect() {
+  if (worker) worker.terminate();
+  pending = new Map(); progressSinks = new Map(); nextId = 1;
+  asksEl.replaceChildren();
+  $("tab-groups").hidden = true;
+  for (const id of ["tools", "resources", "prompts", "groups"]) { $(id).replaceChildren(); $("n-" + id).textContent = ""; }
+  $("sendRaw").disabled = true;
+  for (const b of document.querySelectorAll("#wires button")) b.classList.toggle("on", b.dataset.wire === wire);
+  $("wire-note").textContent = WIRE_NOTES[wire];
+  $("raw").value = JSON.stringify(wire === "stateless"
+    ? { jsonrpc: "2.0", method: "tools/list", params: withStatelessMeta({}) }
+    : { jsonrpc: "2.0", method: "ping" }, null, 2);
+  const url = new URL(location.href);
+  url.searchParams.set("wire", wire);
+  history.replaceState(null, "", url);
+  setStatus("Loading server.wasm…");
+  worker = new Worker("worker.js");
+  worker.onmessage = onMessage;
+}
+
+function onMessage(e) {
+  if (typeof e.data !== "string") {
+    if (e.data.mcpkit === "ready") handshake();
+    if (e.data.mcpkit === "error") setStatus("Failed to load: " + e.data.message, "bad");
+    if (e.data.mcpkit === "exited") setStatus("The server exited.", "bad");
+    return;
+  }
+  log("in", e.data);
+  const msg = JSON.parse(e.data);
+  if (msg.method && msg.id !== undefined) return askFromServer(msg);
+  if (msg.method) return onNotification(msg);
+  const p = pending.get(msg.id);
+  if (p) { pending.delete(msg.id); msg.error ? p.reject(msg.error) : p.resolve(msg.result); }
+}
+
+function onNotification(msg) {
+  if (msg.method === "notifications/progress") {
+    const sink = progressSinks.get(msg.params.progressToken);
+    if (sink) {
+      const { progress, total, message } = msg.params;
+      sink.textContent = "Progress: " + progress + (total ? " / " + total : "") + (message ? " · " + message : "");
+    }
+  }
+}
+
+async function handshake() {
+  try { JSON.parse($("caps").value); } catch (err) { setStatus("Client capabilities are not valid JSON", "bad"); return; }
+  try {
+    let info, version;
+    if (wire === "stateless") {
+      const res = await request("server/discover", {});
+      info = (res._meta || {})["io.modelcontextprotocol/serverInfo"] || res.serverInfo || {};
+      served = res.capabilities || {};
+      version = STATELESS_VERSION;
+    } else {
+      const init = await request("initialize", {
+        protocolVersion: SESSION_VERSION,
+        capabilities: JSON.parse($("caps").value),
+        clientInfo: CLIENT_INFO,
+      });
+      post({ jsonrpc: "2.0", method: "notifications/initialized" });
+      info = init.serverInfo || {};
+      served = init.capabilities || {};
+      version = init.protocolVersion;
+    }
+    setStatus("Connected to " + info.name + " " + info.version + " · " + wire + " wire, protocol " + version, "ok");
+    $("sendRaw").disabled = false;
+    if (served.tools) renderTools(await listAll("tools/list", "tools"));
+    if (served.resources) {
+      const resources = await listAll("resources/list", "resources");
+      const templates = await listAll("resources/templates/list", "resourceTemplates").catch(() => []);
+      renderResources(resources, templates);
+    }
+    if (served.prompts) renderPrompts(await listAll("prompts/list", "prompts"));
+    if ((served.extensions || {})["io.modelcontextprotocol/groups"]) renderGroups(await listAll("groups/list", "groups"));
+  } catch (err) {
+    setStatus("Handshake failed: " + (err instanceof Error ? err.message : JSON.stringify(err)), "bad");
+  }
+}
+
+async function listAll(method, key) {
+  let out = [], cursor;
+  do {
+    const res = await request(method, cursor ? { cursor } : {});
+    out = out.concat(res[key] || []);
+    cursor = res.nextCursor;
+  } while (cursor);
+  return out;
+}
+
+// ---- forms from JSON Schema -------------------------------------------------
+
+function field(name, schema, required) {
+  const label = el("label", {}, name, required ? el("span", { class: "req", text: " *" }) : null,
+    schema.description ? " · " + schema.description : "");
+  const type = Array.isArray(schema.type) ? schema.type.find((t) => t !== "null") : schema.type;
+  // SEP-2356 file inputs: a string or an array of strings marked x-mcp-file.
+  const fileDesc = schema["x-mcp-file"] || (type === "array" && (schema.items || {})["x-mcp-file"]);
+  let input;
+  if (fileDesc) {
+    input = el("input", { type: "file", name });
+    if (type === "array") input.multiple = true;
+    if ((fileDesc.accept || []).length) input.accept = fileDesc.accept.join(",");
+    input.dataset.kind = type === "array" ? "files" : "file";
+    const limits = [(fileDesc.accept || []).length ? "accepts " + fileDesc.accept.join(", ") : "any type",
+      fileDesc.maxSize ? "up to " + formatBytes(fileDesc.maxSize) : "no size limit"];
+    label.append(" · " + limits.join(", "));
+  } else if (schema.enum) {
+    input = el("select", { name });
+    if (!required) input.append(el("option", { value: "", text: "" }));
+    for (const v of schema.enum) input.append(el("option", { value: JSON.stringify(v), text: String(v) }));
+    input.dataset.kind = "enum";
+  } else if (type === "boolean") {
+    input = el("select", { name }, el("option", { value: "", text: "" }),
+      el("option", { value: "true", text: "true" }), el("option", { value: "false", text: "false" }));
+    input.dataset.kind = "boolean";
+  } else if (type === "integer" || type === "number") {
+    input = el("input", { type: "number", name, step: type === "integer" ? "1" : "any" });
+    input.dataset.kind = "number";
+  } else if (type === "string") {
+    input = el("input", { type: "text", name });
+    input.dataset.kind = "string";
+  } else {
+    input = el("textarea", { name, placeholder: "JSON" });
+    input.dataset.kind = "json";
+  }
+  const def = schema.default !== undefined ? schema.default : (schema.examples || [])[0];
+  if (def !== undefined) {
+    input.value = input.dataset.kind === "json" || input.dataset.kind === "enum" ? JSON.stringify(def) : String(def);
+  } else if (name === "name" && type === "string") {
+    input.value = "world";
+  }
+  input.dataset.required = required ? "1" : "";
+  return [label, input];
+}
+
+function schemaFields(schema) {
+  const props = (schema && schema.properties) || {};
+  const req = new Set((schema && schema.required) || []);
+  return Object.entries(props).flatMap(([n, s]) => field(n, s, req.has(n)));
+}
+
+function formatBytes(n) {
+  if (n >= 1 << 20) return +(n / (1 << 20)).toFixed(1) + " MB";
+  if (n >= 1 << 10) return +(n / (1 << 10)).toFixed(1) + " KB";
+  return n + " bytes";
+}
+
+// fileToDataURI reads a picked file into the RFC 2397 form the server's
+// core.DecodeDataURI expects, with the file name as a name= parameter.
+function fileToDataURI(file) {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onerror = () => reject(r.error);
+    r.onload = () => {
+      const b64 = String(r.result).split(",")[1] || "";
+      resolve("data:" + (file.type || "application/octet-stream") + ";name=" + encodeURIComponent(file.name) + ";base64," + b64);
+    };
+    r.readAsDataURL(file);
+  });
+}
+
+async function readForm(form) {
+  const args = {};
+  for (const input of form.querySelectorAll("[name]")) {
+    if (input.dataset.kind === "file" || input.dataset.kind === "files") {
+      const files = [...input.files];
+      if (!files.length) continue;
+      const uris = await Promise.all(files.map(fileToDataURI));
+      args[input.name] = input.dataset.kind === "files" ? uris : uris[0];
+      continue;
+    }
+    const v = input.value;
+    if (v === "" && !input.dataset.required) continue;
+    switch (input.dataset.kind) {
+      case "number": args[input.name] = v === "" ? undefined : Number(v); break;
+      case "boolean": args[input.name] = v === "true"; break;
+      case "enum": args[input.name] = JSON.parse(v); break;
+      case "json": args[input.name] = JSON.parse(v); break;
+      default: args[input.name] = v;
+    }
+  }
+  return args;
+}
+
+// ---- results ----------------------------------------------------------------
+
+function showContent(out, result) {
+  out.replaceChildren();
+  out.classList.toggle("error", !!result.isError);
+  for (const c of result.content || []) {
+    if (c.type === "text") out.append(el("div", { class: "text", text: c.text }));
+    else if (c.type === "image") out.append(el("img", { src: "data:" + c.mimeType + ";base64," + c.data, alt: "image" }));
+    else out.append(pre(c));
+  }
+  for (const m of result.messages || []) out.append(pre(m));
+  for (const c of result.contents || []) out.append(c.text !== undefined ? el("div", { class: "text", text: c.text }) : pre(c));
+  if (result.structuredContent) out.append(el("div", { class: "note", text: "structuredContent" }), pre(result.structuredContent));
+  if (!out.childNodes.length) out.append(pre(result));
+}
+
+// handleResult renders whatever a call returned. retry re-sends the original
+// request with extra params, for the SEP-2322 input_required round trip.
+function handleResult(out, result, retry) {
+  if (result.resultType === "input_required") {
+    out.replaceChildren(inputRequestsForm(result.inputRequests, "Send responses", (responses) =>
+      retry({ inputResponses: responses, requestState: result.requestState })));
+    out.className = "result";
+    return;
+  }
+  if (result.resultType === "task" || (result.taskId && result.status)) return trackTask(out, result);
+  showContent(out, result);
+}
+
+async function call(out, method, params) {
+  out.className = "result";
+  out.replaceChildren(el("div", { class: "note", text: "Waiting for the server…" }));
+  const token = "progress-" + nextId;
+  const sink = el("div", { class: "note" });
+  progressSinks.set(token, sink);
+  try {
+    const res = await request(method, { ...params, _meta: { progressToken: token } });
+    handleResult(out, res, (extra) => call(out, method, { ...params, ...extra }));
+    out.prepend(sink);
+  } catch (err) {
+    out.className = "result error";
+    out.replaceChildren(el("div", { class: "text", text: "Error " + err.code + ": " + err.message }),
+      err.data ? pre(err.data) : null);
+  }
+}
+
+function trackTask(out, task) {
+  const state = el("span", { class: "state" });
+  const body = el("div");
+  const cancel = el("button", { class: "ghost", text: "Cancel task" });
+  const box = el("div", { class: "task" }, el("div", {}, "Task ", el("code", { text: task.taskId }), " · ", state), body, cancel);
+  out.replaceChildren(box);
+  out.className = "result";
+  let stopped = false;
+  cancel.onclick = async () => { await request("tasks/cancel", { taskId: task.taskId }).catch(() => {}); };
+  const show = (t) => {
+    state.textContent = t.status + (t.statusMessage ? " · " + t.statusMessage : "");
+    if (t.status === "input_required" && t.inputRequests) {
+      body.replaceChildren(inputRequestsForm(t.inputRequests, "Send to task", async (responses) => {
+        await request("tasks/update", { taskId: task.taskId, inputResponses: responses });
+        poll();
+      }));
+      return false;
+    }
+    if (t.status === "completed") { body.replaceChildren(); const r = el("div"); body.append(r); showContent(r, t.result || {}); }
+    else if (t.status === "failed") body.replaceChildren(el("div", { class: "error-text", text: JSON.stringify(t.error || t) }));
+    else body.replaceChildren();
+    if (TERMINAL.has(t.status)) { cancel.remove(); return false; }
+    return true;
+  };
+  const poll = async () => {
+    if (stopped) return;
+    let t;
+    try { t = await request("tasks/get", { taskId: task.taskId }); }
+    catch (err) { body.replaceChildren(el("div", { class: "error-text", text: JSON.stringify(err) })); return; }
+    if (show(t)) setTimeout(poll, t.pollIntervalMs || task.pollIntervalMs || 1000);
+  };
+  if (show(task)) setTimeout(poll, task.pollIntervalMs || 500);
+}
+
+// cannedReply is a starting point the tester can edit before sending.
+function cannedReply(method, params) {
+  params = params || {};
+  if (method === "elicitation/create") {
+    const content = {};
+    for (const [k, s] of Object.entries((params.requestedSchema || {}).properties || {})) {
+      content[k] = s.default !== undefined ? s.default : s.type === "boolean" ? true
+        : s.type === "number" || s.type === "integer" ? 1 : s.enum ? s.enum[0] : "playground";
+    }
+    return { action: "accept", content };
+  }
+  if (method === "sampling/createMessage") {
+    return { role: "assistant", content: { type: "text", text: "A reply typed in the playground." }, model: "playground", stopReason: "endTurn" };
+  }
+  if (method === "roots/list") return { roots: [{ uri: "file:///playground", name: "playground" }] };
+  return {};
+}
+
+function replyEditor(method, params) {
+  const area = el("textarea", { rows: 6 });
+  area.value = JSON.stringify(cannedReply(method, params), null, 2);
+  const box = el("div", { class: "ask" }, el("h3", { text: "The server asks: " + method }));
+  if (params && (params.message || params.prompt)) box.append(el("div", { text: params.message || params.prompt }));
+  box.append(el("details", {}, el("summary", { class: "note", text: "request params" }), pre(params || {})),
+    el("label", { text: "Your reply (edit before sending)" }), area);
+  return { box, read: () => JSON.parse(area.value) };
+}
+
+function inputRequestsForm(inputRequests, label, submit) {
+  const wrap = el("div");
+  const editors = Object.entries(inputRequests || {}).map(([key, req]) => {
+    const ed = replyEditor(req.method, req.params);
+    ed.box.querySelector("h3").textContent += " (" + key + ")";
+    wrap.append(ed.box);
+    return [key, ed];
+  });
+  const btn = el("button", { text: label });
+  btn.onclick = () => {
+    try { submit(Object.fromEntries(editors.map(([k, ed]) => [k, ed.read()]))); }
+    catch (err) { alert("A reply is not valid JSON: " + err.message); }
+  };
+  wrap.append(btn);
+  return wrap;
+}
+
+function askFromServer(msg) {
+  const ed = replyEditor(msg.method, msg.params);
+  const send = el("button", { text: "Reply" });
+  const refuse = el("button", { class: "ghost", text: "Reply with an error" });
+  send.onclick = () => {
+    try { post({ jsonrpc: "2.0", id: msg.id, result: ed.read() }); ed.box.remove(); }
+    catch (err) { alert("Not valid JSON: " + err.message); }
+  };
+  refuse.onclick = () => { post({ jsonrpc: "2.0", id: msg.id, error: { code: -1, message: "Refused in the playground" } }); ed.box.remove(); };
+  ed.box.append(send, " ", refuse);
+  asksEl.append(ed.box);
+}
+
+// ---- lists ------------------------------------------------------------------
+
+function item(name, desc, build) {
+  const d = el("details", { class: "item" },
+    el("summary", {}, el("b", { text: name }), desc ? el("span", { class: "desc", text: desc }) : null));
+  let built = false;
+  d.ontoggle = () => { if (d.open && !built) { built = true; d.append(build()); } };
+  return d;
+}
+
+function toolItem(tool) {
+  const d = item(tool.name, tool.description, () => {
+    const form = el("form", {}, ...schemaFields(tool.inputSchema), el("button", { text: "Call " + tool.name }));
+    const out = el("div", { class: "result" });
+    form.onsubmit = async (e) => {
+      e.preventDefault();
+      let args;
+      try { args = await readForm(form); } catch (err) { out.textContent = "Bad input: " + err.message; return; }
+      call(out, "tools/call", { name: tool.name, arguments: args });
+    };
+    return el("div", { class: "body" }, form, out);
+  });
+  d.classList.add("tool");
+  d.dataset.tool = tool.name;
+  return d;
+}
+
+function renderTools(tools) {
+  $("n-tools").textContent = "(" + tools.length + ")";
+  const root = $("tools");
+  root.replaceChildren(...tools.map(toolItem));
+  if (tools.length <= 12) for (const d of root.children) d.open = true;
+}
+
+function groupItem(g) {
+  const d = item(g.title || g.name, g.description, () => {
+    const body = el("div", { class: "body" }, el("div", { class: "note", text: "Loading groups/get…" }));
+    request("groups/get", { name: g.name }).then((res) => {
+      body.replaceChildren();
+      if (res.instructions) body.append(el("div", { class: "note", text: res.instructions }));
+      if ((res.groups || []).length) body.append(el("div", { class: "note", text: "Groups inside " + g.name + ":" }));
+      for (const sub of res.groups || []) body.append(groupItem(sub));
+      for (const t of res.tools || []) body.append(toolItem(t));
+      for (const r of res.resources || []) body.append(el("div", { class: "note", text: "resource: " + r.uri }));
+      for (const p of res.prompts || []) body.append(el("div", { class: "note", text: "prompt: " + p.name }));
+    }, (err) => body.replaceChildren(el("div", { class: "error-text", text: JSON.stringify(err) })));
+    return body;
+  });
+  d.classList.add("group");
+  d.dataset.group = g.name;
+  return d;
+}
+
+function renderGroups(groups) {
+  $("tab-groups").hidden = false;
+  const declared = ((JSON.parse($("caps").value).extensions) || {})["io.modelcontextprotocol/groups"];
+  $("groups-note").textContent = declared
+    ? "This client declared the groups extension, so the server lists grouped tools here instead of in the Tools tab. Remove it under Client capabilities and reconnect to compare."
+    : "This client didn't declare the groups extension, so the Tools tab lists every tool. The groups are still here to browse.";
+  $("n-groups").textContent = "(" + groups.length + ")";
+  $("groups").replaceChildren(...groups.map(groupItem));
+}
+
+$("filter").oninput = () => {
+  const q = $("filter").value.toLowerCase();
+  for (const d of $("tools").children) d.hidden = q !== "" && !d.textContent.toLowerCase().includes(q);
+};
+
+function renderResources(resources, templates) {
+  $("n-resources").textContent = "(" + (resources.length + templates.length) + ")";
+  const items = resources.map((r) => item(r.uri, r.name + (r.description ? " · " + r.description : ""), () => {
+    const out = el("div", { class: "result" });
+    return el("div", { class: "body" }, el("button", { text: "Read", onclick: () => call(out, "resources/read", { uri: r.uri }) }), out);
+  }));
+  for (const t of templates) items.push(item(t.uriTemplate, "template · " + (t.name || ""), () => {
+    const uri = el("input", { type: "text", value: t.uriTemplate });
+    const out = el("div", { class: "result" });
+    return el("div", { class: "body" }, el("label", { text: "URI (fill in the template)" }), uri,
+      el("button", { text: "Read", onclick: () => call(out, "resources/read", { uri: uri.value }) }), out);
+  }));
+  $("resources").replaceChildren(...items);
+}
+
+// completeInto asks the server for argument completions as the tester types
+// and offers them through a datalist (completion/complete, ref/prompt).
+function completeInto(input, promptName) {
+  const list = el("datalist", { id: "complete-" + promptName + "-" + input.name });
+  input.setAttribute("list", list.id);
+  let timer;
+  input.addEventListener("input", () => {
+    clearTimeout(timer);
+    timer = setTimeout(async () => {
+      try {
+        const res = await request("completion/complete", {
+          ref: { type: "ref/prompt", name: promptName },
+          argument: { name: input.name, value: input.value },
+        });
+        list.replaceChildren(...((res.completion || {}).values || []).map((v) => el("option", { value: v })));
+      } catch {}
+    }, 250);
+  });
+  return list;
+}
+
+function renderPrompts(prompts) {
+  $("n-prompts").textContent = "(" + prompts.length + ")";
+  $("prompts").replaceChildren(...prompts.map((p) => item(p.name, p.description, () => {
+    const fields = (p.arguments || []).flatMap((a) => field(a.name, { type: "string", description: a.description }, a.required));
+    const extras = served.completions
+      ? fields.filter((f) => f.tagName === "INPUT").map((input) => completeInto(input, p.name))
+      : [];
+    const form = el("form", {}, ...fields, ...extras, el("button", { text: "Get " + p.name }));
+    const out = el("div", { class: "result" });
+    form.onsubmit = async (e) => {
+      e.preventDefault();
+      call(out, "prompts/get", { name: p.name, arguments: await readForm(form) });
+    };
+    return el("div", { class: "body" }, served.completions ? el("div", { class: "note", text: "Start typing an argument to see the server's completions." }) : null, form, out);
+  })));
+}
+
+// ---- wiring -----------------------------------------------------------------
+
+for (const b of document.querySelectorAll(".tabs button")) {
+  b.onclick = () => {
+    for (const x of document.querySelectorAll(".tabs button")) x.classList.toggle("on", x === b);
+    for (const p of document.querySelectorAll(".pane")) p.hidden = p.id !== "pane-" + b.dataset.pane;
+  };
+}
+$("reconnect").onclick = connect;
+for (const b of document.querySelectorAll("#wires button")) {
+  b.onclick = () => { if (b.dataset.wire !== wire) { wire = b.dataset.wire; connect(); } };
+}
+$("clearLog").onclick = () => { logEl.replaceChildren(); lastOpen = null; };
+$("expandAll").onclick = () => setExpandAll(!expandAll);
+// A raw request with no id takes the page's next one, so it can't collide
+// with a request the page has in flight. A typed id goes out as typed.
+$("sendRaw").onclick = () => {
+  let text = $("raw").value, msg;
+  try { msg = JSON.parse(text); } catch (err) { alert("Not valid JSON: " + err.message); return; }
+  const isRequest = msg && typeof msg === "object" && !Array.isArray(msg) &&
+    typeof msg.method === "string" && !msg.method.startsWith("notifications/");
+  if (isRequest && !("id" in msg)) text = JSON.stringify({ jsonrpc: "2.0", id: nextId++, ...msg });
+  log("out", text);
+  worker.postMessage(text);
+};
+// The manifest says which wires this example offers. The first one is the
+// default, and ?wire= picks another.
+fetch("playground.json").then((r) => (r.ok ? r.json() : {})).catch(() => ({})).then((m) => {
+  if (Array.isArray(m.wires) && m.wires.length) wires = m.wires;
+  if (m.title) {
+    $("title").textContent = m.title;
+    document.title = m.title + " · Playground";
+  }
+  if (Array.isArray(m.about) && m.about.length) {
+    $("about").replaceChildren(...m.about.map((t) => el("li", { text: t })));
+    $("about").hidden = false;
+  }
+  const asked = new URLSearchParams(location.search).get("wire");
+  wire = wires.includes(asked) ? asked : wires[0];
+  for (const b of document.querySelectorAll("#wires button")) b.hidden = !wires.includes(b.dataset.wire);
+  $("wires").hidden = wires.length < 2;
+  connect();
+});
+</script>
+</body>
+</html>

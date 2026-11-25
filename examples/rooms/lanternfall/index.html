@@ -1,0 +1,755 @@
+<!DOCTYPE html>
+
+
+
+
+
+
+
+
+
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    
+    <script>
+      try {
+        const t = localStorage.getItem('theme');
+        if (t === 'dark' || t === 'light') document.documentElement.dataset.theme = t;
+      } catch {}
+    </script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="An AI game master inside your own web app: an agent drives a page the user opened, through the room bridge. Experimental.">
+    <title>Rooms — Lanternfall · mcpkit</title>
+
+    <link rel="stylesheet" href="/mcpkit/static/css/main.css">
+    <style>.bg {  }
+.chroma {  }
+.chroma .err { color: #a61717; background-color: #e3d2d2 }
+.chroma .lntd { vertical-align: top; padding: 0; margin: 0; border: 0; }
+.chroma .lntable { border-spacing: 0; padding: 0; margin: 0; border: 0; }
+.chroma .hl { background-color: #e5e5e5 }
+.chroma .lnt { white-space: pre; user-select: none; margin-right: 0.4em; padding: 0 0.4em 0 0.4em;color: #7f7f7f }
+.chroma .ln { white-space: pre; user-select: none; margin-right: 0.4em; padding: 0 0.4em 0 0.4em;color: #7f7f7f }
+.chroma .line { display: flex; }
+.chroma .k { color: #000000; font-weight: bold }
+.chroma .kc { color: #000000; font-weight: bold }
+.chroma .kd { color: #000000; font-weight: bold }
+.chroma .kn { color: #000000; font-weight: bold }
+.chroma .kp { color: #000000; font-weight: bold }
+.chroma .kr { color: #000000; font-weight: bold }
+.chroma .kt { color: #445588; font-weight: bold }
+.chroma .na { color: #008080 }
+.chroma .nb { color: #0086b3 }
+.chroma .bp { color: #999999 }
+.chroma .nc { color: #445588; font-weight: bold }
+.chroma .no { color: #008080 }
+.chroma .nd { color: #3c5d5d; font-weight: bold }
+.chroma .ni { color: #800080 }
+.chroma .ne { color: #990000; font-weight: bold }
+.chroma .nf { color: #990000; font-weight: bold }
+.chroma .nl { color: #990000; font-weight: bold }
+.chroma .nn { color: #555555 }
+.chroma .nt { color: #000080 }
+.chroma .nv { color: #008080 }
+.chroma .vc { color: #008080 }
+.chroma .vg { color: #008080 }
+.chroma .vi { color: #008080 }
+.chroma .s { color: #dd1144 }
+.chroma .sa { color: #dd1144 }
+.chroma .sb { color: #dd1144 }
+.chroma .sc { color: #dd1144 }
+.chroma .dl { color: #dd1144 }
+.chroma .sd { color: #dd1144 }
+.chroma .s2 { color: #dd1144 }
+.chroma .se { color: #dd1144 }
+.chroma .sh { color: #dd1144 }
+.chroma .si { color: #dd1144 }
+.chroma .sx { color: #dd1144 }
+.chroma .sr { color: #009926 }
+.chroma .s1 { color: #dd1144 }
+.chroma .ss { color: #990073 }
+.chroma .m { color: #009999 }
+.chroma .mb { color: #009999 }
+.chroma .mf { color: #009999 }
+.chroma .mh { color: #009999 }
+.chroma .mi { color: #009999 }
+.chroma .il { color: #009999 }
+.chroma .mo { color: #009999 }
+.chroma .o { color: #000000; font-weight: bold }
+.chroma .ow { color: #000000; font-weight: bold }
+.chroma .c { color: #999988; font-style: italic }
+.chroma .ch { color: #999988; font-style: italic }
+.chroma .cm { color: #999988; font-style: italic }
+.chroma .c1 { color: #999988; font-style: italic }
+.chroma .cs { color: #999999; font-weight: bold; font-style: italic }
+.chroma .cp { color: #999999; font-weight: bold; font-style: italic }
+.chroma .cpf { color: #999999; font-weight: bold; font-style: italic }
+.chroma .gd { color: #000000; background-color: #ffdddd }
+.chroma .ge { color: #000000; font-style: italic }
+.chroma .gr { color: #aa0000 }
+.chroma .gh { color: #999999 }
+.chroma .gi { color: #000000; background-color: #ddffdd }
+.chroma .go { color: #888888 }
+.chroma .gp { color: #555555 }
+.chroma .gs { font-weight: bold }
+.chroma .gu { color: #aaaaaa }
+.chroma .gt { color: #aa0000 }
+.chroma .gl { text-decoration: underline }
+.chroma .w { color: #bbbbbb }
+@media (prefers-color-scheme: dark) {
+:root:not([data-theme]) .bg { color: #f8f8f2;  }
+:root:not([data-theme]) .chroma { color: #f8f8f2;  }
+:root:not([data-theme]) .chroma .err { color: #960050; background-color: #1e0010 }
+:root:not([data-theme]) .chroma .lntd { vertical-align: top; padding: 0; margin: 0; border: 0; }
+:root:not([data-theme]) .chroma .lntable { border-spacing: 0; padding: 0; margin: 0; border: 0; }
+:root:not([data-theme]) .chroma .hl { background-color: #3c3d38 }
+:root:not([data-theme]) .chroma .lnt { white-space: pre; user-select: none; margin-right: 0.4em; padding: 0 0.4em 0 0.4em;color: #7f7f7f }
+:root:not([data-theme]) .chroma .ln { white-space: pre; user-select: none; margin-right: 0.4em; padding: 0 0.4em 0 0.4em;color: #7f7f7f }
+:root:not([data-theme]) .chroma .line { display: flex; }
+:root:not([data-theme]) .chroma .k { color: #66d9ef }
+:root:not([data-theme]) .chroma .kc { color: #66d9ef }
+:root:not([data-theme]) .chroma .kd { color: #66d9ef }
+:root:not([data-theme]) .chroma .kn { color: #f92672 }
+:root:not([data-theme]) .chroma .kp { color: #66d9ef }
+:root:not([data-theme]) .chroma .kr { color: #66d9ef }
+:root:not([data-theme]) .chroma .kt { color: #66d9ef }
+:root:not([data-theme]) .chroma .na { color: #a6e22e }
+:root:not([data-theme]) .chroma .nc { color: #a6e22e }
+:root:not([data-theme]) .chroma .no { color: #66d9ef }
+:root:not([data-theme]) .chroma .nd { color: #a6e22e }
+:root:not([data-theme]) .chroma .ne { color: #a6e22e }
+:root:not([data-theme]) .chroma .nf { color: #a6e22e }
+:root:not([data-theme]) .chroma .nx { color: #a6e22e }
+:root:not([data-theme]) .chroma .nt { color: #f92672 }
+:root:not([data-theme]) .chroma .l { color: #ae81ff }
+:root:not([data-theme]) .chroma .ld { color: #e6db74 }
+:root:not([data-theme]) .chroma .s { color: #e6db74 }
+:root:not([data-theme]) .chroma .sa { color: #e6db74 }
+:root:not([data-theme]) .chroma .sb { color: #e6db74 }
+:root:not([data-theme]) .chroma .sc { color: #e6db74 }
+:root:not([data-theme]) .chroma .dl { color: #e6db74 }
+:root:not([data-theme]) .chroma .sd { color: #e6db74 }
+:root:not([data-theme]) .chroma .s2 { color: #e6db74 }
+:root:not([data-theme]) .chroma .se { color: #ae81ff }
+:root:not([data-theme]) .chroma .sh { color: #e6db74 }
+:root:not([data-theme]) .chroma .si { color: #e6db74 }
+:root:not([data-theme]) .chroma .sx { color: #e6db74 }
+:root:not([data-theme]) .chroma .sr { color: #e6db74 }
+:root:not([data-theme]) .chroma .s1 { color: #e6db74 }
+:root:not([data-theme]) .chroma .ss { color: #e6db74 }
+:root:not([data-theme]) .chroma .m { color: #ae81ff }
+:root:not([data-theme]) .chroma .mb { color: #ae81ff }
+:root:not([data-theme]) .chroma .mf { color: #ae81ff }
+:root:not([data-theme]) .chroma .mh { color: #ae81ff }
+:root:not([data-theme]) .chroma .mi { color: #ae81ff }
+:root:not([data-theme]) .chroma .il { color: #ae81ff }
+:root:not([data-theme]) .chroma .mo { color: #ae81ff }
+:root:not([data-theme]) .chroma .o { color: #f92672 }
+:root:not([data-theme]) .chroma .ow { color: #f92672 }
+:root:not([data-theme]) .chroma .c { color: #75715e }
+:root:not([data-theme]) .chroma .ch { color: #75715e }
+:root:not([data-theme]) .chroma .cm { color: #75715e }
+:root:not([data-theme]) .chroma .c1 { color: #75715e }
+:root:not([data-theme]) .chroma .cs { color: #75715e }
+:root:not([data-theme]) .chroma .cp { color: #75715e }
+:root:not([data-theme]) .chroma .cpf { color: #75715e }
+:root:not([data-theme]) .chroma .gd { color: #f92672 }
+:root:not([data-theme]) .chroma .ge { font-style: italic }
+:root:not([data-theme]) .chroma .gi { color: #a6e22e }
+:root:not([data-theme]) .chroma .gs { font-weight: bold }
+:root:not([data-theme]) .chroma .gu { color: #75715e }
+}
+:root[data-theme="dark"] .bg { color: #f8f8f2;  }
+:root[data-theme="dark"] .chroma { color: #f8f8f2;  }
+:root[data-theme="dark"] .chroma .err { color: #960050; background-color: #1e0010 }
+:root[data-theme="dark"] .chroma .lntd { vertical-align: top; padding: 0; margin: 0; border: 0; }
+:root[data-theme="dark"] .chroma .lntable { border-spacing: 0; padding: 0; margin: 0; border: 0; }
+:root[data-theme="dark"] .chroma .hl { background-color: #3c3d38 }
+:root[data-theme="dark"] .chroma .lnt { white-space: pre; user-select: none; margin-right: 0.4em; padding: 0 0.4em 0 0.4em;color: #7f7f7f }
+:root[data-theme="dark"] .chroma .ln { white-space: pre; user-select: none; margin-right: 0.4em; padding: 0 0.4em 0 0.4em;color: #7f7f7f }
+:root[data-theme="dark"] .chroma .line { display: flex; }
+:root[data-theme="dark"] .chroma .k { color: #66d9ef }
+:root[data-theme="dark"] .chroma .kc { color: #66d9ef }
+:root[data-theme="dark"] .chroma .kd { color: #66d9ef }
+:root[data-theme="dark"] .chroma .kn { color: #f92672 }
+:root[data-theme="dark"] .chroma .kp { color: #66d9ef }
+:root[data-theme="dark"] .chroma .kr { color: #66d9ef }
+:root[data-theme="dark"] .chroma .kt { color: #66d9ef }
+:root[data-theme="dark"] .chroma .na { color: #a6e22e }
+:root[data-theme="dark"] .chroma .nc { color: #a6e22e }
+:root[data-theme="dark"] .chroma .no { color: #66d9ef }
+:root[data-theme="dark"] .chroma .nd { color: #a6e22e }
+:root[data-theme="dark"] .chroma .ne { color: #a6e22e }
+:root[data-theme="dark"] .chroma .nf { color: #a6e22e }
+:root[data-theme="dark"] .chroma .nx { color: #a6e22e }
+:root[data-theme="dark"] .chroma .nt { color: #f92672 }
+:root[data-theme="dark"] .chroma .l { color: #ae81ff }
+:root[data-theme="dark"] .chroma .ld { color: #e6db74 }
+:root[data-theme="dark"] .chroma .s { color: #e6db74 }
+:root[data-theme="dark"] .chroma .sa { color: #e6db74 }
+:root[data-theme="dark"] .chroma .sb { color: #e6db74 }
+:root[data-theme="dark"] .chroma .sc { color: #e6db74 }
+:root[data-theme="dark"] .chroma .dl { color: #e6db74 }
+:root[data-theme="dark"] .chroma .sd { color: #e6db74 }
+:root[data-theme="dark"] .chroma .s2 { color: #e6db74 }
+:root[data-theme="dark"] .chroma .se { color: #ae81ff }
+:root[data-theme="dark"] .chroma .sh { color: #e6db74 }
+:root[data-theme="dark"] .chroma .si { color: #e6db74 }
+:root[data-theme="dark"] .chroma .sx { color: #e6db74 }
+:root[data-theme="dark"] .chroma .sr { color: #e6db74 }
+:root[data-theme="dark"] .chroma .s1 { color: #e6db74 }
+:root[data-theme="dark"] .chroma .ss { color: #e6db74 }
+:root[data-theme="dark"] .chroma .m { color: #ae81ff }
+:root[data-theme="dark"] .chroma .mb { color: #ae81ff }
+:root[data-theme="dark"] .chroma .mf { color: #ae81ff }
+:root[data-theme="dark"] .chroma .mh { color: #ae81ff }
+:root[data-theme="dark"] .chroma .mi { color: #ae81ff }
+:root[data-theme="dark"] .chroma .il { color: #ae81ff }
+:root[data-theme="dark"] .chroma .mo { color: #ae81ff }
+:root[data-theme="dark"] .chroma .o { color: #f92672 }
+:root[data-theme="dark"] .chroma .ow { color: #f92672 }
+:root[data-theme="dark"] .chroma .c { color: #75715e }
+:root[data-theme="dark"] .chroma .ch { color: #75715e }
+:root[data-theme="dark"] .chroma .cm { color: #75715e }
+:root[data-theme="dark"] .chroma .c1 { color: #75715e }
+:root[data-theme="dark"] .chroma .cs { color: #75715e }
+:root[data-theme="dark"] .chroma .cp { color: #75715e }
+:root[data-theme="dark"] .chroma .cpf { color: #75715e }
+:root[data-theme="dark"] .chroma .gd { color: #f92672 }
+:root[data-theme="dark"] .chroma .ge { font-style: italic }
+:root[data-theme="dark"] .chroma .gi { color: #a6e22e }
+:root[data-theme="dark"] .chroma .gs { font-weight: bold }
+:root[data-theme="dark"] .chroma .gu { color: #75715e }
+</style>
+    <link rel="icon" href="data:,">
+</head>
+<body>
+    
+<header class="site-header">
+    <div class="site-header-inner">
+        
+        <a class="brand" href="/mcpkit/">
+            <span class="brand-name">mcpkit</span>
+        </a>
+        <nav class="top-nav">
+            
+            
+            <a class="top-nav-link" href="/mcpkit/get-started/">Get Started</a>
+            
+            <a class="top-nav-link" href="/mcpkit/try/">Try it</a>
+            
+            <a class="top-nav-link" href="/mcpkit/guides/transports/">Guides</a>
+            
+            <a class="top-nav-link" href="/mcpkit/examples/">Examples</a>
+            
+            <a class="top-nav-link" href="/mcpkit/concepts/">Concepts</a>
+            
+            <a class="top-nav-link" href="/mcpkit/conformance/">Conformance</a>
+            
+            <a class="top-nav-link" href="/mcpkit/packages/core/">Packages</a>
+            
+            <a class="top-nav-link" href="/mcpkit/design/apps/">Reference</a>
+            
+            <a class="top-nav-link external" href="https://github.com/panyam/mcpkit">GitHub</a>
+            <button type="button" class="theme-toggle" aria-label="Toggle dark mode" title="Toggle dark mode">
+                <span class="theme-toggle-light">☀</span>
+                <span class="theme-toggle-dark">☾</span>
+            </button>
+        </nav>
+    </div>
+</header>
+
+
+    <div class="page">
+        
+<aside class="sidebar">
+    
+    
+    <nav class="sidebar-nav">
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/get-started/">Get Started</a>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/try/">Try it</a>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/guides/transports/">Guides</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/guides/transports/">Transports</a></li>
+                
+                <li><a href="/mcpkit/guides/auth/">Auth</a></li>
+                
+                <li><a href="/mcpkit/guides/tasks/">Long-running tasks</a></li>
+                
+                <li><a href="/mcpkit/guides/apps/">MCP Apps</a></li>
+                
+                <li><a href="/mcpkit/guides/prompts/">Prompts</a></li>
+                
+                <li><a href="/mcpkit/guides/elicitation/">Elicitation</a></li>
+                
+                <li><a href="/mcpkit/guides/completions/">Argument completion</a></li>
+                
+                <li><a href="/mcpkit/guides/observability/">Observability</a></li>
+                
+                <li><a href="/mcpkit/guides/mrtr/">MRTR input-gathering</a></li>
+                
+                <li><a href="/mcpkit/guides/deployment/">Deployment</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/examples/">Examples</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/examples/">All examples</a></li>
+                
+                <li><a href="/mcpkit/examples/auth/">Auth</a></li>
+                
+                <li><a href="/mcpkit/examples/tasks-v2/">Tasks v2</a></li>
+                
+                <li><a href="/mcpkit/examples/mrtr/">MRTR</a></li>
+                
+                <li><a href="/mcpkit/examples/apps/">MCP Apps</a></li>
+                
+                <li><a href="/mcpkit/examples/events/discord/">Events</a></li>
+                
+                <li><a href="/mcpkit/examples/skills-core/">Skills</a></li>
+                
+                <li><a href="/mcpkit/examples/disclosure/">Progressive disclosure</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/concepts/">Concepts</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/concepts/">Overview</a></li>
+                
+                <li><a href="/mcpkit/concepts/bringup/">Bring-up</a></li>
+                
+                <li><a href="/mcpkit/concepts/transport-mechanics/">Transport mechanics</a></li>
+                
+                <li><a href="/mcpkit/concepts/notifications/">Notifications</a></li>
+                
+                <li><a href="/mcpkit/concepts/request-anatomy/">Anatomy of a request</a></li>
+                
+                <li><a href="/mcpkit/concepts/extension-mechanisms/">Extension mechanisms</a></li>
+                
+                <li><a href="/mcpkit/concepts/reverse-call/">Reverse calls</a></li>
+                
+                <li><a href="/mcpkit/concepts/mrtr/">MRTR internals</a></li>
+                
+                <li><a href="/mcpkit/concepts/tracing/">Tracing</a></li>
+                
+                <li><a href="/mcpkit/concepts/events/">Events</a></li>
+                
+                <li><a href="/mcpkit/concepts/progressive-disclosure/">Progressive disclosure</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/conformance/">Conformance</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/conformance/">Coverage matrix</a></li>
+                
+                <li><a href="/mcpkit/conformance/upstream-audit/">Upstream audit</a></li>
+                
+                <li><a href="/mcpkit/conformance/fixture-audit/">Fixture audit</a></li>
+                
+                <li><a href="/mcpkit/conformance/external-checker/">External checker</a></li>
+                
+                <li><a href="/mcpkit/conformance/apps/compat/">Apps compat</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/packages/core/">Packages</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/packages/core/">core</a></li>
+                
+                <li><a href="/mcpkit/packages/server/">server</a></li>
+                
+                <li><a href="/mcpkit/packages/client/">client</a></li>
+                
+                <li><a href="/mcpkit/packages/ext-auth/">ext/auth</a></li>
+                
+                <li><a href="/mcpkit/packages/ext-tasks/">ext/tasks</a></li>
+                
+                <li><a href="/mcpkit/packages/ext-ui/">ext/ui</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/design/apps/">Reference</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/design/apps/">MCP Apps — design</a></li>
+                
+                <li><a href="/mcpkit/design/apps-host/">MCP Apps — host model</a></li>
+                
+                <li><a href="/mcpkit/design/apps-onboarding/">MCP Apps — onboarding</a></li>
+                
+                <li><a href="/mcpkit/design/tasks-v2-migration/">Tasks v2 migration</a></li>
+                
+                <li><a href="/mcpkit/design/sep-2567-handles/">SEP-2567 handles</a></li>
+                
+                <li><a href="/mcpkit/design/sep-2577-deprecations/">SEP-2577 deprecations</a></li>
+                
+                <li><a href="/mcpkit/design/list-ttl-migration/">List TTL migration</a></li>
+                
+            </ul>
+            
+        </div>
+        
+    </nav>
+</aside>
+
+        <main class="main">
+            
+<article class="content">
+    
+    <header class="content-header">
+        <h1>Rooms — Lanternfall</h1>
+        
+        <p class="lead">An AI game master inside your own web app: an agent drives a page the user opened, through the room bridge. Experimental.</p>
+        
+        
+        <p class="source-link">
+            Source: <a href="https://github.com/panyam/mcpkit/blob/main/examples/rooms/lanternfall/README.md"><code>examples/rooms/lanternfall/README.md</code></a>
+        </p>
+        
+    </header>
+    
+
+    <div class="content-body">
+        
+<h1 id="lanternfall-an-ai-game-master-inside-your-own-web-app">Lanternfall: an AI game master inside your own web app <a class="anchor" href="#lanternfall-an-ai-game-master-inside-your-own-web-app">¶</a></h1>
+<p>A player opens a small map game in their own browser tab. They ask a question in a box on the page.<br />
+An AI agent hears the question, looks at the player&rsquo;s map, writes new details onto it, hides an item<br />
+for them to find, and answers in the page&rsquo;s story log. The page is an ordinary web app. No chat host<br />
+renders it, and the agent can be any MCP client:</p>
+<ul>
+<li>Claude Code, whose system prompt stays as it is. It learns the game from the server&rsquo;s instructions<br />
+and the page&rsquo;s tool descriptions.</li>
+<li>A custom agent on an agent SDK. <a href="https://github.com/panyam/mcpkit/blob/main/examples/rooms/lanternfall/web/src/agent/gm.ts"><code>web/src/agent/gm.ts</code></a> is one on LangGraph.js,<br />
+with a game master&rsquo;s system prompt of its own.</li>
+</ul>
+<p><img src="https://raw.githubusercontent.com/panyam/mcpkit/main/examples/rooms/lanternfall/screenshots/lanternfall.png" alt="Lanternfall: the map, the story log, and the game master&rsquo;s narration" /></p>
+<p>The page offers the agent its tools, and tells it what the player does through declared events. A<br />
+room bridge connects the two: the page joins a relay room for its game, and the agent reaches the<br />
+page through MCP. MCP Apps covers a different case, where a host renders an app inside a chat after<br />
+a tool call. Here the user opened the page themselves, and the agent comes to it.</p>
+<h2 id="try-it">Try it <a class="anchor" href="#try-it">¶</a></h2>
+<pre tabindex="0" class="chroma"><code><span class="line"><span class="cl">go run .                                   <span class="c1"># or: make run</span>
+</span></span></code></pre><p>Open <a href="http://localhost:8080/signin?as=alice&amp;game=demo">http://localhost:8080/signin?as=alice&amp;game=demo</a>. Walk to a neighbouring place by clicking it.<br />
+Click where you stand to search it. Rest the pointer on a place to wonder about it. Then turn on<br />
+<strong>Let my AI game master see and change this map</strong> and bring in an agent.</p>
+<p><strong>Claude Code</strong>, through the <code>rooms-channel</code> front end, which turns the player&rsquo;s events into channel<br />
+messages. Install it from this tree, so it subscribes to the page&rsquo;s declared events:</p>
+<pre tabindex="0" class="chroma"><code><span class="line"><span class="cl"><span class="o">(</span><span class="nb">cd</span> ../../../experimental/integrations/roomsevents <span class="o">&amp;&amp;</span> go install ./cmd/rooms-channel<span class="o">)</span>
+</span></span></code></pre><pre tabindex="0" class="chroma"><code><span class="line"><span class="cl"><span class="p">{</span><span class="nt">&#34;mcpServers&#34;</span><span class="p">:</span> <span class="p">{</span><span class="nt">&#34;rooms&#34;</span><span class="p">:</span> <span class="p">{</span><span class="nt">&#34;command&#34;</span><span class="p">:</span> <span class="s2">&#34;rooms-channel&#34;</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">  <span class="nt">&#34;args&#34;</span><span class="p">:</span> <span class="p">[</span><span class="s2">&#34;-bridge&#34;</span><span class="p">,</span> <span class="s2">&#34;http://localhost:8080/mcp&#34;</span><span class="p">],</span>
+</span></span><span class="line"><span class="cl">  <span class="nt">&#34;env&#34;</span><span class="p">:</span> <span class="p">{</span><span class="nt">&#34;ROOMS_BRIDGE_TOKEN&#34;</span><span class="p">:</span> <span class="s2">&#34;player:alice&#34;</span><span class="p">}}}}</span>
+</span></span></code></pre><pre tabindex="0" class="chroma"><code><span class="line"><span class="cl">claude --dangerously-load-development-channels server:rooms
+</span></span></code></pre><p>Tell it &ldquo;Be the game master of lanternfall:demo&rdquo;, then ask something in the page&rsquo;s box. It arrives<br />
+in Claude Code as a <code>room.ask</code> message, and the answer appears on your map.</p>
+<p><strong>A LangGraph.js agent</strong>, with <code>ANTHROPIC_API_KEY</code> set:</p>
+<pre tabindex="0" class="chroma"><code><span class="line"><span class="cl">make gm                                    <span class="c1"># PLAYER=alice GAME=demo by default</span>
+</span></span></code></pre><p>It defaults to <code>claude-opus-5-5</code> and reads <code>LANTERNFALL_MODEL</code> to use another. It reads each event<br />
+type&rsquo;s context hint from <code>events/list</code> and follows it, printing what it decided:</p>
+<pre tabindex="0" class="chroma"><code><span class="line"><span class="cl">[gm] context hints: item.found=high, place.examined=low, player.moved=medium
+</span></span><span class="line"><span class="cl">[gm] player.moved is medium priority: added to the context
+</span></span><span class="line"><span class="cl">[gm] item.found is high priority: reacting now
+</span></span><span class="line"><span class="cl">[gm] answered with lanternfall_look, lanternfall_reveal, lanternfall_narrate
+</span></span><span class="line"><span class="cl">[gm] compacted 13 messages (~644 tokens) into a summary
+</span></span><span class="line"><span class="cl">[gm] place.examined is low priority: added to the context, replacing an unseen older one
+</span></span><span class="line"><span class="cl">[gm] alice asks: What does the ledger page say?
+</span></span></code></pre><p>A high-priority event gets a reaction at once, unasked. A <code>last-wins</code> aggregate keeps only the newest<br />
+event of its kind, and <code>session</code> retention keeps the latest event of its kind through compaction. A<br />
+question asked from the page is always answered. The context panel below shows all of it.</p>
+<p>To watch events drive it, turn the switch on and walk Gate → Market → Clocktower → Old Archive, then<br />
+click the Archive to search it. The torn ledger page is high priority, so the game master narrates<br />
+without being asked. Then ask it what the page says.</p>
+<p><strong>A second player.</strong> Open <a href="http://localhost:8080/signin?as=bob&amp;game=demo">http://localhost:8080/signin?as=bob&amp;game=demo</a> in another browser profile.<br />
+Bob&rsquo;s tab is his own map. Alice&rsquo;s agent cannot drive it unless Bob accepts that agent&rsquo;s code in the<br />
+&ldquo;Another player&rsquo;s agent code&rdquo; box.</p>
+<p>The bearer token <code>player:&lt;name&gt;</code> acts for <code>&lt;name&gt;</code>. That is the demo&rsquo;s whole auth, so it is for<br />
+localhost only.</p>
+<h2 id="who-decides-what">Who decides what <a class="anchor" href="#who-decides-what">¶</a></h2>
+<p>Three layers, and only one of them is the model:</p>
+<ul>
+<li><strong>The page</strong> is ordinary JavaScript. It draws the map, owns the twelve places and their<br />
+descriptions, walks the player between neighbours, finds an item when the player searches where<br />
+one is hidden, and decides when to emit an event. Each tool&rsquo;s handler says what that tool does to<br />
+the screen.</li>
+<li><strong>Claude</strong> decides everything the game master does: whether to call a tool at all, which one,<br />
+and with what. Every orange line in the story, every italic detail on a tile, and every item<br />
+hidden after the start come from it.</li>
+<li><strong>The harness</strong> (<code>web/src/agent/gm.ts</code>, or Claude Code) decides what reaches Claude and when.<br />
+The LangGraph one follows each event type&rsquo;s context hint: a high-priority event starts a turn,<br />
+the rest wait in the conversation. Claude Code hands every event to Claude as a channel message.</li>
+</ul>
+<h2 id="watching-the-game-masters-context">Watching the game master&rsquo;s context <a class="anchor" href="#watching-the-game-masters-context">¶</a></h2>
+<p>The LangGraph game master keeps one conversation for the whole game, and serves it on<br />
+<code>http://localhost:8091/context</code>. The page&rsquo;s <strong>Game master&rsquo;s context</strong> panel shows exactly what the<br />
+model is sent, oldest first: each <code>[event …]</code> and <code>[question]</code> from the page, what the model said,<br />
+each tool call and its result, an estimate of the tokens against the budget, and the system prompt.</p>
+<ul>
+<li>A low-priority hover replaces an older hover the model has not seen yet (<code>last-wins</code>). The model<br />
+never sees history it was already shown change.</li>
+<li>A high-priority event, such as a found item, starts a turn at once.</li>
+<li>When the conversation passes its budget (2500 estimated tokens, <code>LANTERNFALL_CONTEXT_BUDGET</code>),<br />
+the game master asks the model to summarize it and carries on from the summary. The panel shows<br />
+how many messages were folded. The latest <code>player.moved</code> survives the summary because its hint<br />
+says <code>retention: session</code>, so the model still knows where the player is.</li>
+</ul>
+<p>A second game master for another player serves on another port: <code>--context-port 8092</code>, and open<br />
+that player&rsquo;s page with <code>?gm=8092</code>. Claude Code keeps its own context, so with it the panel stays<br />
+empty.</p>
+<h2 id="what-the-page-shows-you">What the page shows you <a class="anchor" href="#what-the-page-shows-you">¶</a></h2>
+<p>The <strong>Activity</strong> panel under the map lists everything that crosses between the page and agents:</p>
+<ul>
+<li><code>→ event</code>: what the page sent, with its declared priority (<code>high</code>, <code>medium</code>, <code>low</code>, or <code>built in</code><br />
+for <code>room.ask</code>)</li>
+<li><code>← tool call</code>: what an agent did to the page, with its arguments, whether it was read-only, and<br />
+whom it acts for</li>
+<li><code>•</code>: joining, the switch, and agents attaching or starting to act</li>
+</ul>
+<p>With no game master connected, a banner says how to start one, and a question asked with nobody<br />
+listening says so in the story log.</p>
+<h2 id="what-the-page-offers">What the page offers <a class="anchor" href="#what-the-page-offers">¶</a></h2>
+<p><code>catalog.json</code> declares both lists. The Go server passes them to the bridge as fixed catalogs<br />
+(<code>rooms.WithPageTools</code>, <code>rooms.WithPageEventCatalog</code>), and the page imports the same file, so the<br />
+two cannot drift apart.</p>
+<table>
+<thead>
+<tr>
+<th>Tool</th>
+<th>Read-only</th>
+<th>What it does on the page</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>look</code></td>
+<td>yes</td>
+<td>A place&rsquo;s description, what was revealed there, and where the player is</td>
+</tr>
+<tr>
+<td><code>move_player</code></td>
+<td></td>
+<td>Moves the player&rsquo;s token</td>
+</tr>
+<tr>
+<td><code>reveal</code></td>
+<td></td>
+<td>Writes a new detail onto a place</td>
+</tr>
+<tr>
+<td><code>place_item</code></td>
+<td></td>
+<td>Hides an item for the player to find by searching</td>
+</tr>
+<tr>
+<td><code>narrate</code></td>
+<td></td>
+<td>Adds a line from the game master to the story log</td>
+</tr>
+</tbody>
+</table>
+<table>
+<thead>
+<tr>
+<th>Event</th>
+<th>When</th>
+<th>Context hint</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>place.examined</code></td>
+<td>The pointer rests on a place for 0.6 s</td>
+<td>low priority, last one per 1.5 s, <code>{{user}} is looking at {{name}}</code></td>
+</tr>
+<tr>
+<td><code>player.moved</code></td>
+<td>The player walks somewhere</td>
+<td>medium priority, kept for the session</td>
+</tr>
+<tr>
+<td><code>item.found</code></td>
+<td>The player finds an item</td>
+<td>high priority, <code>{{user}} found {{item}} at {{name}}</code></td>
+</tr>
+<tr>
+<td><code>room.ask</code></td>
+<td>The player asks the game master something</td>
+<td>built in</td>
+</tr>
+</tbody>
+</table>
+<p>A host that injects events into a model&rsquo;s context reads the hints from <code>events/list</code>, under<br />
+<code>_meta[&quot;io.github.panyam.mcpkit/context-hint&quot;]</code>, so hovering stays a quiet aside and a found item<br />
+interrupts.</p>
+<h2 id="how-it-fits-together">How it fits together <a class="anchor" href="#how-it-fits-together">¶</a></h2>
+<pre><code class="language-mermaid">sequenceDiagram
+  participant P as Player's tab (joinToolRoomFrom)
+  participant S as Go server: /rooms/join, relay, bridge
+  participant A as Agent (Claude Code or LangGraph)
+  P-&gt;&gt;S: POST /rooms/join?game=demo (cookie)
+  S--&gt;&gt;P: room, relay URL, token, bridge subject
+  P-&gt;&gt;S: join lanternfall:demo, offer tools, declare events
+  A-&gt;&gt;S: MCP attach lanternfall:demo
+  P-&gt;&gt;S: room.ask &quot;what's behind the door?&quot;
+  S--&gt;&gt;A: room.ask event (channel message or next_request)
+  A-&gt;&gt;S: tools/call look, reveal, narrate
+  S-&gt;&gt;P: tools/call, through the relay room
+  P--&gt;&gt;S: result, and the page changes
+</code></pre>
+<h2 id="where-to-look-in-the-code">Where to look in the code <a class="anchor" href="#where-to-look-in-the-code">¶</a></h2>
+<ul>
+<li><a href="https://github.com/panyam/mcpkit/blob/main/examples/rooms/lanternfall/main.go"><code>main.go</code></a> mounts everything: <code>massrelay.NewLocal</code> for the relay, the bridge with the<br />
+fixed catalogs and <code>rooms.Instructions</code>, roomsevents for MCP Events, and the join endpoint.</li>
+<li><a href="https://github.com/panyam/mcpkit/blob/main/examples/rooms/lanternfall/web/src/main.ts"><code>web/src/main.ts</code></a> is the page: <code>joinToolRoomFrom</code>, the tool handlers, and<br />
+the events it emits.</li>
+<li><a href="https://github.com/panyam/mcpkit/blob/main/examples/rooms/lanternfall/web/src/agent/gm.ts"><code>web/src/agent/gm.ts</code></a> is the LangGraph game master.</li>
+<li><a href="https://github.com/panyam/mcpkit/blob/main/examples/rooms/lanternfall/web/tests/exercise.spec.ts"><code>web/tests/exercise.spec.ts</code></a> is the scripted check of mission #1683,<br />
+which <code>make exercise-aipage</code> at the repo root runs.</li>
+<li><a href="https://github.com/panyam/mcpkit/blob/main/experimental/ext/rooms/WIRE.md"><code>experimental/ext/rooms/WIRE.md</code></a> is the protocol between the page and the bridge.</li>
+</ul>
+<h2 id="make-targets">Make targets <a class="anchor" href="#make-targets">¶</a></h2>
+<table>
+<thead>
+<tr>
+<th>Target</th>
+<th>What it does</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>run</code></td>
+<td>Starts the game on :8080</td>
+</tr>
+<tr>
+<td><code>test</code></td>
+<td>Go tests</td>
+</tr>
+<tr>
+<td><code>build-web</code></td>
+<td>Rebuilds <code>static/app.js</code> from <code>web/</code>. Commit the result</td>
+</tr>
+<tr>
+<td><code>check-web</code></td>
+<td>Typechecks <code>web/</code> and fails if <code>static/app.js</code> is stale</td>
+</tr>
+<tr>
+<td><code>test-e2e</code></td>
+<td>Drives a player&rsquo;s page in Chromium, and runs the LangGraph game master when <code>ANTHROPIC_API_KEY</code> is set</td>
+</tr>
+<tr>
+<td><code>gm</code></td>
+<td>Runs the LangGraph game master</td>
+</tr>
+</tbody>
+</table>
+
+
+    </div>
+</article>
+
+        </main>
+    </div>
+
+    
+<footer class="site-footer">
+    <div class="site-footer-inner">
+        <p>
+            <a href="https://github.com/panyam/mcpkit">https://github.com/panyam/mcpkit</a> ·
+            Licensed under Apache-2.0 ·
+            Source rendered by <a href="https://github.com/panyam/s3gen">s3gen</a>.
+        </p>
+    </div>
+</footer>
+
+
+    
+    <script type="module">
+      const blocks = document.querySelectorAll('pre > code.language-mermaid');
+      if (blocks.length) {
+        const { default: mermaid } = await import('https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs');
+        blocks.forEach((code) => {
+          const pre = document.createElement('pre');
+          pre.className = 'mermaid';
+          pre.textContent = code.textContent;
+          code.parentElement.replaceWith(pre);
+        });
+        mermaid.initialize({ startOnLoad: false, securityLevel: 'strict' });
+        await mermaid.run();
+      }
+    </script>
+
+    
+    <script>
+      document.querySelectorAll('pre > code:not(.language-mermaid)').forEach((code) => {
+        const pre = code.parentElement;
+        pre.classList.add('has-copy');
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'copy-btn';
+        btn.textContent = 'Copy';
+        btn.setAttribute('aria-label', 'Copy code to clipboard');
+        btn.addEventListener('click', async () => {
+          try {
+            await navigator.clipboard.writeText(code.textContent);
+            btn.textContent = 'Copied';
+          } catch {
+            btn.textContent = 'Failed';
+          }
+          setTimeout(() => { btn.textContent = 'Copy'; }, 1500);
+        });
+        pre.appendChild(btn);
+      });
+    </script>
+
+    
+    <script>
+      (function () {
+        const btn = document.querySelector('.theme-toggle');
+        if (!btn) return;
+        btn.addEventListener('click', () => {
+          const root = document.documentElement;
+          const current = root.dataset.theme ||
+            (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+          const next = current === 'dark' ? 'light' : 'dark';
+          root.dataset.theme = next;
+          try { localStorage.setItem('theme', next); } catch {}
+        });
+      })();
+    </script>
+</body>
+</html>

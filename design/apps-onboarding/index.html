@@ -1,0 +1,1026 @@
+<!DOCTYPE html>
+
+
+
+
+
+
+
+
+
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    
+    <script>
+      try {
+        const t = localStorage.getItem('theme');
+        if (t === 'dark' || t === 'light') document.documentElement.dataset.theme = t;
+      } catch {}
+    </script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Getting started with the MCP Apps extension end-to-end.">
+    <title>MCP Apps — Onboarding · mcpkit</title>
+
+    <link rel="stylesheet" href="/mcpkit/static/css/main.css">
+    <style>.bg {  }
+.chroma {  }
+.chroma .err { color: #a61717; background-color: #e3d2d2 }
+.chroma .lntd { vertical-align: top; padding: 0; margin: 0; border: 0; }
+.chroma .lntable { border-spacing: 0; padding: 0; margin: 0; border: 0; }
+.chroma .hl { background-color: #e5e5e5 }
+.chroma .lnt { white-space: pre; user-select: none; margin-right: 0.4em; padding: 0 0.4em 0 0.4em;color: #7f7f7f }
+.chroma .ln { white-space: pre; user-select: none; margin-right: 0.4em; padding: 0 0.4em 0 0.4em;color: #7f7f7f }
+.chroma .line { display: flex; }
+.chroma .k { color: #000000; font-weight: bold }
+.chroma .kc { color: #000000; font-weight: bold }
+.chroma .kd { color: #000000; font-weight: bold }
+.chroma .kn { color: #000000; font-weight: bold }
+.chroma .kp { color: #000000; font-weight: bold }
+.chroma .kr { color: #000000; font-weight: bold }
+.chroma .kt { color: #445588; font-weight: bold }
+.chroma .na { color: #008080 }
+.chroma .nb { color: #0086b3 }
+.chroma .bp { color: #999999 }
+.chroma .nc { color: #445588; font-weight: bold }
+.chroma .no { color: #008080 }
+.chroma .nd { color: #3c5d5d; font-weight: bold }
+.chroma .ni { color: #800080 }
+.chroma .ne { color: #990000; font-weight: bold }
+.chroma .nf { color: #990000; font-weight: bold }
+.chroma .nl { color: #990000; font-weight: bold }
+.chroma .nn { color: #555555 }
+.chroma .nt { color: #000080 }
+.chroma .nv { color: #008080 }
+.chroma .vc { color: #008080 }
+.chroma .vg { color: #008080 }
+.chroma .vi { color: #008080 }
+.chroma .s { color: #dd1144 }
+.chroma .sa { color: #dd1144 }
+.chroma .sb { color: #dd1144 }
+.chroma .sc { color: #dd1144 }
+.chroma .dl { color: #dd1144 }
+.chroma .sd { color: #dd1144 }
+.chroma .s2 { color: #dd1144 }
+.chroma .se { color: #dd1144 }
+.chroma .sh { color: #dd1144 }
+.chroma .si { color: #dd1144 }
+.chroma .sx { color: #dd1144 }
+.chroma .sr { color: #009926 }
+.chroma .s1 { color: #dd1144 }
+.chroma .ss { color: #990073 }
+.chroma .m { color: #009999 }
+.chroma .mb { color: #009999 }
+.chroma .mf { color: #009999 }
+.chroma .mh { color: #009999 }
+.chroma .mi { color: #009999 }
+.chroma .il { color: #009999 }
+.chroma .mo { color: #009999 }
+.chroma .o { color: #000000; font-weight: bold }
+.chroma .ow { color: #000000; font-weight: bold }
+.chroma .c { color: #999988; font-style: italic }
+.chroma .ch { color: #999988; font-style: italic }
+.chroma .cm { color: #999988; font-style: italic }
+.chroma .c1 { color: #999988; font-style: italic }
+.chroma .cs { color: #999999; font-weight: bold; font-style: italic }
+.chroma .cp { color: #999999; font-weight: bold; font-style: italic }
+.chroma .cpf { color: #999999; font-weight: bold; font-style: italic }
+.chroma .gd { color: #000000; background-color: #ffdddd }
+.chroma .ge { color: #000000; font-style: italic }
+.chroma .gr { color: #aa0000 }
+.chroma .gh { color: #999999 }
+.chroma .gi { color: #000000; background-color: #ddffdd }
+.chroma .go { color: #888888 }
+.chroma .gp { color: #555555 }
+.chroma .gs { font-weight: bold }
+.chroma .gu { color: #aaaaaa }
+.chroma .gt { color: #aa0000 }
+.chroma .gl { text-decoration: underline }
+.chroma .w { color: #bbbbbb }
+@media (prefers-color-scheme: dark) {
+:root:not([data-theme]) .bg { color: #f8f8f2;  }
+:root:not([data-theme]) .chroma { color: #f8f8f2;  }
+:root:not([data-theme]) .chroma .err { color: #960050; background-color: #1e0010 }
+:root:not([data-theme]) .chroma .lntd { vertical-align: top; padding: 0; margin: 0; border: 0; }
+:root:not([data-theme]) .chroma .lntable { border-spacing: 0; padding: 0; margin: 0; border: 0; }
+:root:not([data-theme]) .chroma .hl { background-color: #3c3d38 }
+:root:not([data-theme]) .chroma .lnt { white-space: pre; user-select: none; margin-right: 0.4em; padding: 0 0.4em 0 0.4em;color: #7f7f7f }
+:root:not([data-theme]) .chroma .ln { white-space: pre; user-select: none; margin-right: 0.4em; padding: 0 0.4em 0 0.4em;color: #7f7f7f }
+:root:not([data-theme]) .chroma .line { display: flex; }
+:root:not([data-theme]) .chroma .k { color: #66d9ef }
+:root:not([data-theme]) .chroma .kc { color: #66d9ef }
+:root:not([data-theme]) .chroma .kd { color: #66d9ef }
+:root:not([data-theme]) .chroma .kn { color: #f92672 }
+:root:not([data-theme]) .chroma .kp { color: #66d9ef }
+:root:not([data-theme]) .chroma .kr { color: #66d9ef }
+:root:not([data-theme]) .chroma .kt { color: #66d9ef }
+:root:not([data-theme]) .chroma .na { color: #a6e22e }
+:root:not([data-theme]) .chroma .nc { color: #a6e22e }
+:root:not([data-theme]) .chroma .no { color: #66d9ef }
+:root:not([data-theme]) .chroma .nd { color: #a6e22e }
+:root:not([data-theme]) .chroma .ne { color: #a6e22e }
+:root:not([data-theme]) .chroma .nf { color: #a6e22e }
+:root:not([data-theme]) .chroma .nx { color: #a6e22e }
+:root:not([data-theme]) .chroma .nt { color: #f92672 }
+:root:not([data-theme]) .chroma .l { color: #ae81ff }
+:root:not([data-theme]) .chroma .ld { color: #e6db74 }
+:root:not([data-theme]) .chroma .s { color: #e6db74 }
+:root:not([data-theme]) .chroma .sa { color: #e6db74 }
+:root:not([data-theme]) .chroma .sb { color: #e6db74 }
+:root:not([data-theme]) .chroma .sc { color: #e6db74 }
+:root:not([data-theme]) .chroma .dl { color: #e6db74 }
+:root:not([data-theme]) .chroma .sd { color: #e6db74 }
+:root:not([data-theme]) .chroma .s2 { color: #e6db74 }
+:root:not([data-theme]) .chroma .se { color: #ae81ff }
+:root:not([data-theme]) .chroma .sh { color: #e6db74 }
+:root:not([data-theme]) .chroma .si { color: #e6db74 }
+:root:not([data-theme]) .chroma .sx { color: #e6db74 }
+:root:not([data-theme]) .chroma .sr { color: #e6db74 }
+:root:not([data-theme]) .chroma .s1 { color: #e6db74 }
+:root:not([data-theme]) .chroma .ss { color: #e6db74 }
+:root:not([data-theme]) .chroma .m { color: #ae81ff }
+:root:not([data-theme]) .chroma .mb { color: #ae81ff }
+:root:not([data-theme]) .chroma .mf { color: #ae81ff }
+:root:not([data-theme]) .chroma .mh { color: #ae81ff }
+:root:not([data-theme]) .chroma .mi { color: #ae81ff }
+:root:not([data-theme]) .chroma .il { color: #ae81ff }
+:root:not([data-theme]) .chroma .mo { color: #ae81ff }
+:root:not([data-theme]) .chroma .o { color: #f92672 }
+:root:not([data-theme]) .chroma .ow { color: #f92672 }
+:root:not([data-theme]) .chroma .c { color: #75715e }
+:root:not([data-theme]) .chroma .ch { color: #75715e }
+:root:not([data-theme]) .chroma .cm { color: #75715e }
+:root:not([data-theme]) .chroma .c1 { color: #75715e }
+:root:not([data-theme]) .chroma .cs { color: #75715e }
+:root:not([data-theme]) .chroma .cp { color: #75715e }
+:root:not([data-theme]) .chroma .cpf { color: #75715e }
+:root:not([data-theme]) .chroma .gd { color: #f92672 }
+:root:not([data-theme]) .chroma .ge { font-style: italic }
+:root:not([data-theme]) .chroma .gi { color: #a6e22e }
+:root:not([data-theme]) .chroma .gs { font-weight: bold }
+:root:not([data-theme]) .chroma .gu { color: #75715e }
+}
+:root[data-theme="dark"] .bg { color: #f8f8f2;  }
+:root[data-theme="dark"] .chroma { color: #f8f8f2;  }
+:root[data-theme="dark"] .chroma .err { color: #960050; background-color: #1e0010 }
+:root[data-theme="dark"] .chroma .lntd { vertical-align: top; padding: 0; margin: 0; border: 0; }
+:root[data-theme="dark"] .chroma .lntable { border-spacing: 0; padding: 0; margin: 0; border: 0; }
+:root[data-theme="dark"] .chroma .hl { background-color: #3c3d38 }
+:root[data-theme="dark"] .chroma .lnt { white-space: pre; user-select: none; margin-right: 0.4em; padding: 0 0.4em 0 0.4em;color: #7f7f7f }
+:root[data-theme="dark"] .chroma .ln { white-space: pre; user-select: none; margin-right: 0.4em; padding: 0 0.4em 0 0.4em;color: #7f7f7f }
+:root[data-theme="dark"] .chroma .line { display: flex; }
+:root[data-theme="dark"] .chroma .k { color: #66d9ef }
+:root[data-theme="dark"] .chroma .kc { color: #66d9ef }
+:root[data-theme="dark"] .chroma .kd { color: #66d9ef }
+:root[data-theme="dark"] .chroma .kn { color: #f92672 }
+:root[data-theme="dark"] .chroma .kp { color: #66d9ef }
+:root[data-theme="dark"] .chroma .kr { color: #66d9ef }
+:root[data-theme="dark"] .chroma .kt { color: #66d9ef }
+:root[data-theme="dark"] .chroma .na { color: #a6e22e }
+:root[data-theme="dark"] .chroma .nc { color: #a6e22e }
+:root[data-theme="dark"] .chroma .no { color: #66d9ef }
+:root[data-theme="dark"] .chroma .nd { color: #a6e22e }
+:root[data-theme="dark"] .chroma .ne { color: #a6e22e }
+:root[data-theme="dark"] .chroma .nf { color: #a6e22e }
+:root[data-theme="dark"] .chroma .nx { color: #a6e22e }
+:root[data-theme="dark"] .chroma .nt { color: #f92672 }
+:root[data-theme="dark"] .chroma .l { color: #ae81ff }
+:root[data-theme="dark"] .chroma .ld { color: #e6db74 }
+:root[data-theme="dark"] .chroma .s { color: #e6db74 }
+:root[data-theme="dark"] .chroma .sa { color: #e6db74 }
+:root[data-theme="dark"] .chroma .sb { color: #e6db74 }
+:root[data-theme="dark"] .chroma .sc { color: #e6db74 }
+:root[data-theme="dark"] .chroma .dl { color: #e6db74 }
+:root[data-theme="dark"] .chroma .sd { color: #e6db74 }
+:root[data-theme="dark"] .chroma .s2 { color: #e6db74 }
+:root[data-theme="dark"] .chroma .se { color: #ae81ff }
+:root[data-theme="dark"] .chroma .sh { color: #e6db74 }
+:root[data-theme="dark"] .chroma .si { color: #e6db74 }
+:root[data-theme="dark"] .chroma .sx { color: #e6db74 }
+:root[data-theme="dark"] .chroma .sr { color: #e6db74 }
+:root[data-theme="dark"] .chroma .s1 { color: #e6db74 }
+:root[data-theme="dark"] .chroma .ss { color: #e6db74 }
+:root[data-theme="dark"] .chroma .m { color: #ae81ff }
+:root[data-theme="dark"] .chroma .mb { color: #ae81ff }
+:root[data-theme="dark"] .chroma .mf { color: #ae81ff }
+:root[data-theme="dark"] .chroma .mh { color: #ae81ff }
+:root[data-theme="dark"] .chroma .mi { color: #ae81ff }
+:root[data-theme="dark"] .chroma .il { color: #ae81ff }
+:root[data-theme="dark"] .chroma .mo { color: #ae81ff }
+:root[data-theme="dark"] .chroma .o { color: #f92672 }
+:root[data-theme="dark"] .chroma .ow { color: #f92672 }
+:root[data-theme="dark"] .chroma .c { color: #75715e }
+:root[data-theme="dark"] .chroma .ch { color: #75715e }
+:root[data-theme="dark"] .chroma .cm { color: #75715e }
+:root[data-theme="dark"] .chroma .c1 { color: #75715e }
+:root[data-theme="dark"] .chroma .cs { color: #75715e }
+:root[data-theme="dark"] .chroma .cp { color: #75715e }
+:root[data-theme="dark"] .chroma .cpf { color: #75715e }
+:root[data-theme="dark"] .chroma .gd { color: #f92672 }
+:root[data-theme="dark"] .chroma .ge { font-style: italic }
+:root[data-theme="dark"] .chroma .gi { color: #a6e22e }
+:root[data-theme="dark"] .chroma .gs { font-weight: bold }
+:root[data-theme="dark"] .chroma .gu { color: #75715e }
+</style>
+    <link rel="icon" href="data:,">
+</head>
+<body>
+    
+<header class="site-header">
+    <div class="site-header-inner">
+        
+        <a class="brand" href="/mcpkit/">
+            <span class="brand-name">mcpkit</span>
+        </a>
+        <nav class="top-nav">
+            
+            
+            <a class="top-nav-link" href="/mcpkit/get-started/">Get Started</a>
+            
+            <a class="top-nav-link" href="/mcpkit/try/">Try it</a>
+            
+            <a class="top-nav-link" href="/mcpkit/guides/transports/">Guides</a>
+            
+            <a class="top-nav-link" href="/mcpkit/examples/">Examples</a>
+            
+            <a class="top-nav-link" href="/mcpkit/concepts/">Concepts</a>
+            
+            <a class="top-nav-link" href="/mcpkit/conformance/">Conformance</a>
+            
+            <a class="top-nav-link" href="/mcpkit/packages/core/">Packages</a>
+            
+            <a class="top-nav-link" href="/mcpkit/design/apps/">Reference</a>
+            
+            <a class="top-nav-link external" href="https://github.com/panyam/mcpkit">GitHub</a>
+            <button type="button" class="theme-toggle" aria-label="Toggle dark mode" title="Toggle dark mode">
+                <span class="theme-toggle-light">☀</span>
+                <span class="theme-toggle-dark">☾</span>
+            </button>
+        </nav>
+    </div>
+</header>
+
+
+    <div class="page">
+        
+<aside class="sidebar">
+    
+    
+    <nav class="sidebar-nav">
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/get-started/">Get Started</a>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/try/">Try it</a>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/guides/transports/">Guides</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/guides/transports/">Transports</a></li>
+                
+                <li><a href="/mcpkit/guides/auth/">Auth</a></li>
+                
+                <li><a href="/mcpkit/guides/tasks/">Long-running tasks</a></li>
+                
+                <li><a href="/mcpkit/guides/apps/">MCP Apps</a></li>
+                
+                <li><a href="/mcpkit/guides/prompts/">Prompts</a></li>
+                
+                <li><a href="/mcpkit/guides/elicitation/">Elicitation</a></li>
+                
+                <li><a href="/mcpkit/guides/completions/">Argument completion</a></li>
+                
+                <li><a href="/mcpkit/guides/observability/">Observability</a></li>
+                
+                <li><a href="/mcpkit/guides/mrtr/">MRTR input-gathering</a></li>
+                
+                <li><a href="/mcpkit/guides/deployment/">Deployment</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/examples/">Examples</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/examples/">All examples</a></li>
+                
+                <li><a href="/mcpkit/examples/auth/">Auth</a></li>
+                
+                <li><a href="/mcpkit/examples/tasks-v2/">Tasks v2</a></li>
+                
+                <li><a href="/mcpkit/examples/mrtr/">MRTR</a></li>
+                
+                <li><a href="/mcpkit/examples/apps/">MCP Apps</a></li>
+                
+                <li><a href="/mcpkit/examples/events/discord/">Events</a></li>
+                
+                <li><a href="/mcpkit/examples/skills-core/">Skills</a></li>
+                
+                <li><a href="/mcpkit/examples/disclosure/">Progressive disclosure</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/concepts/">Concepts</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/concepts/">Overview</a></li>
+                
+                <li><a href="/mcpkit/concepts/bringup/">Bring-up</a></li>
+                
+                <li><a href="/mcpkit/concepts/transport-mechanics/">Transport mechanics</a></li>
+                
+                <li><a href="/mcpkit/concepts/notifications/">Notifications</a></li>
+                
+                <li><a href="/mcpkit/concepts/request-anatomy/">Anatomy of a request</a></li>
+                
+                <li><a href="/mcpkit/concepts/extension-mechanisms/">Extension mechanisms</a></li>
+                
+                <li><a href="/mcpkit/concepts/reverse-call/">Reverse calls</a></li>
+                
+                <li><a href="/mcpkit/concepts/mrtr/">MRTR internals</a></li>
+                
+                <li><a href="/mcpkit/concepts/tracing/">Tracing</a></li>
+                
+                <li><a href="/mcpkit/concepts/events/">Events</a></li>
+                
+                <li><a href="/mcpkit/concepts/progressive-disclosure/">Progressive disclosure</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/conformance/">Conformance</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/conformance/">Coverage matrix</a></li>
+                
+                <li><a href="/mcpkit/conformance/upstream-audit/">Upstream audit</a></li>
+                
+                <li><a href="/mcpkit/conformance/fixture-audit/">Fixture audit</a></li>
+                
+                <li><a href="/mcpkit/conformance/external-checker/">External checker</a></li>
+                
+                <li><a href="/mcpkit/conformance/apps/compat/">Apps compat</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/packages/core/">Packages</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/packages/core/">core</a></li>
+                
+                <li><a href="/mcpkit/packages/server/">server</a></li>
+                
+                <li><a href="/mcpkit/packages/client/">client</a></li>
+                
+                <li><a href="/mcpkit/packages/ext-auth/">ext/auth</a></li>
+                
+                <li><a href="/mcpkit/packages/ext-tasks/">ext/tasks</a></li>
+                
+                <li><a href="/mcpkit/packages/ext-ui/">ext/ui</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/design/apps/">Reference</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/design/apps/">MCP Apps — design</a></li>
+                
+                <li><a href="/mcpkit/design/apps-host/">MCP Apps — host model</a></li>
+                
+                <li><a href="/mcpkit/design/apps-onboarding/">MCP Apps — onboarding</a></li>
+                
+                <li><a href="/mcpkit/design/tasks-v2-migration/">Tasks v2 migration</a></li>
+                
+                <li><a href="/mcpkit/design/sep-2567-handles/">SEP-2567 handles</a></li>
+                
+                <li><a href="/mcpkit/design/sep-2577-deprecations/">SEP-2577 deprecations</a></li>
+                
+                <li><a href="/mcpkit/design/list-ttl-migration/">List TTL migration</a></li>
+                
+            </ul>
+            
+        </div>
+        
+    </nav>
+</aside>
+
+        <main class="main">
+            
+<article class="content">
+    
+    <header class="content-header">
+        <h1>MCP Apps — Onboarding</h1>
+        
+        <p class="lead">Getting started with the MCP Apps extension end-to-end.</p>
+        
+        
+        <p class="source-link">
+            Source: <a href="https://github.com/panyam/mcpkit/blob/main/docs/APPS_ONBOARDING.md"><code>docs/APPS_ONBOARDING.md</code></a>
+        </p>
+        
+    </header>
+    
+
+    <div class="content-body">
+        
+<h1 id="ship-your-app-as-an-mcp-app-via-mcpkit">Ship Your App as an MCP App via mcpkit <a class="anchor" href="#ship-your-app-as-an-mcp-app-via-mcpkit">¶</a></h1>
+<p>See <a href="/mcpkit/packages/ext-ui/">APPS_DESIGN.md</a> for the core protocol design and <a href="/mcpkit/design/apps-host/">APPS_HOST.md</a> for building custom hosts.</p>
+<p>This section is a complete walkthrough for taking any Go application with an MCP server (built on mcpkit) and making it render interactive UI in Claude, ChatGPT, VS Code Copilot, and other MCP Apps hosts. It uses slyds as the running example, but the pattern applies to any app.</p>
+<h3 id="prerequisites">Prerequisites <a class="anchor" href="#prerequisites">¶</a></h3>
+<p>Your app needs:</p>
+<ol>
+<li>An MCP server built on mcpkit (Streamable HTTP transport)</li>
+<li>A tool that produces or displays HTML content</li>
+<li>The HTML itself (self-contained or with declared external assets)</li>
+</ol>
+<h3 id="step-1-understand-what-the-host-expects">Step 1: Understand What the Host Expects <a class="anchor" href="#step-1-understand-what-the-host-expects">¶</a></h3>
+<p>When a host like Claude or ChatGPT calls your tool, here&rsquo;s what happens behind the scenes:</p>
+<pre><code class="language-mermaid">sequenceDiagram
+    participant Host
+    participant S as Your MCP Server
+
+    Host-&gt;&gt;S: 1. initialize with io.modelcontextprotocol/ui
+    Note right of S: Server sees client supports UI
+    S--&gt;&gt;Host: initialize result with UI extension
+
+    Host-&gt;&gt;S: 2. tools/list
+    S--&gt;&gt;Host: tools with _meta.ui metadata
+
+    Note over Host: 3. LLM decides to call tool
+
+    Host-&gt;&gt;S: 4. resources/read ui://your-app/view
+    S--&gt;&gt;Host: HTML content
+
+    Note over Host: 5. Render HTML in iframe
+
+    Host-&gt;&gt;S: 6. tools/call your-tool
+    S--&gt;&gt;Host: tool result
+
+    Note over Host: 7. Push result to iframe via postMessage
+</code></pre>
+<p>The host needs three things from your server:</p>
+<ul>
+<li><strong>Extension declaration</strong> in initialize → &ldquo;I support MCP Apps&rdquo;</li>
+<li><strong>Tool metadata</strong> in tools/list → &ldquo;This tool has a UI at this URI&rdquo;</li>
+<li><strong>HTML resource</strong> via resources/read → &ldquo;Here&rsquo;s the HTML to render&rdquo;</li>
+</ul>
+<h3 id="step-2-register-the-extension">Step 2: Register the Extension <a class="anchor" href="#step-2-register-the-extension">¶</a></h3>
+<p>Tell the host your server supports MCP Apps:</p>
+<pre tabindex="0" class="chroma"><code><span class="line"><span class="cl"><span class="kn">import</span> <span class="p">(</span>
+</span></span><span class="line"><span class="cl">    <span class="s">&#34;github.com/panyam/mcpkit&#34;</span>
+</span></span><span class="line"><span class="cl">    <span class="s">&#34;github.com/panyam/mcpkit/ui&#34;</span>
+</span></span><span class="line"><span class="cl"><span class="p">)</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="nx">srv</span> <span class="o">:=</span> <span class="nx">mcpkit</span><span class="p">.</span><span class="nf">NewServer</span><span class="p">(</span>
+</span></span><span class="line"><span class="cl">    <span class="nx">mcpkit</span><span class="p">.</span><span class="nx">ServerInfo</span><span class="p">{</span><span class="nx">Name</span><span class="p">:</span> <span class="s">&#34;slyds&#34;</span><span class="p">,</span> <span class="nx">Version</span><span class="p">:</span> <span class="s">&#34;1.0&#34;</span><span class="p">},</span>
+</span></span><span class="line"><span class="cl">    <span class="nx">mcpkit</span><span class="p">.</span><span class="nf">WithExtension</span><span class="p">(</span><span class="nx">ui</span><span class="p">.</span><span class="nx">UIExtension</span><span class="p">{}),</span>  <span class="c1">// ← declares io.modelcontextprotocol/ui
+</span></span></span><span class="line"><span class="cl"><span class="c1"></span><span class="p">)</span>
+</span></span></code></pre><p>This adds the extension to your initialize response:</p>
+<pre tabindex="0" class="chroma"><code><span class="line"><span class="cl"><span class="p">{</span>
+</span></span><span class="line"><span class="cl">  <span class="nt">&#34;capabilities&#34;</span><span class="p">:</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">    <span class="nt">&#34;tools&#34;</span><span class="p">:</span> <span class="p">{},</span>
+</span></span><span class="line"><span class="cl">    <span class="nt">&#34;resources&#34;</span><span class="p">:</span> <span class="p">{},</span>
+</span></span><span class="line"><span class="cl">    <span class="nt">&#34;extensions&#34;</span><span class="p">:</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">      <span class="nt">&#34;io.modelcontextprotocol/ui&#34;</span><span class="p">:</span> <span class="p">{}</span>
+</span></span><span class="line"><span class="cl">    <span class="p">}</span>
+</span></span><span class="line"><span class="cl">  <span class="p">}</span>
+</span></span><span class="line"><span class="cl"><span class="p">}</span>
+</span></span></code></pre><h3 id="step-3-add--metaui-to-your-tool">Step 3: Add <code>_meta.ui</code> to Your Tool <a class="anchor" href="#step-3-add--metaui-to-your-tool">¶</a></h3>
+<p>Link your tool to a UI resource:</p>
+<pre tabindex="0" class="chroma"><code><span class="line"><span class="cl"><span class="nx">srv</span><span class="p">.</span><span class="nf">RegisterTool</span><span class="p">(</span><span class="nx">mcpkit</span><span class="p">.</span><span class="nx">ToolDef</span><span class="p">{</span>
+</span></span><span class="line"><span class="cl">    <span class="nx">Name</span><span class="p">:</span>        <span class="s">&#34;build_deck&#34;</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">    <span class="nx">Description</span><span class="p">:</span> <span class="s">&#34;Build and display the presentation&#34;</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">    <span class="nx">InputSchema</span><span class="p">:</span> <span class="nx">buildDeckSchema</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">    <span class="nx">Meta</span><span class="p">:</span> <span class="o">&amp;</span><span class="nx">mcpkit</span><span class="p">.</span><span class="nx">ToolMeta</span><span class="p">{</span>
+</span></span><span class="line"><span class="cl">        <span class="nx">UI</span><span class="p">:</span> <span class="o">&amp;</span><span class="nx">mcpkit</span><span class="p">.</span><span class="nx">UIMetadata</span><span class="p">{</span>
+</span></span><span class="line"><span class="cl">            <span class="nx">ResourceUri</span><span class="p">:</span>   <span class="s">&#34;ui://decks/demo/preview&#34;</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">            <span class="nx">PrefersBorder</span><span class="p">:</span> <span class="nf">boolPtr</span><span class="p">(</span><span class="kc">false</span><span class="p">),</span>
+</span></span><span class="line"><span class="cl">        <span class="p">},</span>
+</span></span><span class="line"><span class="cl">    <span class="p">},</span>
+</span></span><span class="line"><span class="cl"><span class="p">},</span> <span class="nx">buildDeckHandler</span><span class="p">)</span>
+</span></span></code></pre><p><strong>Key fields in <code>UIMetadata</code>:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Required</th>
+<th>Purpose</th>
+<th>Example</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>ResourceUri</code></td>
+<td>Yes</td>
+<td><code>ui://</code> URI pointing to the HTML resource</td>
+<td><code>&quot;ui://decks/demo/preview&quot;</code></td>
+</tr>
+<tr>
+<td><code>Visibility</code></td>
+<td>No</td>
+<td>Who can see/call this tool. Default: <code>[&quot;model&quot;, &quot;app&quot;]</code></td>
+<td><code>[]UIVisibility{UIVisibilityApp}</code> for iframe-only tools</td>
+</tr>
+<tr>
+<td><code>CSP</code></td>
+<td>No</td>
+<td>External domains the HTML needs to load</td>
+<td><code>{ResourceDomains: [&quot;cdn.jsdelivr.net&quot;]}</code></td>
+</tr>
+<tr>
+<td><code>Permissions</code></td>
+<td>No</td>
+<td>Browser capabilities (camera, mic, clipboard)</td>
+<td><code>[&quot;clipboardWrite&quot;]</code></td>
+</tr>
+<tr>
+<td><code>PrefersBorder</code></td>
+<td>No</td>
+<td>Whether host should draw a border around the iframe</td>
+<td><code>boolPtr(false)</code></td>
+</tr>
+<tr>
+<td><code>Domain</code></td>
+<td>No</td>
+<td>Request a dedicated sandbox origin</td>
+<td><code>&quot;slyds&quot;</code></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Important:</strong> Your tool handler MUST still return useful text content. Non-UI clients (CLI tools, older hosts) ignore <code>_meta.ui</code> and only see the text:</p>
+<pre tabindex="0" class="chroma"><code><span class="line"><span class="cl"><span class="kd">func</span> <span class="nf">buildDeckHandler</span><span class="p">(</span><span class="nx">ctx</span> <span class="nx">context</span><span class="p">.</span><span class="nx">Context</span><span class="p">,</span> <span class="nx">req</span> <span class="nx">mcpkit</span><span class="p">.</span><span class="nx">ToolRequest</span><span class="p">)</span> <span class="p">(</span><span class="nx">mcpkit</span><span class="p">.</span><span class="nx">ToolResult</span><span class="p">,</span> <span class="kt">error</span><span class="p">)</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">    <span class="c1">// ... build the deck ...
+</span></span></span><span class="line"><span class="cl"><span class="c1"></span>
+</span></span><span class="line"><span class="cl">    <span class="c1">// Always return text — the UI is a bonus, not a replacement
+</span></span></span><span class="line"><span class="cl"><span class="c1"></span>    <span class="k">return</span> <span class="nx">mcpkit</span><span class="p">.</span><span class="nf">TextResult</span><span class="p">(</span><span class="s">&#34;Built presentation: 8 slides, theme=default&#34;</span><span class="p">),</span> <span class="kc">nil</span>
+</span></span><span class="line"><span class="cl"><span class="p">}</span>
+</span></span></code></pre><h3 id="step-4-serve-the-html-resource">Step 4: Serve the HTML Resource <a class="anchor" href="#step-4-serve-the-html-resource">¶</a></h3>
+<p>Register a resource handler for the <code>ui://</code> URI your tool references:</p>
+<pre tabindex="0" class="chroma"><code><span class="line"><span class="cl"><span class="c1">// Static URI (one fixed UI):
+</span></span></span><span class="line"><span class="cl"><span class="c1"></span><span class="nx">srv</span><span class="p">.</span><span class="nf">RegisterResource</span><span class="p">(</span><span class="nx">mcpkit</span><span class="p">.</span><span class="nx">ResourceDef</span><span class="p">{</span>
+</span></span><span class="line"><span class="cl">    <span class="nx">URI</span><span class="p">:</span>      <span class="s">&#34;ui://decks/demo/preview&#34;</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">    <span class="nx">Name</span><span class="p">:</span>     <span class="s">&#34;Deck Preview&#34;</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">    <span class="nx">MimeType</span><span class="p">:</span> <span class="nx">mcpkit</span><span class="p">.</span><span class="nx">AppMIMEType</span><span class="p">,</span>  <span class="c1">// &#34;text/html;profile=mcp-app&#34;
+</span></span></span><span class="line"><span class="cl"><span class="c1"></span><span class="p">},</span> <span class="kd">func</span><span class="p">(</span><span class="nx">ctx</span> <span class="nx">context</span><span class="p">.</span><span class="nx">Context</span><span class="p">,</span> <span class="nx">req</span> <span class="nx">mcpkit</span><span class="p">.</span><span class="nx">ResourceRequest</span><span class="p">)</span> <span class="p">(</span><span class="nx">mcpkit</span><span class="p">.</span><span class="nx">ResourceResult</span><span class="p">,</span> <span class="kt">error</span><span class="p">)</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">    <span class="nx">html</span> <span class="o">:=</span> <span class="nf">buildSelfContainedHTML</span><span class="p">()</span>
+</span></span><span class="line"><span class="cl">    <span class="k">return</span> <span class="nx">mcpkit</span><span class="p">.</span><span class="nx">ResourceResult</span><span class="p">{</span>
+</span></span><span class="line"><span class="cl">        <span class="nx">Contents</span><span class="p">:</span> <span class="p">[]</span><span class="nx">mcpkit</span><span class="p">.</span><span class="nx">ResourceReadContent</span><span class="p">{{</span>
+</span></span><span class="line"><span class="cl">            <span class="nx">URI</span><span class="p">:</span>      <span class="nx">req</span><span class="p">.</span><span class="nx">URI</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">            <span class="nx">MimeType</span><span class="p">:</span> <span class="nx">mcpkit</span><span class="p">.</span><span class="nx">AppMIMEType</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">            <span class="nx">Text</span><span class="p">:</span>     <span class="nx">html</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">        <span class="p">}},</span>
+</span></span><span class="line"><span class="cl">    <span class="p">},</span> <span class="kc">nil</span>
+</span></span><span class="line"><span class="cl"><span class="p">})</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="c1">// Parameterized URI (multiple UIs, e.g., one per deck):
+</span></span></span><span class="line"><span class="cl"><span class="c1"></span><span class="nx">srv</span><span class="p">.</span><span class="nf">RegisterResourceTemplate</span><span class="p">(</span><span class="nx">mcpkit</span><span class="p">.</span><span class="nx">ResourceTemplate</span><span class="p">{</span>
+</span></span><span class="line"><span class="cl">    <span class="nx">URITemplate</span><span class="p">:</span> <span class="s">&#34;ui://decks/{name}/preview&#34;</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">    <span class="nx">Name</span><span class="p">:</span>        <span class="s">&#34;Deck Preview&#34;</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">    <span class="nx">MimeType</span><span class="p">:</span>    <span class="nx">mcpkit</span><span class="p">.</span><span class="nx">AppMIMEType</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl"><span class="p">},</span> <span class="kd">func</span><span class="p">(</span><span class="nx">ctx</span> <span class="nx">context</span><span class="p">.</span><span class="nx">Context</span><span class="p">,</span> <span class="nx">uri</span> <span class="kt">string</span><span class="p">,</span> <span class="nx">params</span> <span class="kd">map</span><span class="p">[</span><span class="kt">string</span><span class="p">]</span><span class="kt">string</span><span class="p">)</span> <span class="p">(</span><span class="nx">mcpkit</span><span class="p">.</span><span class="nx">ResourceResult</span><span class="p">,</span> <span class="kt">error</span><span class="p">)</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">    <span class="nx">deckName</span> <span class="o">:=</span> <span class="nx">params</span><span class="p">[</span><span class="s">&#34;name&#34;</span><span class="p">]</span>
+</span></span><span class="line"><span class="cl">    <span class="nx">html</span> <span class="o">:=</span> <span class="nf">buildHTMLForDeck</span><span class="p">(</span><span class="nx">deckName</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl">    <span class="k">return</span> <span class="nx">mcpkit</span><span class="p">.</span><span class="nx">ResourceResult</span><span class="p">{</span>
+</span></span><span class="line"><span class="cl">        <span class="nx">Contents</span><span class="p">:</span> <span class="p">[]</span><span class="nx">mcpkit</span><span class="p">.</span><span class="nx">ResourceReadContent</span><span class="p">{{</span>
+</span></span><span class="line"><span class="cl">            <span class="nx">URI</span><span class="p">:</span>      <span class="nx">uri</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">            <span class="nx">MimeType</span><span class="p">:</span> <span class="nx">mcpkit</span><span class="p">.</span><span class="nx">AppMIMEType</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">            <span class="nx">Text</span><span class="p">:</span>     <span class="nx">html</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">        <span class="p">}},</span>
+</span></span><span class="line"><span class="cl">    <span class="p">},</span> <span class="kc">nil</span>
+</span></span><span class="line"><span class="cl"><span class="p">})</span>
+</span></span></code></pre><h3 id="step-5-prepare-your-html">Step 5: Prepare Your HTML <a class="anchor" href="#step-5-prepare-your-html">¶</a></h3>
+<p>The HTML is rendered in a <strong>sandboxed iframe</strong> with restrictive defaults. Here&rsquo;s what that means for your content:</p>
+<h4 id="option-a-self-contained-html-simplest-recommended-for-v1">Option A: Self-contained HTML (simplest, recommended for v1) <a class="anchor" href="#option-a-self-contained-html-simplest-recommended-for-v1">¶</a></h4>
+<p>Bundle everything (CSS, JS, images) into a single HTML file. No external requests, no CSP worries.</p>
+<pre tabindex="0" class="chroma"><code><span class="line"><span class="cl"><span class="cp">&lt;!DOCTYPE html&gt;</span>
+</span></span><span class="line"><span class="cl"><span class="p">&lt;</span><span class="nt">html</span> <span class="na">lang</span><span class="o">=</span><span class="s">&#34;en&#34;</span><span class="p">&gt;</span>
+</span></span><span class="line"><span class="cl"><span class="p">&lt;</span><span class="nt">head</span><span class="p">&gt;</span>
+</span></span><span class="line"><span class="cl">  <span class="p">&lt;</span><span class="nt">meta</span> <span class="na">charset</span><span class="o">=</span><span class="s">&#34;UTF-8&#34;</span><span class="p">&gt;</span>
+</span></span><span class="line"><span class="cl">  <span class="p">&lt;</span><span class="nt">style</span><span class="p">&gt;</span><span class="c">/* all CSS inlined here */</span><span class="p">&lt;/</span><span class="nt">style</span><span class="p">&gt;</span>
+</span></span><span class="line"><span class="cl"><span class="p">&lt;/</span><span class="nt">head</span><span class="p">&gt;</span>
+</span></span><span class="line"><span class="cl"><span class="p">&lt;</span><span class="nt">body</span><span class="p">&gt;</span>
+</span></span><span class="line"><span class="cl">  <span class="p">&lt;</span><span class="nt">div</span> <span class="na">id</span><span class="o">=</span><span class="s">&#34;app&#34;</span><span class="p">&gt;</span>Your content<span class="p">&lt;/</span><span class="nt">div</span><span class="p">&gt;</span>
+</span></span><span class="line"><span class="cl">  <span class="p">&lt;</span><span class="nt">script</span><span class="p">&gt;</span><span class="cm">/* all JS inlined here */</span><span class="p">&lt;/</span><span class="nt">script</span><span class="p">&gt;</span>
+</span></span><span class="line"><span class="cl"><span class="p">&lt;/</span><span class="nt">body</span><span class="p">&gt;</span>
+</span></span><span class="line"><span class="cl"><span class="p">&lt;/</span><span class="nt">html</span><span class="p">&gt;</span>
+</span></span></code></pre><p><strong>Pros:</strong> Works everywhere, no CSP configuration needed.<br />
+<strong>Cons:</strong> Large file size if assets are big. Base64 images inflate 33%.</p>
+<p><strong>Practical size guidance:</strong></p>
+<ul>
+<li>Under 1MB: works reliably across all hosts</li>
+<li>1-5MB: works on Claude and ChatGPT, may be slow</li>
+<li>Over 5MB: risk of timeouts or host-imposed limits, so use Option B</li>
+</ul>
+<h4 id="option-b-external-assets-via-csp-declarations">Option B: External assets via CSP declarations <a class="anchor" href="#option-b-external-assets-via-csp-declarations">¶</a></h4>
+<p>If your HTML loads scripts, fonts, or images from CDNs, declare the domains:</p>
+<pre tabindex="0" class="chroma"><code><span class="line"><span class="cl"><span class="nx">Meta</span><span class="p">:</span> <span class="o">&amp;</span><span class="nx">mcpkit</span><span class="p">.</span><span class="nx">ToolMeta</span><span class="p">{</span>
+</span></span><span class="line"><span class="cl">    <span class="nx">UI</span><span class="p">:</span> <span class="o">&amp;</span><span class="nx">mcpkit</span><span class="p">.</span><span class="nx">UIMetadata</span><span class="p">{</span>
+</span></span><span class="line"><span class="cl">        <span class="nx">ResourceUri</span><span class="p">:</span> <span class="s">&#34;ui://my-app/view&#34;</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">        <span class="nx">CSP</span><span class="p">:</span> <span class="o">&amp;</span><span class="nx">mcpkit</span><span class="p">.</span><span class="nx">UICSPConfig</span><span class="p">{</span>
+</span></span><span class="line"><span class="cl">            <span class="nx">ResourceDomains</span><span class="p">:</span> <span class="p">[]</span><span class="kt">string</span><span class="p">{</span>
+</span></span><span class="line"><span class="cl">                <span class="s">&#34;cdn.jsdelivr.net&#34;</span><span class="p">,</span>     <span class="c1">// JS libraries
+</span></span></span><span class="line"><span class="cl"><span class="c1"></span>                <span class="s">&#34;fonts.googleapis.com&#34;</span><span class="p">,</span> <span class="c1">// Google Fonts
+</span></span></span><span class="line"><span class="cl"><span class="c1"></span>                <span class="s">&#34;fonts.gstatic.com&#34;</span><span class="p">,</span>    <span class="c1">// Font files
+</span></span></span><span class="line"><span class="cl"><span class="c1"></span>            <span class="p">},</span>
+</span></span><span class="line"><span class="cl">            <span class="nx">ConnectDomains</span><span class="p">:</span> <span class="p">[]</span><span class="kt">string</span><span class="p">{</span>
+</span></span><span class="line"><span class="cl">                <span class="s">&#34;api.example.com&#34;</span><span class="p">,</span>      <span class="c1">// XHR/fetch targets
+</span></span></span><span class="line"><span class="cl"><span class="c1"></span>            <span class="p">},</span>
+</span></span><span class="line"><span class="cl">        <span class="p">},</span>
+</span></span><span class="line"><span class="cl">    <span class="p">},</span>
+</span></span><span class="line"><span class="cl"><span class="p">},</span>
+</span></span></code></pre><p>The host constructs CSP headers from these declarations:</p>
+<pre><code>                          Your declaration            Host-constructed CSP
+                          ─────────────────           ────────────────────
+CSP.ConnectDomains     →  [&quot;api.example.com&quot;]      →  connect-src 'self' api.example.com
+CSP.ResourceDomains    →  [&quot;cdn.jsdelivr.net&quot;]     →  script-src 'self' 'unsafe-inline' cdn.jsdelivr.net
+                                                       style-src 'self' 'unsafe-inline' cdn.jsdelivr.net
+                                                       img-src 'self' data: cdn.jsdelivr.net
+CSP.FrameDomains       →  [&quot;youtube.com&quot;]          →  frame-src youtube.com
+</code></pre>
+<p><strong>Default CSP (when no CSP declared):</strong></p>
+<pre><code>default-src 'none';
+script-src 'self' 'unsafe-inline';
+style-src 'self' 'unsafe-inline';
+img-src 'self' data:;
+connect-src 'none';
+</code></pre>
+<p>This means: no external fetches, no external scripts/images. Self-contained HTML works by default.</p>
+<h4 id="html-gotchas-in-the-sandbox">HTML gotchas in the sandbox <a class="anchor" href="#html-gotchas-in-the-sandbox">¶</a></h4>
+<table>
+<thead>
+<tr>
+<th>What</th>
+<th>Works?</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Inline <code>&lt;script&gt;</code></td>
+<td>Yes</td>
+<td><code>'unsafe-inline'</code> is in default CSP</td>
+</tr>
+<tr>
+<td>Inline <code>&lt;style&gt;</code></td>
+<td>Yes</td>
+<td>Same</td>
+</tr>
+<tr>
+<td><code>&lt;script src=&quot;cdn...&quot;&gt;</code></td>
+<td>Only with CSP</td>
+<td>Declare domain in <code>ResourceDomains</code></td>
+</tr>
+<tr>
+<td><code>&lt;img src=&quot;data:...&quot;&gt;</code></td>
+<td>Yes</td>
+<td><code>data:</code> is in default <code>img-src</code></td>
+</tr>
+<tr>
+<td><code>&lt;img src=&quot;https://...&quot;&gt;</code></td>
+<td>Only with CSP</td>
+<td>Declare domain in <code>ResourceDomains</code></td>
+</tr>
+<tr>
+<td><code>fetch()</code> / <code>XMLHttpRequest</code></td>
+<td>Only with CSP</td>
+<td>Declare domain in <code>ConnectDomains</code></td>
+</tr>
+<tr>
+<td><code>localStorage</code> / cookies</td>
+<td>No</td>
+<td>Sandbox blocks these</td>
+</tr>
+<tr>
+<td><code>window.open()</code> / <code>target=&quot;_blank&quot;</code></td>
+<td>No</td>
+<td>Use <code>ui/open-link</code> via postMessage instead</td>
+</tr>
+<tr>
+<td><code>navigator.clipboard</code></td>
+<td>Only with permission</td>
+<td>Declare <code>&quot;clipboardWrite&quot;</code> in <code>Permissions</code></td>
+</tr>
+</tbody>
+</table>
+<h3 id="step-6-choose-your-transport">Step 6: Choose Your Transport <a class="anchor" href="#step-6-choose-your-transport">¶</a></h3>
+<p>MCP Apps hosts communicate over <strong>Streamable HTTP</strong>. This is the modern MCP transport and what all Apps-capable hosts use.</p>
+<pre tabindex="0" class="chroma"><code><span class="line"><span class="cl"><span class="nx">mux</span> <span class="o">:=</span> <span class="nx">http</span><span class="p">.</span><span class="nf">NewServeMux</span><span class="p">()</span>
+</span></span><span class="line"><span class="cl"><span class="nx">mux</span><span class="p">.</span><span class="nf">Handle</span><span class="p">(</span><span class="s">&#34;/mcp&#34;</span><span class="p">,</span> <span class="nx">srv</span><span class="p">.</span><span class="nf">Handler</span><span class="p">(</span><span class="nx">mcpkit</span><span class="p">.</span><span class="nf">WithStreamableHTTP</span><span class="p">(</span><span class="kc">true</span><span class="p">)))</span>
+</span></span><span class="line"><span class="cl"><span class="nx">http</span><span class="p">.</span><span class="nf">ListenAndServe</span><span class="p">(</span><span class="s">&#34;:8787&#34;</span><span class="p">,</span> <span class="nx">mux</span><span class="p">)</span>
+</span></span></code></pre><p>SSE transport also works (hosts fall back to it), but Streamable HTTP is preferred.</p>
+<h3 id="step-7-connect-to-a-host">Step 7: Connect to a Host <a class="anchor" href="#step-7-connect-to-a-host">¶</a></h3>
+<h4 id="claude-web-or-desktop">Claude (web or Desktop) <a class="anchor" href="#claude-web-or-desktop">¶</a></h4>
+<p>For local development, tunnel your server to the internet:</p>
+<pre tabindex="0" class="chroma"><code><span class="line"><span class="cl"><span class="c1"># Terminal 1: start your MCP server</span>
+</span></span><span class="line"><span class="cl">slyds mcp --deck-root ~/presentations/ --listen :8787
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="c1"># Terminal 2: tunnel via cloudflare</span>
+</span></span><span class="line"><span class="cl">npx cloudflared tunnel --url http://localhost:8787
+</span></span><span class="line"><span class="cl"><span class="c1"># → https://random-name.trycloudflare.com</span>
+</span></span></code></pre><p>Then in Claude:</p>
+<ol>
+<li>Profile → Settings → Connectors → Add custom connector</li>
+<li>URL: <code>https://random-name.trycloudflare.com/mcp</code></li>
+<li>Start a new chat and ask Claude to use your tool</li>
+</ol>
+<p><strong>Note:</strong> Custom connectors require a paid Claude plan (Pro, Max, or Team).</p>
+<h4 id="chatgpt">ChatGPT <a class="anchor" href="#chatgpt">¶</a></h4>
+<p>ChatGPT supports MCP Apps via its connector system. The flow is similar, so expose your server URL and register it as a connector.</p>
+<h4 id="vs-code-copilot">VS Code Copilot <a class="anchor" href="#vs-code-copilot">¶</a></h4>
+<p>Add to your VS Code MCP settings (<code>.vscode/mcp.json</code> or user settings):</p>
+<pre tabindex="0" class="chroma"><code><span class="line"><span class="cl"><span class="p">{</span>
+</span></span><span class="line"><span class="cl">  <span class="nt">&#34;servers&#34;</span><span class="p">:</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">    <span class="nt">&#34;slyds&#34;</span><span class="p">:</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">      <span class="nt">&#34;url&#34;</span><span class="p">:</span> <span class="s2">&#34;http://localhost:8787/mcp&#34;</span>
+</span></span><span class="line"><span class="cl">    <span class="p">}</span>
+</span></span><span class="line"><span class="cl">  <span class="p">}</span>
+</span></span><span class="line"><span class="cl"><span class="p">}</span>
+</span></span></code></pre><h4 id="for-production-deployment">For production deployment <a class="anchor" href="#for-production-deployment">¶</a></h4>
+<p>In production, your MCP server runs behind HTTPS (not a tunnel). The same <code>/mcp</code> endpoint serves both regular MCP tools and UI resources. No special deployment changes are needed for MCP Apps, since it&rsquo;s the same server, same endpoint, same transport.</p>
+<pre><code>Production deployment:
+
+┌──────────────┐     ┌──────────────────┐     ┌──────────────────┐
+│  Host        │     │  Load balancer   │     │  Your MCP server │
+│  (Claude,    │────&gt;│  (HTTPS term.)   │────&gt;│  :8787/mcp       │
+│   ChatGPT)   │     │                  │     │                  │
+└──────────────┘     └──────────────────┘     │  tools/list      │
+                                              │  tools/call      │
+                                              │  resources/read  │
+                                              │  (all same endpoint)
+                                              └──────────────────┘
+</code></pre>
+<h3 id="step-8-add-interactivity-optional">Step 8: Add Interactivity (optional) <a class="anchor" href="#step-8-add-interactivity-optional">¶</a></h3>
+<p>So far your app is read-only. The host renders HTML and the user views it. To make it interactive (user clicks a button in the iframe → calls a tool on your server), add a thin JS bridge to your HTML:</p>
+<pre tabindex="0" class="chroma"><code><span class="line"><span class="cl"><span class="c1">// Minimal MCP App bridge — add to your HTML&#39;s &lt;script&gt;
+</span></span></span><span class="line"><span class="cl"><span class="c1"></span><span class="p">(</span><span class="kd">function</span><span class="p">()</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">    <span class="k">if</span> <span class="p">(</span><span class="nb">window</span><span class="p">.</span><span class="nx">parent</span> <span class="o">===</span> <span class="nb">window</span><span class="p">)</span> <span class="k">return</span><span class="p">;</span> <span class="c1">// not in iframe
+</span></span></span><span class="line"><span class="cl"><span class="c1"></span>
+</span></span><span class="line"><span class="cl">    <span class="kr">const</span> <span class="nx">pending</span> <span class="o">=</span> <span class="k">new</span> <span class="nx">Map</span><span class="p">();</span>
+</span></span><span class="line"><span class="cl">    <span class="kd">let</span> <span class="nx">nextId</span> <span class="o">=</span> <span class="mi">1</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="nb">window</span><span class="p">.</span><span class="nx">addEventListener</span><span class="p">(</span><span class="s1">&#39;message&#39;</span><span class="p">,</span> <span class="p">(</span><span class="nx">event</span><span class="p">)</span> <span class="p">=&gt;</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">        <span class="kr">const</span> <span class="nx">msg</span> <span class="o">=</span> <span class="nx">event</span><span class="p">.</span><span class="nx">data</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">        <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="nx">msg</span> <span class="o">||</span> <span class="o">!</span><span class="nx">msg</span><span class="p">.</span><span class="nx">jsonrpc</span><span class="p">)</span> <span class="k">return</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        <span class="c1">// Host pushing a tool result to us
+</span></span></span><span class="line"><span class="cl"><span class="c1"></span>        <span class="k">if</span> <span class="p">(</span><span class="nx">msg</span><span class="p">.</span><span class="nx">method</span> <span class="o">===</span> <span class="s1">&#39;ui/notifications/tool-result&#39;</span><span class="p">)</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">            <span class="k">if</span> <span class="p">(</span><span class="k">typeof</span> <span class="nb">window</span><span class="p">.</span><span class="nx">onMCPToolResult</span> <span class="o">===</span> <span class="s1">&#39;function&#39;</span><span class="p">)</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">                <span class="nb">window</span><span class="p">.</span><span class="nx">onMCPToolResult</span><span class="p">(</span><span class="nx">msg</span><span class="p">.</span><span class="nx">params</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">            <span class="p">}</span>
+</span></span><span class="line"><span class="cl">        <span class="p">}</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        <span class="c1">// Response to a request we sent
+</span></span></span><span class="line"><span class="cl"><span class="c1"></span>        <span class="k">if</span> <span class="p">(</span><span class="nx">msg</span><span class="p">.</span><span class="nx">id</span> <span class="o">&amp;&amp;</span> <span class="nx">pending</span><span class="p">.</span><span class="nx">has</span><span class="p">(</span><span class="nx">msg</span><span class="p">.</span><span class="nx">id</span><span class="p">))</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">            <span class="kr">const</span> <span class="p">{</span> <span class="nx">resolve</span><span class="p">,</span> <span class="nx">reject</span> <span class="p">}</span> <span class="o">=</span> <span class="nx">pending</span><span class="p">.</span><span class="nx">get</span><span class="p">(</span><span class="nx">msg</span><span class="p">.</span><span class="nx">id</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">            <span class="nx">pending</span><span class="p">.</span><span class="k">delete</span><span class="p">(</span><span class="nx">msg</span><span class="p">.</span><span class="nx">id</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">            <span class="nx">msg</span><span class="p">.</span><span class="nx">error</span> <span class="o">?</span> <span class="nx">reject</span><span class="p">(</span><span class="nx">msg</span><span class="p">.</span><span class="nx">error</span><span class="p">)</span> <span class="o">:</span> <span class="nx">resolve</span><span class="p">(</span><span class="nx">msg</span><span class="p">.</span><span class="nx">result</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">        <span class="p">}</span>
+</span></span><span class="line"><span class="cl">    <span class="p">});</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="c1">// Call a tool on your MCP server via the host
+</span></span></span><span class="line"><span class="cl"><span class="c1"></span>    <span class="nb">window</span><span class="p">.</span><span class="nx">callMCPTool</span> <span class="o">=</span> <span class="kd">function</span><span class="p">(</span><span class="nx">name</span><span class="p">,</span> <span class="nx">args</span><span class="p">)</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">        <span class="k">return</span> <span class="k">new</span> <span class="nb">Promise</span><span class="p">((</span><span class="nx">resolve</span><span class="p">,</span> <span class="nx">reject</span><span class="p">)</span> <span class="p">=&gt;</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">            <span class="kr">const</span> <span class="nx">id</span> <span class="o">=</span> <span class="nx">nextId</span><span class="o">++</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">            <span class="nx">pending</span><span class="p">.</span><span class="nx">set</span><span class="p">(</span><span class="nx">id</span><span class="p">,</span> <span class="p">{</span> <span class="nx">resolve</span><span class="p">,</span> <span class="nx">reject</span> <span class="p">});</span>
+</span></span><span class="line"><span class="cl">            <span class="nb">window</span><span class="p">.</span><span class="nx">parent</span><span class="p">.</span><span class="nx">postMessage</span><span class="p">({</span>
+</span></span><span class="line"><span class="cl">                <span class="nx">jsonrpc</span><span class="o">:</span> <span class="s1">&#39;2.0&#39;</span><span class="p">,</span> <span class="nx">id</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">                <span class="nx">method</span><span class="o">:</span> <span class="s1">&#39;tools/call&#39;</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">                <span class="nx">params</span><span class="o">:</span> <span class="p">{</span> <span class="nx">name</span><span class="p">,</span> <span class="nx">arguments</span><span class="o">:</span> <span class="nx">args</span> <span class="o">||</span> <span class="p">{}</span> <span class="p">}</span>
+</span></span><span class="line"><span class="cl">            <span class="p">},</span> <span class="s1">&#39;*&#39;</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">        <span class="p">});</span>
+</span></span><span class="line"><span class="cl">    <span class="p">};</span>
+</span></span><span class="line"><span class="cl"><span class="p">})();</span>
+</span></span></code></pre><p>Then in your HTML:</p>
+<pre tabindex="0" class="chroma"><code><span class="line"><span class="cl"><span class="p">&lt;</span><span class="nt">button</span> <span class="na">onclick</span><span class="o">=</span><span class="s">&#34;callMCPTool(&#39;edit_slide&#39;, {position: 3, content: &#39;...&#39;})
+</span></span></span><span class="line"><span class="cl"><span class="s">    .then(() =&gt; location.reload())&#34;</span><span class="p">&gt;</span>
+</span></span><span class="line"><span class="cl">    Edit Slide 3
+</span></span><span class="line"><span class="cl"><span class="p">&lt;/</span><span class="nt">button</span><span class="p">&gt;</span>
+</span></span></code></pre><h4 id="app-only-tools">App-only tools <a class="anchor" href="#app-only-tools">¶</a></h4>
+<p>Some tools only make sense when called from the iframe, not by the LLM. For example, <code>navigate_slide</code> or <code>get_theme_css</code> are UI controls, not things an LLM should reason about. Mark these as app-only:</p>
+<pre tabindex="0" class="chroma"><code><span class="line"><span class="cl"><span class="nx">srv</span><span class="p">.</span><span class="nf">RegisterTool</span><span class="p">(</span><span class="nx">mcpkit</span><span class="p">.</span><span class="nx">ToolDef</span><span class="p">{</span>
+</span></span><span class="line"><span class="cl">    <span class="nx">Name</span><span class="p">:</span>        <span class="s">&#34;navigate_slide&#34;</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">    <span class="nx">Description</span><span class="p">:</span> <span class="s">&#34;Navigate to a specific slide by number&#34;</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">    <span class="nx">InputSchema</span><span class="p">:</span> <span class="nx">navigateSchema</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">    <span class="nx">Meta</span><span class="p">:</span> <span class="o">&amp;</span><span class="nx">mcpkit</span><span class="p">.</span><span class="nx">ToolMeta</span><span class="p">{</span>
+</span></span><span class="line"><span class="cl">        <span class="nx">UI</span><span class="p">:</span> <span class="o">&amp;</span><span class="nx">mcpkit</span><span class="p">.</span><span class="nx">UIMetadata</span><span class="p">{</span>
+</span></span><span class="line"><span class="cl">            <span class="nx">Visibility</span><span class="p">:</span> <span class="p">[]</span><span class="nx">mcpkit</span><span class="p">.</span><span class="nx">UIVisibility</span><span class="p">{</span><span class="nx">mcpkit</span><span class="p">.</span><span class="nx">UIVisibilityApp</span><span class="p">},</span> <span class="c1">// hidden from LLM
+</span></span></span><span class="line"><span class="cl"><span class="c1"></span>        <span class="p">},</span>
+</span></span><span class="line"><span class="cl">    <span class="p">},</span>
+</span></span><span class="line"><span class="cl"><span class="p">},</span> <span class="nx">navigateHandler</span><span class="p">)</span>
+</span></span></code></pre><p>The host filters these out of the LLM&rsquo;s tool list but still allows the iframe to call them.</p>
+<h3 id="step-9-handle-mutations-and-freshness">Step 9: Handle Mutations and Freshness <a class="anchor" href="#step-9-handle-mutations-and-freshness">¶</a></h3>
+<p>If your tools modify state (edit a slide, update a dashboard), the cached UI resource becomes stale. Signal the host to re-fetch:</p>
+<pre tabindex="0" class="chroma"><code><span class="line"><span class="cl"><span class="kd">func</span> <span class="nf">editSlideHandler</span><span class="p">(</span><span class="nx">ctx</span> <span class="nx">context</span><span class="p">.</span><span class="nx">Context</span><span class="p">,</span> <span class="nx">req</span> <span class="nx">mcpkit</span><span class="p">.</span><span class="nx">ToolRequest</span><span class="p">)</span> <span class="p">(</span><span class="nx">mcpkit</span><span class="p">.</span><span class="nx">ToolResult</span><span class="p">,</span> <span class="kt">error</span><span class="p">)</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">    <span class="c1">// ... perform the edit ...
+</span></span></span><span class="line"><span class="cl"><span class="c1"></span>
+</span></span><span class="line"><span class="cl">    <span class="c1">// Tell the host: resources may have changed, re-fetch if needed
+</span></span></span><span class="line"><span class="cl"><span class="c1"></span>    <span class="nx">mcpkit</span><span class="p">.</span><span class="nf">NotifyResourcesChanged</span><span class="p">(</span><span class="nx">ctx</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="k">return</span> <span class="nx">mcpkit</span><span class="p">.</span><span class="nf">TextResult</span><span class="p">(</span><span class="s">&#34;Slide 3 updated&#34;</span><span class="p">),</span> <span class="kc">nil</span>
+</span></span><span class="line"><span class="cl"><span class="p">}</span>
+</span></span></code></pre><p>Not all hosts support this notification. For best compatibility:</p>
+<ol>
+<li>Always call <code>NotifyResourcesChanged</code> after mutations</li>
+<li>Also return useful text in the tool result (so non-UI clients see the update)</li>
+<li>Design your UI to handle being rebuilt from scratch (host may re-fetch the entire HTML)</li>
+</ol>
+<h3 id="step-10-test-locally">Step 10: Test Locally <a class="anchor" href="#step-10-test-locally">¶</a></h3>
+<p>Before connecting to Claude/ChatGPT, validate your setup locally using mcpkit&rsquo;s Go client:</p>
+<pre tabindex="0" class="chroma"><code><span class="line"><span class="cl"><span class="nx">client</span> <span class="o">:=</span> <span class="nx">mcpkit</span><span class="p">.</span><span class="nf">NewClient</span><span class="p">(</span><span class="s">&#34;http://localhost:8787/mcp&#34;</span><span class="p">,</span> <span class="nx">clientInfo</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">    <span class="nx">mcpkit</span><span class="p">.</span><span class="nf">WithUIExtension</span><span class="p">(),</span>
+</span></span><span class="line"><span class="cl"><span class="p">)</span>
+</span></span><span class="line"><span class="cl"><span class="k">if</span> <span class="nx">err</span> <span class="o">:=</span> <span class="nx">client</span><span class="p">.</span><span class="nf">Connect</span><span class="p">(</span><span class="nx">ctx</span><span class="p">);</span> <span class="nx">err</span> <span class="o">!=</span> <span class="kc">nil</span> <span class="p">{</span> <span class="o">...</span> <span class="p">}</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="c1">// Verify extension negotiation
+</span></span></span><span class="line"><span class="cl"><span class="c1"></span><span class="nf">assert</span><span class="p">(</span><span class="nx">client</span><span class="p">.</span><span class="nf">ServerSupportsUI</span><span class="p">())</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="c1">// Verify tool has _meta.ui
+</span></span></span><span class="line"><span class="cl"><span class="c1"></span><span class="nx">tools</span><span class="p">,</span> <span class="nx">_</span> <span class="o">:=</span> <span class="nx">client</span><span class="p">.</span><span class="nf">ListTools</span><span class="p">()</span>
+</span></span><span class="line"><span class="cl"><span class="nx">buildTool</span> <span class="o">:=</span> <span class="nf">findTool</span><span class="p">(</span><span class="nx">tools</span><span class="p">,</span> <span class="s">&#34;build_deck&#34;</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl"><span class="nf">assert</span><span class="p">(</span><span class="nx">buildTool</span><span class="p">.</span><span class="nx">Meta</span><span class="p">.</span><span class="nx">UI</span><span class="p">.</span><span class="nx">ResourceUri</span> <span class="o">==</span> <span class="s">&#34;ui://decks/demo/preview&#34;</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="c1">// Verify resource serves HTML with correct MIME type
+</span></span></span><span class="line"><span class="cl"><span class="c1"></span><span class="nx">res</span><span class="p">,</span> <span class="nx">_</span> <span class="o">:=</span> <span class="nx">client</span><span class="p">.</span><span class="nf">ReadResource</span><span class="p">(</span><span class="nx">ctx</span><span class="p">,</span> <span class="s">&#34;ui://decks/demo/preview&#34;</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl"><span class="nf">assert</span><span class="p">(</span><span class="nx">res</span><span class="p">.</span><span class="nx">Contents</span><span class="p">[</span><span class="mi">0</span><span class="p">].</span><span class="nx">MimeType</span> <span class="o">==</span> <span class="s">&#34;text/html;profile=mcp-app&#34;</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl"><span class="nf">assert</span><span class="p">(</span><span class="nx">strings</span><span class="p">.</span><span class="nf">Contains</span><span class="p">(</span><span class="nx">res</span><span class="p">.</span><span class="nx">Contents</span><span class="p">[</span><span class="mi">0</span><span class="p">].</span><span class="nx">Text</span><span class="p">,</span> <span class="s">&#34;&lt;!DOCTYPE html&gt;&#34;</span><span class="p">))</span>
+</span></span></code></pre><p>You can also use the ext-apps basic-host for visual testing:</p>
+<pre tabindex="0" class="chroma"><code><span class="line"><span class="cl">git clone https://github.com/modelcontextprotocol/ext-apps.git
+</span></span><span class="line"><span class="cl"><span class="nb">cd</span> ext-apps/examples/basic-host
+</span></span><span class="line"><span class="cl">npm install
+</span></span><span class="line"><span class="cl"><span class="nv">SERVERS</span><span class="o">=</span><span class="s1">&#39;[&#34;http://localhost:8787/mcp&#34;]&#39;</span> npm start
+</span></span><span class="line"><span class="cl"><span class="c1"># → open http://localhost:8080</span>
+</span></span></code></pre><h3 id="checklist-is-my-app-ready">Checklist: Is My App Ready? <a class="anchor" href="#checklist-is-my-app-ready">¶</a></h3>
+<pre><code>Server setup:
+  [ ] mcpkit server with Streamable HTTP transport
+  [ ] UIExtension registered via WithExtension()
+  [ ] At least one tool with _meta.ui.resourceUri
+  [ ] Matching ui:// resource registered (exact or template)
+  [ ] Tool handler returns text content (fallback for non-UI clients)
+
+HTML content:
+  [ ] Valid HTML5 document
+  [ ] MIME type is text/html;profile=mcp-app
+  [ ] Self-contained OR external domains declared in CSP
+  [ ] Works in an iframe (no localStorage, no window.open)
+  [ ] Under 5MB (or external assets via CSP for larger content)
+
+Interactivity (optional):
+  [ ] postMessage bridge in JS (callMCPTool function)
+  [ ] App-only tools marked with visibility: [&quot;app&quot;]
+  [ ] NotifyResourcesChanged called after mutations
+
+Deployment:
+  [ ] Server accessible via HTTPS (or tunnel for local dev)
+  [ ] /mcp endpoint serves all MCP methods
+  [ ] Registered as custom connector in Claude/ChatGPT
+</code></pre>
+<h3 id="end-to-end-example-slyds-on-chatgpt">End-to-End Example: Slyds on ChatGPT <a class="anchor" href="#end-to-end-example-slyds-on-chatgpt">¶</a></h3>
+<pre><code class="language-mermaid">sequenceDiagram
+    participant User
+    participant GPT as ChatGPT
+    participant Slyds as Slyds MCP Server
+    participant App as Slide Deck iframe
+
+    Note over Slyds: 1. slyds mcp --deck-root ~/decks/ --listen 8787
+    Note over GPT,Slyds: 2. Tunnel via cloudflared&lt;br/&gt;3. Register as custom connector in ChatGPT
+
+    User-&gt;&gt;GPT: Create a presentation about distributed systems
+
+    GPT-&gt;&gt;Slyds: initialize
+    Slyds--&gt;&gt;GPT: capabilities with io.modelcontextprotocol/ui
+    GPT-&gt;&gt;Slyds: tools/list
+    Slyds--&gt;&gt;GPT: tools with _meta.ui
+    GPT-&gt;&gt;Slyds: create_deck
+    Slyds--&gt;&gt;GPT: deck created
+    loop 5 slides
+        GPT-&gt;&gt;Slyds: edit_slide
+        Slyds--&gt;&gt;GPT: slide updated
+    end
+    GPT-&gt;&gt;Slyds: build_deck
+    Slyds--&gt;&gt;GPT: result text summary
+
+    GPT-&gt;&gt;Slyds: resources/read ui://decks/distributed-systems/preview
+    Slyds--&gt;&gt;GPT: self-contained HTML with all slides
+
+    GPT-&gt;&gt;App: Render in sandboxed iframe
+    App--&gt;&gt;User: Interactive slide deck with navigation and themes
+
+    User-&gt;&gt;App: clicks Next slide
+    Note right of App: slyds.js handles locally
+
+    User-&gt;&gt;App: clicks Edit slide 3
+    App-&gt;&gt;GPT: postMessage tools/call edit_slide
+    GPT-&gt;&gt;Slyds: tools/call edit_slide
+    Slyds--&gt;&gt;GPT: result
+    GPT-&gt;&gt;App: postMessage result
+    Note right of App: iframe updates slide 3
+
+    User-&gt;&gt;GPT: Make the title slide more dramatic
+    GPT-&gt;&gt;Slyds: tools/call edit_slide for slide 1
+    Note right of Slyds: NotifyResourcesChanged
+    Slyds--&gt;&gt;GPT: result + resources/list_changed notification
+    GPT-&gt;&gt;Slyds: resources/read re-fetch
+    Slyds--&gt;&gt;GPT: updated HTML
+    GPT-&gt;&gt;App: iframe refreshes with new content
+</code></pre>
+
+
+    </div>
+</article>
+
+        </main>
+    </div>
+
+    
+<footer class="site-footer">
+    <div class="site-footer-inner">
+        <p>
+            <a href="https://github.com/panyam/mcpkit">https://github.com/panyam/mcpkit</a> ·
+            Licensed under Apache-2.0 ·
+            Source rendered by <a href="https://github.com/panyam/s3gen">s3gen</a>.
+        </p>
+    </div>
+</footer>
+
+
+    
+    <script type="module">
+      const blocks = document.querySelectorAll('pre > code.language-mermaid');
+      if (blocks.length) {
+        const { default: mermaid } = await import('https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs');
+        blocks.forEach((code) => {
+          const pre = document.createElement('pre');
+          pre.className = 'mermaid';
+          pre.textContent = code.textContent;
+          code.parentElement.replaceWith(pre);
+        });
+        mermaid.initialize({ startOnLoad: false, securityLevel: 'strict' });
+        await mermaid.run();
+      }
+    </script>
+
+    
+    <script>
+      document.querySelectorAll('pre > code:not(.language-mermaid)').forEach((code) => {
+        const pre = code.parentElement;
+        pre.classList.add('has-copy');
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'copy-btn';
+        btn.textContent = 'Copy';
+        btn.setAttribute('aria-label', 'Copy code to clipboard');
+        btn.addEventListener('click', async () => {
+          try {
+            await navigator.clipboard.writeText(code.textContent);
+            btn.textContent = 'Copied';
+          } catch {
+            btn.textContent = 'Failed';
+          }
+          setTimeout(() => { btn.textContent = 'Copy'; }, 1500);
+        });
+        pre.appendChild(btn);
+      });
+    </script>
+
+    
+    <script>
+      (function () {
+        const btn = document.querySelector('.theme-toggle');
+        if (!btn) return;
+        btn.addEventListener('click', () => {
+          const root = document.documentElement;
+          const current = root.dataset.theme ||
+            (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+          const next = current === 'dark' ? 'light' : 'dark';
+          root.dataset.theme = next;
+          try { localStorage.setItem('theme', next); } catch {}
+        });
+      })();
+    </script>
+</body>
+</html>

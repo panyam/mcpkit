@@ -1,0 +1,19 @@
+{
+  "title": "Multi-round-trip requests",
+  "summary": "Tools that stop and ask the client for input (SEP-2322): elicitation, sampling and roots, answered by you in the page, across one or more rounds.",
+  "about": [
+    "Tools that stop, ask the client for input, and then carry on (SEP-2322).",
+    "Each one asks for something different: an answer to a question, a model reply (sampling), or the client's roots.",
+    "You type the reply here, and the page calls the tool again with your answer and the server's requestState.",
+    "test_incomplete_result_multi_round asks twice before it finishes."
+  ],
+  "docs": "examples/mrtr/",
+  "smoke": {
+    "tool": "test_incomplete_result_multi_round",
+    "replies": [
+      "Send responses",
+      "Send responses"
+    ],
+    "expect": "your favorite color is"
+  }
+}

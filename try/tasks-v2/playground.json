@@ -1,0 +1,21 @@
+{
+  "title": "Tasks v2",
+  "summary": "Long-running tools as tasks (SEP-2663). Start a slow job and watch it poll, answer a task that stops to ask for input, or cancel one.",
+  "about": [
+    "Tools that run as tasks (SEP-2663). A call returns a task ID, and the page polls tasks/get until it finishes.",
+    "slow_compute runs for as many seconds as you ask. Cancel it partway with the Cancel button.",
+    "confirm_delete stops and asks you to confirm, and your answer goes back with tasks/update.",
+    "failing_job and protocol_error_job show the two ways a task can fail."
+  ],
+  "docs": "examples/tasks-v2/",
+  "smoke": {
+    "tool": "confirm_delete",
+    "args": {
+      "filename": "a.txt"
+    },
+    "replies": [
+      "Send to task"
+    ],
+    "expect": "deleted 'a.txt'"
+  }
+}

@@ -1,0 +1,684 @@
+<!DOCTYPE html>
+
+
+
+
+
+
+
+
+
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    
+    <script>
+      try {
+        const t = localStorage.getItem('theme');
+        if (t === 'dark' || t === 'light') document.documentElement.dataset.theme = t;
+      } catch {}
+    </script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="A fixture with 200 tools and two skills. Measures how many bytes a flat tools/list sends to the model, and checks a plain client and a groups client on both wires.">
+    <title>Progressive disclosure (experimental) · mcpkit</title>
+
+    <link rel="stylesheet" href="/mcpkit/static/css/main.css">
+    <style>.bg {  }
+.chroma {  }
+.chroma .err { color: #a61717; background-color: #e3d2d2 }
+.chroma .lntd { vertical-align: top; padding: 0; margin: 0; border: 0; }
+.chroma .lntable { border-spacing: 0; padding: 0; margin: 0; border: 0; }
+.chroma .hl { background-color: #e5e5e5 }
+.chroma .lnt { white-space: pre; user-select: none; margin-right: 0.4em; padding: 0 0.4em 0 0.4em;color: #7f7f7f }
+.chroma .ln { white-space: pre; user-select: none; margin-right: 0.4em; padding: 0 0.4em 0 0.4em;color: #7f7f7f }
+.chroma .line { display: flex; }
+.chroma .k { color: #000000; font-weight: bold }
+.chroma .kc { color: #000000; font-weight: bold }
+.chroma .kd { color: #000000; font-weight: bold }
+.chroma .kn { color: #000000; font-weight: bold }
+.chroma .kp { color: #000000; font-weight: bold }
+.chroma .kr { color: #000000; font-weight: bold }
+.chroma .kt { color: #445588; font-weight: bold }
+.chroma .na { color: #008080 }
+.chroma .nb { color: #0086b3 }
+.chroma .bp { color: #999999 }
+.chroma .nc { color: #445588; font-weight: bold }
+.chroma .no { color: #008080 }
+.chroma .nd { color: #3c5d5d; font-weight: bold }
+.chroma .ni { color: #800080 }
+.chroma .ne { color: #990000; font-weight: bold }
+.chroma .nf { color: #990000; font-weight: bold }
+.chroma .nl { color: #990000; font-weight: bold }
+.chroma .nn { color: #555555 }
+.chroma .nt { color: #000080 }
+.chroma .nv { color: #008080 }
+.chroma .vc { color: #008080 }
+.chroma .vg { color: #008080 }
+.chroma .vi { color: #008080 }
+.chroma .s { color: #dd1144 }
+.chroma .sa { color: #dd1144 }
+.chroma .sb { color: #dd1144 }
+.chroma .sc { color: #dd1144 }
+.chroma .dl { color: #dd1144 }
+.chroma .sd { color: #dd1144 }
+.chroma .s2 { color: #dd1144 }
+.chroma .se { color: #dd1144 }
+.chroma .sh { color: #dd1144 }
+.chroma .si { color: #dd1144 }
+.chroma .sx { color: #dd1144 }
+.chroma .sr { color: #009926 }
+.chroma .s1 { color: #dd1144 }
+.chroma .ss { color: #990073 }
+.chroma .m { color: #009999 }
+.chroma .mb { color: #009999 }
+.chroma .mf { color: #009999 }
+.chroma .mh { color: #009999 }
+.chroma .mi { color: #009999 }
+.chroma .il { color: #009999 }
+.chroma .mo { color: #009999 }
+.chroma .o { color: #000000; font-weight: bold }
+.chroma .ow { color: #000000; font-weight: bold }
+.chroma .c { color: #999988; font-style: italic }
+.chroma .ch { color: #999988; font-style: italic }
+.chroma .cm { color: #999988; font-style: italic }
+.chroma .c1 { color: #999988; font-style: italic }
+.chroma .cs { color: #999999; font-weight: bold; font-style: italic }
+.chroma .cp { color: #999999; font-weight: bold; font-style: italic }
+.chroma .cpf { color: #999999; font-weight: bold; font-style: italic }
+.chroma .gd { color: #000000; background-color: #ffdddd }
+.chroma .ge { color: #000000; font-style: italic }
+.chroma .gr { color: #aa0000 }
+.chroma .gh { color: #999999 }
+.chroma .gi { color: #000000; background-color: #ddffdd }
+.chroma .go { color: #888888 }
+.chroma .gp { color: #555555 }
+.chroma .gs { font-weight: bold }
+.chroma .gu { color: #aaaaaa }
+.chroma .gt { color: #aa0000 }
+.chroma .gl { text-decoration: underline }
+.chroma .w { color: #bbbbbb }
+@media (prefers-color-scheme: dark) {
+:root:not([data-theme]) .bg { color: #f8f8f2;  }
+:root:not([data-theme]) .chroma { color: #f8f8f2;  }
+:root:not([data-theme]) .chroma .err { color: #960050; background-color: #1e0010 }
+:root:not([data-theme]) .chroma .lntd { vertical-align: top; padding: 0; margin: 0; border: 0; }
+:root:not([data-theme]) .chroma .lntable { border-spacing: 0; padding: 0; margin: 0; border: 0; }
+:root:not([data-theme]) .chroma .hl { background-color: #3c3d38 }
+:root:not([data-theme]) .chroma .lnt { white-space: pre; user-select: none; margin-right: 0.4em; padding: 0 0.4em 0 0.4em;color: #7f7f7f }
+:root:not([data-theme]) .chroma .ln { white-space: pre; user-select: none; margin-right: 0.4em; padding: 0 0.4em 0 0.4em;color: #7f7f7f }
+:root:not([data-theme]) .chroma .line { display: flex; }
+:root:not([data-theme]) .chroma .k { color: #66d9ef }
+:root:not([data-theme]) .chroma .kc { color: #66d9ef }
+:root:not([data-theme]) .chroma .kd { color: #66d9ef }
+:root:not([data-theme]) .chroma .kn { color: #f92672 }
+:root:not([data-theme]) .chroma .kp { color: #66d9ef }
+:root:not([data-theme]) .chroma .kr { color: #66d9ef }
+:root:not([data-theme]) .chroma .kt { color: #66d9ef }
+:root:not([data-theme]) .chroma .na { color: #a6e22e }
+:root:not([data-theme]) .chroma .nc { color: #a6e22e }
+:root:not([data-theme]) .chroma .no { color: #66d9ef }
+:root:not([data-theme]) .chroma .nd { color: #a6e22e }
+:root:not([data-theme]) .chroma .ne { color: #a6e22e }
+:root:not([data-theme]) .chroma .nf { color: #a6e22e }
+:root:not([data-theme]) .chroma .nx { color: #a6e22e }
+:root:not([data-theme]) .chroma .nt { color: #f92672 }
+:root:not([data-theme]) .chroma .l { color: #ae81ff }
+:root:not([data-theme]) .chroma .ld { color: #e6db74 }
+:root:not([data-theme]) .chroma .s { color: #e6db74 }
+:root:not([data-theme]) .chroma .sa { color: #e6db74 }
+:root:not([data-theme]) .chroma .sb { color: #e6db74 }
+:root:not([data-theme]) .chroma .sc { color: #e6db74 }
+:root:not([data-theme]) .chroma .dl { color: #e6db74 }
+:root:not([data-theme]) .chroma .sd { color: #e6db74 }
+:root:not([data-theme]) .chroma .s2 { color: #e6db74 }
+:root:not([data-theme]) .chroma .se { color: #ae81ff }
+:root:not([data-theme]) .chroma .sh { color: #e6db74 }
+:root:not([data-theme]) .chroma .si { color: #e6db74 }
+:root:not([data-theme]) .chroma .sx { color: #e6db74 }
+:root:not([data-theme]) .chroma .sr { color: #e6db74 }
+:root:not([data-theme]) .chroma .s1 { color: #e6db74 }
+:root:not([data-theme]) .chroma .ss { color: #e6db74 }
+:root:not([data-theme]) .chroma .m { color: #ae81ff }
+:root:not([data-theme]) .chroma .mb { color: #ae81ff }
+:root:not([data-theme]) .chroma .mf { color: #ae81ff }
+:root:not([data-theme]) .chroma .mh { color: #ae81ff }
+:root:not([data-theme]) .chroma .mi { color: #ae81ff }
+:root:not([data-theme]) .chroma .il { color: #ae81ff }
+:root:not([data-theme]) .chroma .mo { color: #ae81ff }
+:root:not([data-theme]) .chroma .o { color: #f92672 }
+:root:not([data-theme]) .chroma .ow { color: #f92672 }
+:root:not([data-theme]) .chroma .c { color: #75715e }
+:root:not([data-theme]) .chroma .ch { color: #75715e }
+:root:not([data-theme]) .chroma .cm { color: #75715e }
+:root:not([data-theme]) .chroma .c1 { color: #75715e }
+:root:not([data-theme]) .chroma .cs { color: #75715e }
+:root:not([data-theme]) .chroma .cp { color: #75715e }
+:root:not([data-theme]) .chroma .cpf { color: #75715e }
+:root:not([data-theme]) .chroma .gd { color: #f92672 }
+:root:not([data-theme]) .chroma .ge { font-style: italic }
+:root:not([data-theme]) .chroma .gi { color: #a6e22e }
+:root:not([data-theme]) .chroma .gs { font-weight: bold }
+:root:not([data-theme]) .chroma .gu { color: #75715e }
+}
+:root[data-theme="dark"] .bg { color: #f8f8f2;  }
+:root[data-theme="dark"] .chroma { color: #f8f8f2;  }
+:root[data-theme="dark"] .chroma .err { color: #960050; background-color: #1e0010 }
+:root[data-theme="dark"] .chroma .lntd { vertical-align: top; padding: 0; margin: 0; border: 0; }
+:root[data-theme="dark"] .chroma .lntable { border-spacing: 0; padding: 0; margin: 0; border: 0; }
+:root[data-theme="dark"] .chroma .hl { background-color: #3c3d38 }
+:root[data-theme="dark"] .chroma .lnt { white-space: pre; user-select: none; margin-right: 0.4em; padding: 0 0.4em 0 0.4em;color: #7f7f7f }
+:root[data-theme="dark"] .chroma .ln { white-space: pre; user-select: none; margin-right: 0.4em; padding: 0 0.4em 0 0.4em;color: #7f7f7f }
+:root[data-theme="dark"] .chroma .line { display: flex; }
+:root[data-theme="dark"] .chroma .k { color: #66d9ef }
+:root[data-theme="dark"] .chroma .kc { color: #66d9ef }
+:root[data-theme="dark"] .chroma .kd { color: #66d9ef }
+:root[data-theme="dark"] .chroma .kn { color: #f92672 }
+:root[data-theme="dark"] .chroma .kp { color: #66d9ef }
+:root[data-theme="dark"] .chroma .kr { color: #66d9ef }
+:root[data-theme="dark"] .chroma .kt { color: #66d9ef }
+:root[data-theme="dark"] .chroma .na { color: #a6e22e }
+:root[data-theme="dark"] .chroma .nc { color: #a6e22e }
+:root[data-theme="dark"] .chroma .no { color: #66d9ef }
+:root[data-theme="dark"] .chroma .nd { color: #a6e22e }
+:root[data-theme="dark"] .chroma .ne { color: #a6e22e }
+:root[data-theme="dark"] .chroma .nf { color: #a6e22e }
+:root[data-theme="dark"] .chroma .nx { color: #a6e22e }
+:root[data-theme="dark"] .chroma .nt { color: #f92672 }
+:root[data-theme="dark"] .chroma .l { color: #ae81ff }
+:root[data-theme="dark"] .chroma .ld { color: #e6db74 }
+:root[data-theme="dark"] .chroma .s { color: #e6db74 }
+:root[data-theme="dark"] .chroma .sa { color: #e6db74 }
+:root[data-theme="dark"] .chroma .sb { color: #e6db74 }
+:root[data-theme="dark"] .chroma .sc { color: #e6db74 }
+:root[data-theme="dark"] .chroma .dl { color: #e6db74 }
+:root[data-theme="dark"] .chroma .sd { color: #e6db74 }
+:root[data-theme="dark"] .chroma .s2 { color: #e6db74 }
+:root[data-theme="dark"] .chroma .se { color: #ae81ff }
+:root[data-theme="dark"] .chroma .sh { color: #e6db74 }
+:root[data-theme="dark"] .chroma .si { color: #e6db74 }
+:root[data-theme="dark"] .chroma .sx { color: #e6db74 }
+:root[data-theme="dark"] .chroma .sr { color: #e6db74 }
+:root[data-theme="dark"] .chroma .s1 { color: #e6db74 }
+:root[data-theme="dark"] .chroma .ss { color: #e6db74 }
+:root[data-theme="dark"] .chroma .m { color: #ae81ff }
+:root[data-theme="dark"] .chroma .mb { color: #ae81ff }
+:root[data-theme="dark"] .chroma .mf { color: #ae81ff }
+:root[data-theme="dark"] .chroma .mh { color: #ae81ff }
+:root[data-theme="dark"] .chroma .mi { color: #ae81ff }
+:root[data-theme="dark"] .chroma .il { color: #ae81ff }
+:root[data-theme="dark"] .chroma .mo { color: #ae81ff }
+:root[data-theme="dark"] .chroma .o { color: #f92672 }
+:root[data-theme="dark"] .chroma .ow { color: #f92672 }
+:root[data-theme="dark"] .chroma .c { color: #75715e }
+:root[data-theme="dark"] .chroma .ch { color: #75715e }
+:root[data-theme="dark"] .chroma .cm { color: #75715e }
+:root[data-theme="dark"] .chroma .c1 { color: #75715e }
+:root[data-theme="dark"] .chroma .cs { color: #75715e }
+:root[data-theme="dark"] .chroma .cp { color: #75715e }
+:root[data-theme="dark"] .chroma .cpf { color: #75715e }
+:root[data-theme="dark"] .chroma .gd { color: #f92672 }
+:root[data-theme="dark"] .chroma .ge { font-style: italic }
+:root[data-theme="dark"] .chroma .gi { color: #a6e22e }
+:root[data-theme="dark"] .chroma .gs { font-weight: bold }
+:root[data-theme="dark"] .chroma .gu { color: #75715e }
+</style>
+    <link rel="icon" href="data:,">
+</head>
+<body>
+    
+<header class="site-header">
+    <div class="site-header-inner">
+        
+        <a class="brand" href="/mcpkit/">
+            <span class="brand-name">mcpkit</span>
+        </a>
+        <nav class="top-nav">
+            
+            
+            <a class="top-nav-link" href="/mcpkit/get-started/">Get Started</a>
+            
+            <a class="top-nav-link" href="/mcpkit/try/">Try it</a>
+            
+            <a class="top-nav-link" href="/mcpkit/guides/transports/">Guides</a>
+            
+            <a class="top-nav-link" href="/mcpkit/examples/">Examples</a>
+            
+            <a class="top-nav-link" href="/mcpkit/concepts/">Concepts</a>
+            
+            <a class="top-nav-link" href="/mcpkit/conformance/">Conformance</a>
+            
+            <a class="top-nav-link" href="/mcpkit/packages/core/">Packages</a>
+            
+            <a class="top-nav-link" href="/mcpkit/design/apps/">Reference</a>
+            
+            <a class="top-nav-link external" href="https://github.com/panyam/mcpkit">GitHub</a>
+            <button type="button" class="theme-toggle" aria-label="Toggle dark mode" title="Toggle dark mode">
+                <span class="theme-toggle-light">☀</span>
+                <span class="theme-toggle-dark">☾</span>
+            </button>
+        </nav>
+    </div>
+</header>
+
+
+    <div class="page">
+        
+<aside class="sidebar">
+    
+    
+    <nav class="sidebar-nav">
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/get-started/">Get Started</a>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/try/">Try it</a>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/guides/transports/">Guides</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/guides/transports/">Transports</a></li>
+                
+                <li><a href="/mcpkit/guides/auth/">Auth</a></li>
+                
+                <li><a href="/mcpkit/guides/tasks/">Long-running tasks</a></li>
+                
+                <li><a href="/mcpkit/guides/apps/">MCP Apps</a></li>
+                
+                <li><a href="/mcpkit/guides/prompts/">Prompts</a></li>
+                
+                <li><a href="/mcpkit/guides/elicitation/">Elicitation</a></li>
+                
+                <li><a href="/mcpkit/guides/completions/">Argument completion</a></li>
+                
+                <li><a href="/mcpkit/guides/observability/">Observability</a></li>
+                
+                <li><a href="/mcpkit/guides/mrtr/">MRTR input-gathering</a></li>
+                
+                <li><a href="/mcpkit/guides/deployment/">Deployment</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/examples/">Examples</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/examples/">All examples</a></li>
+                
+                <li><a href="/mcpkit/examples/auth/">Auth</a></li>
+                
+                <li><a href="/mcpkit/examples/tasks-v2/">Tasks v2</a></li>
+                
+                <li><a href="/mcpkit/examples/mrtr/">MRTR</a></li>
+                
+                <li><a href="/mcpkit/examples/apps/">MCP Apps</a></li>
+                
+                <li><a href="/mcpkit/examples/events/discord/">Events</a></li>
+                
+                <li><a href="/mcpkit/examples/skills-core/">Skills</a></li>
+                
+                <li><a href="/mcpkit/examples/disclosure/">Progressive disclosure</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/concepts/">Concepts</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/concepts/">Overview</a></li>
+                
+                <li><a href="/mcpkit/concepts/bringup/">Bring-up</a></li>
+                
+                <li><a href="/mcpkit/concepts/transport-mechanics/">Transport mechanics</a></li>
+                
+                <li><a href="/mcpkit/concepts/notifications/">Notifications</a></li>
+                
+                <li><a href="/mcpkit/concepts/request-anatomy/">Anatomy of a request</a></li>
+                
+                <li><a href="/mcpkit/concepts/extension-mechanisms/">Extension mechanisms</a></li>
+                
+                <li><a href="/mcpkit/concepts/reverse-call/">Reverse calls</a></li>
+                
+                <li><a href="/mcpkit/concepts/mrtr/">MRTR internals</a></li>
+                
+                <li><a href="/mcpkit/concepts/tracing/">Tracing</a></li>
+                
+                <li><a href="/mcpkit/concepts/events/">Events</a></li>
+                
+                <li><a href="/mcpkit/concepts/progressive-disclosure/">Progressive disclosure</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/conformance/">Conformance</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/conformance/">Coverage matrix</a></li>
+                
+                <li><a href="/mcpkit/conformance/upstream-audit/">Upstream audit</a></li>
+                
+                <li><a href="/mcpkit/conformance/fixture-audit/">Fixture audit</a></li>
+                
+                <li><a href="/mcpkit/conformance/external-checker/">External checker</a></li>
+                
+                <li><a href="/mcpkit/conformance/apps/compat/">Apps compat</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/packages/core/">Packages</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/packages/core/">core</a></li>
+                
+                <li><a href="/mcpkit/packages/server/">server</a></li>
+                
+                <li><a href="/mcpkit/packages/client/">client</a></li>
+                
+                <li><a href="/mcpkit/packages/ext-auth/">ext/auth</a></li>
+                
+                <li><a href="/mcpkit/packages/ext-tasks/">ext/tasks</a></li>
+                
+                <li><a href="/mcpkit/packages/ext-ui/">ext/ui</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/design/apps/">Reference</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/design/apps/">MCP Apps — design</a></li>
+                
+                <li><a href="/mcpkit/design/apps-host/">MCP Apps — host model</a></li>
+                
+                <li><a href="/mcpkit/design/apps-onboarding/">MCP Apps — onboarding</a></li>
+                
+                <li><a href="/mcpkit/design/tasks-v2-migration/">Tasks v2 migration</a></li>
+                
+                <li><a href="/mcpkit/design/sep-2567-handles/">SEP-2567 handles</a></li>
+                
+                <li><a href="/mcpkit/design/sep-2577-deprecations/">SEP-2577 deprecations</a></li>
+                
+                <li><a href="/mcpkit/design/list-ttl-migration/">List TTL migration</a></li>
+                
+            </ul>
+            
+        </div>
+        
+    </nav>
+</aside>
+
+        <main class="main">
+            
+<article class="content">
+    
+    <header class="content-header">
+        <h1>Progressive disclosure (experimental)</h1>
+        
+        <p class="lead">A fixture with 200 tools and two skills. Measures how many bytes a flat tools/list sends to the model, and checks a plain client and a groups client on both wires.</p>
+        
+        
+        <p class="source-link">
+            Source: <a href="https://github.com/panyam/mcpkit/blob/main/examples/disclosure/README.md"><code>examples/disclosure/README.md</code></a>
+        </p>
+        
+    </header>
+    
+
+    <div class="content-body">
+        
+<h1 id="disclosure-200-tools-eight-groups-and-two-skills">disclosure: 200 tools, eight groups and two skills <a class="anchor" href="#disclosure-200-tools-eight-groups-and-two-skills">¶</a></h1>
+<p>An agent connects to a server with 200 tools. <code>tools/list</code> sends every schema, and the host puts<br />
+all of them into the model&rsquo;s context, about 82 KB of JSON here. The model may need one billing<br />
+tool.</p>
+<p>This example serves that situation so you can measure it, and then serves the fix. The server<br />
+has 200 tools in eight themes (billing, deploy, search, users, storage, metrics, alerts, docs) and<br />
+two SEP-2640 skills. <code>billing-refunds</code> uses billing tools. <code>incident-triage</code> uses alerts, metrics<br />
+and deploy tools.</p>
+<p>Each theme is also a group, served by the experimental groups extension in<br />
+<code>experimental/ext/groups</code>. A client that declares the extension sees eight one-line groups<br />
+instead of 200 tools, and fetches one group&rsquo;s tools with <code>groups/get</code> when it needs them. The<br />
+billing group lists the <code>billing-refunds</code> skill next to its tools. A client that doesn&rsquo;t declare<br />
+the extension still gets the flat list.</p>
+<p>Groups nest. billing and users both list <code>disputes</code>, a child group with its own instructions.<br />
+<code>groups/list</code> leaves <code>disputes</code> out, since it sits under a parent, and <code>groups/get disputes</code><br />
+resolves it by name. The groups conformance suite (<code>make testconf-groups</code>) grades this nesting.</p>
+<h2 id="try-it-in-your-browser">Try it in your browser <a class="anchor" href="#try-it-in-your-browser">¶</a></h2>
+<p><a href="https://panyam.github.io/mcpkit/try/disclosure/">panyam.github.io/mcpkit/try/disclosure</a> runs this server in a browser tab,<br />
+with nothing to install. It&rsquo;s a playground rather than the walkthrough. Call any tool with any<br />
+input, answer the server when it asks for input, and watch the JSON-RPC go each way.<br />
+<code>just serve-web</code> builds and serves the same page on <code>http://localhost:8788/</code>.</p>
+<p>The tools live in <code>mcp/</code>. The CLI server, the tests and <code>web/main.go</code> all register them from<br />
+there, so the playground runs the same server without demokit or otel.</p>
+<h2 id="run-it">Run it <a class="anchor" href="#run-it">¶</a></h2>
+<pre tabindex="0" class="chroma"><code><span class="line"><span class="cl">just serve          <span class="c1"># terminal 1: the fixture on :8080</span>
+</span></span><span class="line"><span class="cl">just demo           <span class="c1"># terminal 2: the walkthrough</span>
+</span></span></code></pre><p>Both sides take <code>--wire=legacy</code> or <code>--wire=stateless</code>.</p>
+<p>The walkthrough connects a plain client, counts the bytes of the flat <code>tools/list</code>, lists the<br />
+skills, and reads <code>billing-refunds</code> with its digest checked. Then it connects a groups client,<br />
+lists the groups and fetches billing. See <a href="https://github.com/panyam/mcpkit/blob/main/examples/disclosure/WALKTHROUGH.md">WALKTHROUGH.md</a> for the steps.</p>
+<h2 id="check-mode">Check mode <a class="anchor" href="#check-mode">¶</a></h2>
+<p><code>--check</code> connects two clients and prints one row per check:</p>
+<pre tabindex="0" class="chroma"><code><span class="line"><span class="cl">go run . --serve --addr<span class="o">=</span>127.0.0.1:18420 --wire<span class="o">=</span>stateless <span class="p">&amp;</span>
+</span></span><span class="line"><span class="cl">go run . --check --url http://127.0.0.1:18420 --wire<span class="o">=</span>stateless
+</span></span></code></pre><pre><code>  PASS stateless plain client: tools/list returns every tool: 200 of 200 tools, 82055 bytes
+  PASS stateless plain client: SKILL.md reads and verifies: skill://billing-refunds/SKILL.md, 424 bytes, digest verified true
+  PASS stateless groups client: groups/list returns one group per theme: 8 groups, want 8, 1030 bytes
+  PASS stateless groups client: groups/get billing returns its tools and SKILL.md: 25 tools, want 25, SKILL.md listed true
+  PASS stateless groups client: tools/list leaves out grouped tools: 0 of 200 tools, 156 bytes
+  INFO stateless sizes: groups/get billing vs flat tools/list: groups/list 1030 + groups/get billing 10802 + tools/list 156 = 11988 bytes, flat tools/list 82055 bytes (14%)
+</code></pre>
+<p>The plain client declares no extensions and must get the flat list. The groups client declares<br />
+<code>io.modelcontextprotocol/groups</code>, an extension the Progressive Disclosure working group drafts.<br />
+It must get eight groups, the billing group&rsquo;s 25 tools and its skill, and an empty <code>tools/list</code>.<br />
+The command exits 1 if any row fails. The last row adds up what the groups client reads to reach<br />
+the billing tools, next to the flat list.</p>
+<h2 id="files">Files <a class="anchor" href="#files">¶</a></h2>
+<table>
+<thead>
+<tr>
+<th>File</th>
+<th>What it holds</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>mcp/fixture.go</code></td>
+<td>The 200 tool definitions, the eight groups and the embedded <code>mcp/skills/</code> tree</td>
+</tr>
+<tr>
+<td><code>check.go</code></td>
+<td>The <code>--check</code> rows</td>
+</tr>
+<tr>
+<td><code>walkthrough.go</code></td>
+<td>The demokit walkthrough</td>
+</tr>
+<tr>
+<td><code>mcp/skills/</code></td>
+<td><code>billing-refunds</code> and <code>incident-triage</code></td>
+</tr>
+<tr>
+<td><code>web/main.go</code></td>
+<td>The bare server the browser playground runs</td>
+</tr>
+</tbody>
+</table>
+
+
+<hr/>
+
+<h2 id="walkthrough">Walkthrough</h2>
+<p class="source-link">Generated from the scripted demo — run it with <code>make serve</code> + <code>make demo</code>. Source: <a href="https://github.com/panyam/mcpkit/blob/main/examples/disclosure/WALKTHROUGH.md"><code>examples/disclosure/WALKTHROUGH.md</code></a></p>
+
+<h1 id="progressive-disclosure-200-tools-eight-groups-and-two-skills">Progressive disclosure: 200 tools, eight groups and two skills <a class="anchor" href="#progressive-disclosure-200-tools-eight-groups-and-two-skills">¶</a></h1>
+<p>A server with 200 tools sends all 200 in <code>tools/list</code>, and a client puts every schema into the model&rsquo;s context. This walkthrough counts those bytes on a fixture server and loads a skill. Then it connects a second client that declares the experimental groups extension. That client sees eight groups instead of 200 tools, and it fetches one group&rsquo;s tools and skill when the model picks it.</p>
+<h2 id="what-youll-learn">What you&rsquo;ll learn <a class="anchor" href="#what-youll-learn">¶</a></h2>
+<ul>
+<li><strong>tools/list returns all 200 tools</strong> - The tools come in eight themes: billing, deploy, search, users, storage, metrics, alerts and docs. A model that needs one billing tool still receives all 200 schemas. The host sends that many bytes to the model before the model does anything.</li>
+<li><strong>skills/list names the skills without their bodies</strong> - A skill is a <code>SKILL.md</code> with instructions, served under <code>skill://</code>. The listing carries each skill&rsquo;s name, description and file digests. The host reads a body only when the model picks that skill.</li>
+<li><strong>Read billing-refunds and verify its digest</strong> - <code>ReadFromEntry</code> checks the served bytes against the size and digest from the listing before the host uses them. The skill names the billing tools it needs, but it can&rsquo;t carry their schemas. Groups deliver those.</li>
+<li><strong>A groups client sees groups instead of tools</strong> - Every tool on this server sits in a group, so the groups client&rsquo;s <code>tools/list</code> comes back empty. <code>groups/list</code> carries a name and a one-line description per group, which is what the model picks from.</li>
+<li><strong>Fetch the billing group</strong> - The model picked billing, so the host fetches it. The result carries 25 complete tool definitions, the group&rsquo;s instructions, and the skill&rsquo;s URI in <code>resources</code>. The host still verifies the skill through the skills extension, as in the step above.</li>
+</ul>
+<h2 id="flow">Flow <a class="anchor" href="#flow">¶</a></h2>
+<pre><code class="language-mermaid">sequenceDiagram
+    participant Host as MCP Host (this client)
+    participant Server as MCP Server (just serve, 200 tools in 8 groups + 2 skills)
+
+    Note over Host,Server: Step 1: Connect
+    Host-&gt;&gt;Server: initialize
+    Server--&gt;&gt;Host: serverInfo + capabilities, including the skills extension
+
+    Note over Host,Server: Step 2: tools/list returns all 200 tools
+    Host-&gt;&gt;Server: tools/list
+    Server--&gt;&gt;Host: { tools: [200 schemas] }
+
+    Note over Host,Server: Step 3: skills/list names the skills without their bodies
+    Host-&gt;&gt;Server: skills/list
+    Server--&gt;&gt;Host: { skills: [name, description, digest per file] }
+
+    Note over Host,Server: Step 4: Read billing-refunds and verify its digest
+    Host-&gt;&gt;Server: resources/read skill://billing-refunds/SKILL.md
+    Server--&gt;&gt;Host: SKILL.md body
+
+    Note over Host,Server: Step 5: A groups client sees groups instead of tools
+    Host-&gt;&gt;Server: tools/list  (_meta declares groups)
+    Server--&gt;&gt;Host: { tools: [] }
+    Host-&gt;&gt;Server: groups/list
+    Server--&gt;&gt;Host: { groups: [billing, deploy, ...] }
+
+    Note over Host,Server: Step 6: Fetch the billing group
+    Host-&gt;&gt;Server: groups/get {name: &quot;billing&quot;}
+    Server--&gt;&gt;Host: { instructions, tools: [25], resources: [SKILL.md] }
+</code></pre>
+<h2 id="steps">Steps <a class="anchor" href="#steps">¶</a></h2>
+<h3 id="setup">Setup <a class="anchor" href="#setup">¶</a></h3>
+<p>Start the server in a separate terminal first:</p>
+<pre><code>Terminal 1:  just serve         # 200 tools in 8 groups + 2 skills on :8080
+Terminal 2:  just demo          # this walkthrough (--tui for the interactive TUI)
+</code></pre>
+<p>Both sides take <code>--wire=legacy</code> or <code>--wire=stateless</code>. The results are the same on either wire.</p>
+<h3 id="step-1-connect">Step 1: Connect <a class="anchor" href="#step-1-connect">¶</a></h3>
+<h3 id="step-2-toolslist-returns-all-200-tools">Step 2: tools/list returns all 200 tools <a class="anchor" href="#step-2-toolslist-returns-all-200-tools">¶</a></h3>
+<p>The tools come in eight themes: billing, deploy, search, users, storage, metrics, alerts and docs. A model that needs one billing tool still receives all 200 schemas. The host sends that many bytes to the model before the model does anything.</p>
+<h3 id="step-3-skillslist-names-the-skills-without-their-bodies">Step 3: skills/list names the skills without their bodies <a class="anchor" href="#step-3-skillslist-names-the-skills-without-their-bodies">¶</a></h3>
+<p>A skill is a <code>SKILL.md</code> with instructions, served under <code>skill://</code>. The listing carries each skill&rsquo;s name, description and file digests. The host reads a body only when the model picks that skill.</p>
+<h3 id="step-4-read-billing-refunds-and-verify-its-digest">Step 4: Read billing-refunds and verify its digest <a class="anchor" href="#step-4-read-billing-refunds-and-verify-its-digest">¶</a></h3>
+<p><code>ReadFromEntry</code> checks the served bytes against the size and digest from the listing before the host uses them. The skill names the billing tools it needs, but it can&rsquo;t carry their schemas. Groups deliver those.</p>
+<h3 id="groups-experimental">Groups (experimental) <a class="anchor" href="#groups-experimental">¶</a></h3>
+<p>The Progressive Disclosure working group drafts a groups extension, <code>io.modelcontextprotocol/groups</code>. The draft has no sponsor yet, and mcpkit serves it from <code>experimental/ext/groups</code>. This server puts each theme&rsquo;s 25 tools in a group named after the theme. The billing group also lists the billing-refunds skill.</p>
+<p>A client opts in by declaring the extension, with <code>groups.ClientOption()</code>. The plain client above declared nothing, so it keeps the flat list.</p>
+<h3 id="step-5-a-groups-client-sees-groups-instead-of-tools">Step 5: A groups client sees groups instead of tools <a class="anchor" href="#step-5-a-groups-client-sees-groups-instead-of-tools">¶</a></h3>
+<p>Every tool on this server sits in a group, so the groups client&rsquo;s <code>tools/list</code> comes back empty. <code>groups/list</code> carries a name and a one-line description per group, which is what the model picks from.</p>
+<h3 id="step-6-fetch-the-billing-group">Step 6: Fetch the billing group <a class="anchor" href="#step-6-fetch-the-billing-group">¶</a></h3>
+<p>The model picked billing, so the host fetches it. The result carries 25 complete tool definitions, the group&rsquo;s instructions, and the skill&rsquo;s URI in <code>resources</code>. The host still verifies the skill through the skills extension, as in the step above.</p>
+<h3 id="where-to-look-in-the-code">Where to look in the code <a class="anchor" href="#where-to-look-in-the-code">¶</a></h3>
+<ul>
+<li>The fixture: <code>fixture.go</code> in this directory</li>
+<li>Skills provider and client: <a href="https://github.com/panyam/mcpkit/blob/main/ext/skills/provider.go"><code>ext/skills/provider.go</code></a>, <a href="https://github.com/panyam/mcpkit/blob/main/ext/skills/client_methods.go"><code>ext/skills/client_methods.go</code></a></li>
+<li>Groups catalog, list filter and client: <a href="https://github.com/panyam/mcpkit/blob/main/experimental/ext/groups/catalog.go"><code>experimental/ext/groups/catalog.go</code></a>, <a href="https://github.com/panyam/mcpkit/blob/main/experimental/ext/groups/client.go"><code>experimental/ext/groups/client.go</code></a></li>
+<li>The seam that lets an extension hide primitives per caller: <a href="https://github.com/panyam/mcpkit/blob/main/server/list_scope.go"><code>server/list_scope.go</code></a></li>
+<li>The checks <code>make exercise-disclosure</code> runs: <code>check.go</code> in this directory</li>
+</ul>
+<h2 id="run-it">Run it <a class="anchor" href="#run-it">¶</a></h2>
+<pre tabindex="0" class="chroma"><code><span class="line"><span class="cl">go run ./examples/disclosure/
+</span></span></code></pre><p>Pass <code>--non-interactive</code> to skip pauses:</p>
+<pre tabindex="0" class="chroma"><code><span class="line"><span class="cl">go run ./examples/disclosure/ --non-interactive
+</span></span></code></pre>
+
+    </div>
+</article>
+
+        </main>
+    </div>
+
+    
+<footer class="site-footer">
+    <div class="site-footer-inner">
+        <p>
+            <a href="https://github.com/panyam/mcpkit">https://github.com/panyam/mcpkit</a> ·
+            Licensed under Apache-2.0 ·
+            Source rendered by <a href="https://github.com/panyam/s3gen">s3gen</a>.
+        </p>
+    </div>
+</footer>
+
+
+    
+    <script type="module">
+      const blocks = document.querySelectorAll('pre > code.language-mermaid');
+      if (blocks.length) {
+        const { default: mermaid } = await import('https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs');
+        blocks.forEach((code) => {
+          const pre = document.createElement('pre');
+          pre.className = 'mermaid';
+          pre.textContent = code.textContent;
+          code.parentElement.replaceWith(pre);
+        });
+        mermaid.initialize({ startOnLoad: false, securityLevel: 'strict' });
+        await mermaid.run();
+      }
+    </script>
+
+    
+    <script>
+      document.querySelectorAll('pre > code:not(.language-mermaid)').forEach((code) => {
+        const pre = code.parentElement;
+        pre.classList.add('has-copy');
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'copy-btn';
+        btn.textContent = 'Copy';
+        btn.setAttribute('aria-label', 'Copy code to clipboard');
+        btn.addEventListener('click', async () => {
+          try {
+            await navigator.clipboard.writeText(code.textContent);
+            btn.textContent = 'Copied';
+          } catch {
+            btn.textContent = 'Failed';
+          }
+          setTimeout(() => { btn.textContent = 'Copy'; }, 1500);
+        });
+        pre.appendChild(btn);
+      });
+    </script>
+
+    
+    <script>
+      (function () {
+        const btn = document.querySelector('.theme-toggle');
+        if (!btn) return;
+        btn.addEventListener('click', () => {
+          const root = document.documentElement;
+          const current = root.dataset.theme ||
+            (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+          const next = current === 'dark' ? 'light' : 'dark';
+          root.dataset.theme = next;
+          try { localStorage.setItem('theme', next); } catch {}
+        });
+      })();
+    </script>
+</body>
+</html>

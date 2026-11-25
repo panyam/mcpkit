@@ -1,0 +1,256 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>integration — get-time &#43; ResourceLink download path</title>
+<link rel="stylesheet" href="./demokit-player.css">
+<style>
+body { margin: 2em auto; max-width: 900px; padding: 0 1em; font-family: -apple-system, BlinkMacSystemFont, sans-serif; }
+</style>
+</head>
+<body>
+<demokit-demo>{
+  "demo": {
+    "title": "integration — get-time + ResourceLink download path",
+    "description": "Walks the integration-server round trip end-to-end: one App tool (get-time, same shape as basic-vanillajs), one plain resource (sample-report.txt — a downloadable text resource demoing the host's ResourceLink + ui/download-file pathway), and the iframe HTML. The fixture mirrors upstream's integration-server: server-side time + downloadable resource, with three iframe-driven Playwright tests upstream ships (Send Message / Send Log / Open Link) all riding the App SDK bridge. Run `make serve` in another terminal first.",
+    "actors": [
+      {
+        "id": "Host",
+        "label": "MCP Host (this client)"
+      },
+      {
+        "id": "Server",
+        "label": "mcpkit-Go fixture (make serve)"
+      }
+    ],
+    "items": [
+      {
+        "kind": "section",
+        "title": "Setup",
+        "body": "Start the MCP server in a separate terminal first:\n\n```\nTerminal 1:  make serve         # mcpkit-Go fixture on :3101\nTerminal 2:  make demo          # this walkthrough (--tui for interactive TUI)\n```\n\nAny MCP host can connect to the running server. The walkthrough below acts as a scripted host that issues the protocol calls directly through `*mcpkit/client.Client` — no LLM, no browser. The same calls drive the iframe when you run `make demo-app EXAMPLE=integration` in basic-host (see the [centralized guide](../README.md#other-ways-to-test-a-fixture))."
+      },
+      {
+        "kind": "step",
+        "title": "Connect to the fixture",
+        "note": "Standard MCP initialize handshake.",
+        "arrows": [
+          {
+            "from": "Host",
+            "to": "Server",
+            "label": "POST /mcp — initialize"
+          },
+          {
+            "from": "Server",
+            "to": "Host",
+            "label": "serverInfo + capabilities + Mcp-Session-Id",
+            "dashed": true
+          }
+        ],
+        "verbatim": [
+          {
+            "label": "Reproduce on the wire",
+            "variants": [
+              {
+                "label": "curl",
+                "lang": "bash",
+                "content": "SID=$(curl -si -X POST http://localhost:3101/mcp \\\n  -H 'Content-Type: application/json' \\\n  -H 'Accept: text/event-stream, application/json' \\\n  -d '{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2025-11-25\",\"capabilities\":{},\"clientInfo\":{\"name\":\"curl\",\"version\":\"1\"}}}' \\\n  | awk 'tolower($1) == \"mcp-session-id:\" {gsub(/\\r/,\"\"); print $2}')\n\ncurl -s -X POST http://localhost:3101/mcp -H \"Mcp-Session-Id: $SID\" \\\n  -H 'Content-Type: application/json' -H 'Accept: text/event-stream, application/json' \\\n  -d '{\"jsonrpc\":\"2.0\",\"method\":\"notifications/initialized\"}'",
+                "default": true
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "kind": "step",
+        "title": "tools/list + resources/list — surfaces side-by-side",
+        "note": "Two probes side-by-side. `tools/list` returns just `get-time` (App tool, `_meta.ui.resourceUri` = `ui://get-time/mcp-app.html`). `resources/list` returns BOTH the App's iframe HTML AND a separate `resource:///sample-report.txt` — a plain downloadable text resource. basic-host's `ui/download-file` path resolves the latter via this same `resources/read` call when the iframe asks to download a file.",
+        "arrows": [
+          {
+            "from": "Host",
+            "to": "Server",
+            "label": "tools/list + resources/list"
+          },
+          {
+            "from": "Server",
+            "to": "Host",
+            "label": "tools[get-time], resources[ui://get-time/mcp-app.html, resource:///sample-report.txt]",
+            "dashed": true
+          }
+        ],
+        "verbatim": [
+          {
+            "label": "Reproduce on the wire",
+            "variants": [
+              {
+                "label": "curl",
+                "lang": "bash",
+                "content": "curl -s -X POST http://localhost:3101/mcp -H \"Mcp-Session-Id: $SID\" \\\n  -H 'Content-Type: application/json' -H 'Accept: text/event-stream, application/json' \\\n  -d '{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/list\",\"params\":{}}' \\\n  | jq '.result.tools[] | {name, _meta}'\n\ncurl -s -X POST http://localhost:3101/mcp -H \"Mcp-Session-Id: $SID\" \\\n  -H 'Content-Type: application/json' -H 'Accept: text/event-stream, application/json' \\\n  -d '{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"resources/list\",\"params\":{}}' \\\n  | jq '.result.resources[] | {uri, name, mimeType}'",
+                "default": true
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "kind": "step",
+        "title": "tools/call get-time — RFC 3339 nano timestamp",
+        "note": "Same shape as basic-vanillajs's get-time: the typed handler returns `getTimeOutput{Time: time.Now().UTC().Format(time.RFC3339Nano)}`. The iframe consumes the timestamp; the integration tests upstream ships (Send Message / Send Log / Open Link) all sit on top of this same shape — they exercise the App SDK bridge rather than introduce new server endpoints.",
+        "arrows": [
+          {
+            "from": "Host",
+            "to": "Server",
+            "label": "tools/call get-time {}"
+          },
+          {
+            "from": "Server",
+            "to": "Host",
+            "label": "structuredContent = { time: \"2026-...\" }",
+            "dashed": true
+          }
+        ],
+        "verbatim": [
+          {
+            "label": "Reproduce on the wire",
+            "variants": [
+              {
+                "label": "curl",
+                "lang": "bash",
+                "content": "curl -s -X POST http://localhost:3101/mcp -H \"Mcp-Session-Id: $SID\" \\\n  -H 'Content-Type: application/json' -H 'Accept: text/event-stream, application/json' \\\n  -d '{\"jsonrpc\":\"2.0\",\"id\":4,\"method\":\"tools/call\",\"params\":{\"name\":\"get-time\",\"arguments\":{}}}' \\\n  | jq '.result.structuredContent'",
+                "default": true
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "kind": "step",
+        "title": "resources/read on resource:///sample-report.txt — ResourceLink content",
+        "note": "This is the downloadable text resource — the same call basic-host's `ui/download-file` path issues when the iframe asks to download a file. Each read returns a fresh `Generated: \u003cRFC 3339 nano\u003e` line so a round-trip can be verified. Server-side it's a plain `srv.RegisterResource` with a small text-formatting handler; from the iframe's perspective it's a ResourceLink the bridge resolves opaquely.",
+        "arrows": [
+          {
+            "from": "Host",
+            "to": "Server",
+            "label": "resources/read { uri: resource:///sample-report.txt }"
+          },
+          {
+            "from": "Server",
+            "to": "Host",
+            "label": "Contents[0] = { text/plain, fresh 'Generated:' line }",
+            "dashed": true
+          }
+        ],
+        "verbatim": [
+          {
+            "label": "Reproduce on the wire",
+            "variants": [
+              {
+                "label": "curl",
+                "lang": "bash",
+                "content": "curl -s -X POST http://localhost:3101/mcp -H \"Mcp-Session-Id: $SID\" \\\n  -H 'Content-Type: application/json' -H 'Accept: text/event-stream, application/json' \\\n  -d '{\"jsonrpc\":\"2.0\",\"id\":5,\"method\":\"resources/read\",\"params\":{\"uri\":\"resource:///sample-report.txt\"}}' \\\n  | jq -r '.result.contents[0].text'",
+                "default": true
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "kind": "step",
+        "title": "resources/read on ui://get-time/mcp-app.html — the App iframe",
+        "note": "The App iframe itself. Upstream's three Playwright interaction tests (Send Message / Send Log / Open Link) all drive the iframe's bridge JS — the server's role reduces to serving this HTML + the get-time tool + the downloadable resource. No CSP block.",
+        "arrows": [
+          {
+            "from": "Host",
+            "to": "Server",
+            "label": "resources/read { uri: ui://get-time/mcp-app.html }"
+          },
+          {
+            "from": "Server",
+            "to": "Host",
+            "label": "Contents[0].Text = the iframe HTML",
+            "dashed": true
+          }
+        ],
+        "verbatim": [
+          {
+            "label": "Reproduce on the wire",
+            "variants": [
+              {
+                "label": "curl",
+                "lang": "bash",
+                "content": "curl -s -X POST http://localhost:3101/mcp -H \"Mcp-Session-Id: $SID\" \\\n  -H 'Content-Type: application/json' -H 'Accept: text/event-stream, application/json' \\\n  -d '{\"jsonrpc\":\"2.0\",\"id\":6,\"method\":\"resources/read\",\"params\":{\"uri\":\"ui://get-time/mcp-app.html\"}}' \\\n  | jq -r '.result.contents[0].text' | head -c 200",
+                "default": true
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "kind": "section",
+        "title": "What the App iframe does with all this",
+        "body": "The host → iframe handoff mechanics (`tools/call` → `resources/read` → sandboxed iframe → `postMessage`) are covered once in [The basic-host bridge dance](../README.md#the-basic-host-bridge-dance). Steps 1-5 above are the floor every MCP Apps interaction starts from.\n\nintegration's iframe sits at the **rich** end of the App-ness spectrum — it exercises the full broad-surface bridge for upstream's three interaction-test cases. The bridge calls its App SDK makes:\n\n- `app.ontoolresult` for `get-time` — surfaces the timestamp.\n- `app.sendMessage` / `app.sendLog` — fire-and-forget bridge calls upstream's tests gate on. mcpkit's role here is bridge-relay only; the messages don't reach the server.\n- `app.requestDisplayMode` — opens / closes fullscreen.\n- `ui/download-file` — resolves `resource:///sample-report.txt` through `resources/read` (step 4) and hands the bytes to the host's download UI.\n\nMost of the App-ness here is bridge-resident, not server-resident. This fixture's job is to make sure the SDK plumbing flows end-to-end."
+      },
+      {
+        "kind": "section",
+        "title": "Where to look in the code",
+        "body": "- `main.go` — fixture is ~130 lines. Two registrations: `ui.RegisterTypedAppTool` for `get-time` (paired with the App iframe), and a plain `srv.RegisterResource` for the `resource:///sample-report.txt` downloadable text — note the resource is intentionally NOT paired with the iframe (it's served alongside, not via the same `_meta.ui.resourceUri` mechanism).\n- `walkthrough.go` — this file. Each step's curl + Go recipe is the canonical wire reproduction.\n- `../README.md` — narrative + screenshots + the centralized [Other ways to test a fixture](../README.md#other-ways-to-test-a-fixture) guide and the bridge-dance reference section."
+      }
+    ]
+  },
+  "trace": [
+    {
+      "kind": "section",
+      "title": "Setup",
+      "body": "Start the MCP server in a separate terminal first:\n\n```\nTerminal 1:  make serve         # mcpkit-Go fixture on :3101\nTerminal 2:  make demo          # this walkthrough (--tui for interactive TUI)\n```\n\nAny MCP host can connect to the running server. The walkthrough below acts as a scripted host that issues the protocol calls directly through `*mcpkit/client.Client` — no LLM, no browser. The same calls drive the iframe when you run `make demo-app EXAMPLE=integration` in basic-host (see the [centralized guide](../README.md#other-ways-to-test-a-fixture))."
+    },
+    {
+      "kind": "step",
+      "title": "Connect to the fixture",
+      "step_id": "step-1",
+      "visit": 1,
+      "output": "    connected to Integration Test Server 1.0.0\n"
+    },
+    {
+      "kind": "step",
+      "title": "tools/list + resources/list — surfaces side-by-side",
+      "step_id": "step-2",
+      "visit": 1,
+      "output": "    tool: get-time  _meta=map[ui:map[resourceUri:ui://get-time/mcp-app.html] ui/resourceUri:ui://get-time/mcp-app.html]\n    resource: ui://get-time/mcp-app.html  (get-time UI, text/html;profile=mcp-app)\n    resource: resource:///sample-report.txt  (resource:///sample-report.txt, text/plain)\n"
+    },
+    {
+      "kind": "step",
+      "title": "tools/call get-time — RFC 3339 nano timestamp",
+      "step_id": "step-3",
+      "visit": 1,
+      "output": "    structuredContent: {\n      \"time\": \"2026-06-09T01:42:47.19397Z\"\n    }\n"
+    },
+    {
+      "kind": "step",
+      "title": "resources/read on resource:///sample-report.txt — ResourceLink content",
+      "step_id": "step-4",
+      "visit": 1,
+      "output": "    Integration Test Server — Sample Report\nGenerated: 2026-06-09T01:42:47.787222Z\n\nThis file was downloaded via MCP ResourceLink.\nThe host resolved it by calling resources/read on the server.\n"
+    },
+    {
+      "kind": "step",
+      "title": "resources/read on ui://get-time/mcp-app.html — the App iframe",
+      "step_id": "step-5",
+      "visit": 1,
+      "output": "    531181 bytes; first 200:\n      \u003c!DOCTYPE html\u003e\n\u003chtml lang=\"en\"\u003e\n\u003chead\u003e\n  \u003cmeta charset=\"UTF-8\"\u003e\n  \u003cmeta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\"\u003e\n  \u003cmeta name=\"color-scheme\" content=\"light dark\"\u003e\n  \u003ctitle\u003eGet…\n"
+    },
+    {
+      "kind": "section",
+      "title": "What the App iframe does with all this",
+      "body": "The host → iframe handoff mechanics (`tools/call` → `resources/read` → sandboxed iframe → `postMessage`) are covered once in [The basic-host bridge dance](../README.md#the-basic-host-bridge-dance). Steps 1-5 above are the floor every MCP Apps interaction starts from.\n\nintegration's iframe sits at the **rich** end of the App-ness spectrum — it exercises the full broad-surface bridge for upstream's three interaction-test cases. The bridge calls its App SDK makes:\n\n- `app.ontoolresult` for `get-time` — surfaces the timestamp.\n- `app.sendMessage` / `app.sendLog` — fire-and-forget bridge calls upstream's tests gate on. mcpkit's role here is bridge-relay only; the messages don't reach the server.\n- `app.requestDisplayMode` — opens / closes fullscreen.\n- `ui/download-file` — resolves `resource:///sample-report.txt` through `resources/read` (step 4) and hands the bytes to the host's download UI.\n\nMost of the App-ness here is bridge-resident, not server-resident. This fixture's job is to make sure the SDK plumbing flows end-to-end."
+    },
+    {
+      "kind": "section",
+      "title": "Where to look in the code",
+      "body": "- `main.go` — fixture is ~130 lines. Two registrations: `ui.RegisterTypedAppTool` for `get-time` (paired with the App iframe), and a plain `srv.RegisterResource` for the `resource:///sample-report.txt` downloadable text — note the resource is intentionally NOT paired with the iframe (it's served alongside, not via the same `_meta.ui.resourceUri` mechanism).\n- `walkthrough.go` — this file. Each step's curl + Go recipe is the canonical wire reproduction.\n- `../README.md` — narrative + screenshots + the centralized [Other ways to test a fixture](../README.md#other-ways-to-test-a-fixture) guide and the bridge-dance reference section."
+    }
+  ]
+}
+</demokit-demo>
+<script type="module" src="./demokit-player.js"></script>
+</body>
+</html>
