@@ -9,6 +9,13 @@ Releases before 0.3.0 were tag-only and are not back-filled here.
 
 ## [Unreleased]
 
+## [0.8.23] - 2026-11-25
+
+Full write-up: [`docs/releases/v0.8.23.md`](docs/releases/v0.8.23.md). v0.8.22 was tagged without a GitHub Release, and v0.8.23 carries everything in it.
+
+### Security
+- **gorilla/websocket at the commit that fixes GO-2026-6278**, across every module (PR 1759).
+
 ## [0.8.22] - 2026-11-25
 
 Full write-up: [`docs/releases/v0.8.22.md`](docs/releases/v0.8.22.md).

@@ -55,8 +55,8 @@ require (
 	github.com/panyam/demokit/notebook v0.0.33 // indirect
 	github.com/panyam/gocurrent v0.1.3 // indirect
 	github.com/panyam/goutils v0.1.13 // indirect
-	github.com/panyam/mcpkit v0.8.22 // indirect
-	github.com/panyam/mcpkit/experimental/ext/events v0.8.22 // indirect
+	github.com/panyam/mcpkit v0.8.23 // indirect
+	github.com/panyam/mcpkit/experimental/ext/events v0.8.23 // indirect
 	github.com/panyam/mcpkit/ext/otel v0.6.0 // indirect
 	github.com/panyam/oneauth v0.3.19 // indirect
 	github.com/panyam/servicekit v0.2.5 // indirect

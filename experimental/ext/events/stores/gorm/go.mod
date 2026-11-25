@@ -7,7 +7,7 @@ replace github.com/panyam/mcpkit => ../../../../..
 replace github.com/panyam/mcpkit/experimental/ext/events => ../..
 
 require (
-	github.com/panyam/mcpkit/experimental/ext/events v0.8.22
+	github.com/panyam/mcpkit/experimental/ext/events v0.8.23
 	github.com/stretchr/testify v1.12.1
 	gorm.io/driver/postgres v1.6.3
 	gorm.io/driver/sqlite v1.6.0
@@ -30,7 +30,7 @@ require (
 	github.com/mattn/go-sqlite3 v1.14.22 // indirect
 	github.com/panyam/gocurrent v0.1.3 // indirect
 	github.com/panyam/goutils v0.1.13 // indirect
-	github.com/panyam/mcpkit v0.8.22 // indirect
+	github.com/panyam/mcpkit v0.8.23 // indirect
 	github.com/panyam/oneauth v0.3.19 // indirect
 	github.com/panyam/servicekit v0.2.5 // indirect
 	github.com/pb33f/ordered-map/v2 v2.3.1 // indirect
