@@ -2,11 +2,6 @@ module github.com/panyam/mcpkit/experimental/ext/events/clients/go
 
 go 1.26.11
 
-replace (
-	github.com/panyam/mcpkit => ../../../../..
-	github.com/panyam/mcpkit/experimental/ext/events => ../..
-)
-
 require (
 	github.com/panyam/mcpkit v0.8.23
 	github.com/panyam/mcpkit/experimental/ext/events v0.8.23
