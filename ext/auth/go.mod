@@ -5,7 +5,7 @@ go 1.26.11
 require (
 	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/panyam/gocurrent v0.1.3
-	github.com/panyam/mcpkit v0.8.21
+	github.com/panyam/mcpkit v0.8.22
 	github.com/panyam/oneauth v0.3.19
 	github.com/stretchr/testify v1.12.1
 	go.opentelemetry.io/otel/sdk v1.47.0

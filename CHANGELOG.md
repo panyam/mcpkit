@@ -9,6 +9,23 @@ Releases before 0.3.0 were tag-only and are not back-filled here.
 
 ## [Unreleased]
 
+## [0.8.22] - 2026-11-25
+
+Full write-up: [`docs/releases/v0.8.22.md`](docs/releases/v0.8.22.md).
+
+### Added
+- **Server Cards** at `<prefix>/server-card`, and `SetCardExtensionInfo` for extensions (PR 1739).
+- **ed25519 `v1a` signatures on webhook deliveries**, with the keys published on the Server Card (PRs 1741, 1743).
+- **`experimental/ext/groups`**, a prototype of `groups/list` and `groups/get`, and `server.SetListScope` (PRs 1709, 1727).
+- **Browser playgrounds under `/try/`** on the docs site (PRs 1713, 1715, 1717, 1720, 1721, 1722, 1725, 1730).
+
+### Changed
+- **A room bridge refusal says whether the page is another person's or your own with its switch off** (PR 1757).
+- **Go 1.26.11 floor, servicekit v0.2.5 and oneauth v0.3.19** across every module (PRs 1740, 1748, 1751).
+
+### Fixed
+- **One invalid `skills/list` entry no longer fails the whole listing** (PR 1728).
+
 ## [0.8.21] - 2026-11-11
 
 Full write-up: [`docs/releases/v0.8.21.md`](docs/releases/v0.8.21.md).
