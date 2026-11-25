@@ -318,7 +318,7 @@ func (b *Bridge) target(p Principal, rooms []string, name string, page PeerID) (
 			rs := b.rooms[r]
 			if pg := rs.pages[page]; pg != nil && pg.listed && offers(pg) {
 				if !agreesLocked(pg, p) {
-					return nil, "", &errNoTarget{reason: fmt.Sprintf("page %s has not agreed to you; its user can turn on agent access, accept your pairing code from attach, or show a code you enter with pair", page), roster: roster}
+					return nil, "", &errNoTarget{reason: notAgreedLocked(pg, p), roster: roster}
 				}
 				return rs, page, nil
 			}
@@ -338,7 +338,7 @@ func (b *Bridge) target(p Principal, rooms []string, name string, page PeerID) (
 	case def != "":
 		return rs, def, nil
 	case agreed == 0:
-		return nil, "", &errNoTarget{reason: "no page offering " + name + " has agreed to you yet; its user can turn on agent access, accept your pairing code from attach, or show a code you enter with pair", roster: roster}
+		return nil, "", &errNoTarget{reason: noneAgreedLocked(rs, p, name, offers), roster: roster}
 	default:
 		return nil, "", &errNoTarget{reason: "several pages that agreed to you offer " + name + "; pass page to choose one", roster: roster}
 	}
@@ -374,4 +374,29 @@ func (b *Bridge) notifyPrincipalLocked(p Principal) []*session {
 		}
 	}
 	return out
+}
+
+// pairHint tells an agent how another person lets it in. Only that person can,
+// from their page.
+const pairHint = "they can show a code you enter with pair, or accept the code attach gave you"
+
+// notAgreedLocked says why pg refuses p. Another person's page agrees to p only
+// once its user pairs with p. p's own page agrees once its user turns on the
+// agents switch.
+func notAgreedLocked(pg *pageState, p Principal) string {
+	if pg.peer.Subject != p.Subject {
+		return fmt.Sprintf("page %s is another person's tab, and they have not paired with you; %s", pg.peer.ID, pairHint)
+	}
+	return fmt.Sprintf("page %s is your own tab, and its agent access is off; turn it on in that tab", pg.peer.ID)
+}
+
+// noneAgreedLocked says why no page in rs offering a tool agrees to p. It names
+// p's own pages first, since p's user can turn those on without asking anyone.
+func noneAgreedLocked(rs *roomState, p Principal, name string, offers func(*pageState) bool) string {
+	for _, id := range sortedPages(rs) {
+		if pg := rs.pages[id]; offers(pg) && pg.peer.Subject == p.Subject {
+			return "your own tabs offering " + name + " have agent access off; turn it on in one of them"
+		}
+	}
+	return "every page offering " + name + " is another person's tab, and none has paired with you; " + pairHint
 }

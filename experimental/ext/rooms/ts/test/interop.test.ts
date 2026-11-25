@@ -368,7 +368,7 @@ describe("a TypeScript page behind the Go bridge", () => {
     expect(p.grants()).toEqual([]);
     await eventually(async () => {
       const res: any = await bob.callTool({ name: "show_sheet", arguments: { room: ROOM, page: p.id, sheet: "x" } });
-      return !!res.isError && /has not agreed to you/.test(textOf(res));
+      return !!res.isError && /another person's tab/.test(textOf(res));
     }, 5000, "the revoke to reach the bridge");
   });
 
