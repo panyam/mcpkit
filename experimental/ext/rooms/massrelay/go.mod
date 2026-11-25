@@ -8,7 +8,7 @@ replace (
 )
 
 require (
-	github.com/gorilla/websocket v1.5.3
+	github.com/gorilla/websocket v1.5.4-0.20240701034025-d67f41855da4
 	github.com/panyam/massrelay v0.3.7
 	github.com/panyam/mcpkit v0.8.22
 	github.com/panyam/mcpkit/experimental/ext/rooms v0.8.22
