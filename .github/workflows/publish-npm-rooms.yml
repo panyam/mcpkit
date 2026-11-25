@@ -40,7 +40,7 @@ jobs:
       - name: Restore in-repo replaces
         run: bash scripts/release-replaces.sh restore
 
-      - uses: panyam/ci-actions/setup-go-pnpm@v0.1.2
+      - uses: panyam/ci-actions/setup-go-pnpm@v0.1.4
         with:
           pnpm-version: 12.4.1
           working-directory: experimental/ext/rooms/ts
